@@ -25,16 +25,16 @@ PRD §16 已给出 7 周里程碑表（目标/交付物/验收）。本文档把
 - **POC 明确不做**（§4.3 原文）：多租户 / 支付订阅（积分用 CLI 发）/ 社区分发 / 音频生成与对口型 / 可视化工作流编辑器 / 移动端精修 / 分库分表
 - **若排期滑坡，按此顺序砍 P1**（从 §7 各功能表逐条摘出的全部 P1 项，无遗漏）：
 
-  | 顺序 | 功能 ID | 内容 |
-  |---|---|---|
-  | 1 | F6.10 | H3-Context-IR 提示词增强 |
-  | 2 | F6.4 | 多模态参考（reference_image/video/audio） |
-  | 3 | F6.3 | 首尾帧模式 |
-  | 4 | F5.8 | 图生图 |
-  | 5 | F5.4 | 剧情自动拆 4 格 |
-  | 6 | F8.3 | 产物后置审核 |
-  | 7 | F2.7 | 软删 + 批量下载 |
-  | 8 | F1.2 | 匿名试用生成 1 次单图 |
+  | 顺序 | 功能 ID | 内容 | 状态 |
+  |---|---|---|---|
+  | 1 | F6.10 | H3-Context-IR 提示词增强 | ✅ 已完成——新增 `minimax.prompt_enhance` 执行器（`task_type=h3_context_ir`），路由到 `video-single-enhanced.json` 变体；真实调用验证：¥0.074 生成出明显更丰富的结构化 prompt（含运镜/光影/声景），据此生成的视频成功 |
+  | 2 | F6.4 | 多模态参考（reference_image/video/audio） | ✅ 已完成（`video.single` 缺口部分）——新增 `resolveCharacterRefAssetIDs`，绑定角色但未显式传参考图时自动取角色的 F3.1 参考图；真实调用验证：`gen` 节点的 `inputs_json` 确认参考图确实来自角色数据，未被覆盖 |
+  | 3 | F6.3 | 首尾帧模式 | 未纳入本轮（已有基础机制在 video.sequence 内部使用，未单独验证） |
+  | 4 | F5.8 | 图生图 | ✅ 已完成——`minimax.image` 新增 `source-image-asset-id`，走 `subject_reference`（base64 data URI，非 mm_file://，因为 MiniMax 文件上传 API 未给图片生成场景定义 purpose）；真实调用验证：把已生成的狐狸图回传，prompt "戴上红色小帽子"，产出图片明显保留了原狐狸的毛色和五官特征 |
+  | 5 | F5.4 | 剧情自动拆 4 格 | ✅ 已完成——新增 `minimax.text.split_story`（MiniMax-M3 chat completions），路由到 `image-comic4-auto.json`；**实测踩坑**：M3 默认输出 `<think>...</think>` 推理内容混入结果，需要 `thinking:{type:"disabled"}` 关闭；修复后真实调用验证：¥0.0015 拆出 4 句连贯分镜文案，四格图确实讲了一个完整故事（迷路→问路→回家→团聚） |
+  | 6 | F8.3 | 产物后置审核 | ✅ 已完成——`maybeReviewAsset` 用 MiniMax-M3 视觉输入对成功产物做独立二次审核（区别于生成时的 F8.1/F8.2），命中写 `moderation_records`（`post_review:` 前缀）；真实调用验证：向日葵图片正确判定 OK（无记录），皮卡丘图片被正确标记为 "well-known copyrighted character"——证明这条检测确实抓到了 MiniMax 生成时过滤器放过的内容 |
+  | 7 | F2.7 | 软删 + 批量下载 | ✅ 已完成——`DELETE /assets/{bizID}` 软删（`deleted_at`，所有读路径早已支持过滤）+ `POST /assets/batch-download` 打包 zip；真实调用验证：删除返回 204、列表消失、行仍在且带时间戳、重复删除 404，批量下载 3 张真实图片产出 1.3MB 有效 zip |
+  | 8 | F1.2 | 匿名试用生成 1 次单图 | ✅ 已完成——`POST /trial/image`，设备指纹（Redis SETNX 永久占用）+ IP 限流（24h 内 3 次，不分设备），完全绕开 jobs/credits/assets 流程；真实调用验证：新设备成功拿到图、同设备二次 403、新设备再成功、同 IP 第 4 次请求 429 |
 
   唯一的 P2（`F4.5` 用户自定义预设）不在此清单——它从一开始就不做。
 - **W7 可延后但不可砍**（§16 原文）：监控和 DAG 可视化优先级低于 W1–W6 的功能闭环，如果 7 周内前 6 周超支，W7 内容可以顺延，但不能反过来牺牲前 6 周的验收项。
@@ -225,8 +225,11 @@ PRD §16 已给出 7 周里程碑表（目标/交付物/验收）。本文档把
 ### 已知推迟到 W6/W7 的小缺口
 
 - video asset 的 `width`/`height` 列目前落库为 0（首尾帧图片是有的，只是视频行本身没填）——不影响任何当前功能（前端还没做，没有消费方读它），真要修最省事的方式是等 W6 拼接执行器顺手从抽帧结果回填
-- F6.4（角色参考图 → `reference_image`，characters 表已有 `ref_asset_ids` 字段可用）是 PRD 明确标的 P1，未接入 `video.single`；`video.single` 目前只接受调用方直接传 asset ID 引用
+- ~~F6.4（角色参考图 → `reference_image`...）未接入 `video.single`~~ **已在后续 P1 补齐轮次完成**，见 §2 P1 清单表
 
+### ⚠️ 新发现、未修复：积分对账不等式被打破
+
+P1 补齐轮次的 upkeep 日志里，`SUM(credit_ledger.amount) == balance + held` 这条 §12.3 的核心恒等式对 smoketest 账号出现了真实偏差（例如 `balance=6, held=0, ledger_sum=1`，后来又观察到 `ledger_sum=-1`，偏差在扩大而不是稳定值，说明不是一次性的历史脏数据）。**这不是本轮任何 P1 功能改动引入的**——七个新功能里唯一动 `credit_ledger.amount` 的路径都是复用既有的 `maybeCommitCredits`/`Hold`/`Refund`，没有新写路径。根因尚未排查（怀疑与本轮高频并发提交/退款有关，但未验证），需要单独一次会话专门排查，不要跟功能开发混在一起做。
 ### 前端
 
 - [ ] 单段影片创作台 tab、F6.5 模式互斥前端拦截（zod + UI 禁用态双保险）、ratio 校验提示：**推迟**，和 W3/W4 一样的判断——后端互斥/条件校验已经是真实的第二道防线并实测验证（见上），前端接入是纯粘合工作，等专门做前端时统一补
@@ -247,7 +250,7 @@ PRD §16 已给出 7 周里程碑表（目标/交付物/验收）。本文档把
 - [x] §5.4 混合衔接策略：镜头 1（及每 `recalibrate_every` 个镜头一次，默认 3）用 `r2va`（角色参考图，若未绑定角色则退化为 `t2va`），其余镜头用 `i2va`（上一段尾帧）——**实测**：3 镜头用例里镜头 1 走 t2va（未绑定角色）、镜头 2/3 走 i2va，链路正确
 - [x] `minimax.video.regen` 执行器（`internal/infra/executor/minimax/video_regen.go`）：**PRD §3.5 描述的"原样提交 768P 全部 content + 额外加入 `type=video_url,role=base_video`"实测证伪**——真实调用返回 `400 bad_params: content[2].role="base_video" invalid for type="video_url" (2013)`；对照 MiniMax 官方 API 文档核实，`video_url` 唯一合法 `role` 是 `reference_video`（多模态参考场景专用），根本不存在"续传原视频做升级"这个机制。改为：**直接用原始 content 重新提交一次分辨率为 2K 的生成**（本质就是一次全新的 2K 生成，不是真正的"升级"）；§10.5 声称的折扣价 `RegenCostPerSecondYuan: 0.30` 同理站不住脚（没有真正的 regen 操作，谈不上比全新生成更便宜），改用标准 2K 价 ¥0.80/秒——**实测**：修复后真实调用成功，4 秒输出 2528×1440，`cost-yuan=3.2`（4×0.80，价格对得上）
 - [x] `local.ffmpeg.concat` 执行器（`internal/infra/executor/local/ffmpeg_concat.go`）：下载 N 段 mp4、探测各自分辨率、取最大值做统一目标（**必须用 `filter_complex` 的 `scale+pad+concat` 重新编码，不能用 concat demuxer 的 stream-copy**——升 2K 的段和保持 768P 的段分辨率不同，stream-copy 会产出损坏文件）——**实测中修复的两个真实 bug**（见下）
-- [ ] 段间 0.2s 交叉淡化：**明确推迟**——PRD 原文标注"可选"，核心拼接路径已验证，淡化是纯视觉打磨，留给真正需要时再做
+- [x] 段间 0.2s 交叉淡化：**已完成**——`local.ffmpeg.concat` 从硬切改为链式 `xfade`（视频）+ `acrossfade`（音频），固定 0.2s（PRD 唯一给出的值，未做成可配置）。**受 MiniMax 真实账户余额耗尽所限**（本轮大量真实调用后账户余额不足，"insufficient balance" 而非本系统积分不足），未能跑通完整真实 video.sequence 管线；改用零成本方式直接验证改动本身：ffmpeg 自带 lavfi 生成两段合成测试片段，跑通 `runConcatFilter` 实际拼出的 filter_complex 字符串，输出时长正确（7.83s ≈ 4+4-0.2），并在过渡中点截帧肉眼确认是真实的画面融合而非硬切
 - [ ] 预览门积分二次预扣：**明确推迟到 W7**——`credit_ledger` 表本身要 W7 才建，这条依赖它，提前做会做出个孤立字段
 - [x] 确保 Suspended 状态可持久化恢复：天然成立——挂起状态是 `aether_task_runs` 表里的一行 `status='Suspended'`，不依赖任何进程内存/连接状态，Aether 进程重启、浏览器关闭重开都不受影响，未额外开发，靠已有的 MySQL Store 设计自然满足
 
@@ -282,8 +285,8 @@ PRD §16 已给出 7 周里程碑表（目标/交付物/验收）。本文档把
   - 每日财务对账——同样在 `upkeep` 里，简化成**周期性 ticker（6 小时）而不是精确 03:00 cron**，POC 阶段这个简化可接受，重要的是"周期性执行 + 不一致时 Error 级别记日志"这个效果，不是"精确踩点 3 点"这个形式
   - **推迟**：轮询兜底扫描（60s，`minimax.video`/`minimax.video.regen` 自身已经有 25 分钟内的轮询兜底，这条是"engine 完全没收到执行器报告"这种更极端情况的二级保险，POC 阶段风险可接受）、孤儿任务对账（需要调 MiniMax「查询任务列表」接口，一个新的集成面）、`provider_files` 过期清理（纯维护性，不影响任何功能正确性）
 - [x] F8.4 `moderation_records` 留档：`internal/application/projection` 新增钩子，任何任务以 `sensitive_content:` 前缀失败（`minimax.image`/`minimax.video` 早就在用这个前缀，W3/W5 就定的约定）自动落一条审核记录——**未用真实触发内容安全的调用验证**（不想为了测这条特意构造真会被 MiniMax 判定敏感的 prompt），SQL 写入路径本身随迁移+构建走了一遍，逻辑上和已反复验证过的 `maybeCommitCredits`/`maybeRefundCredits` 是同一种钩子模式
-- [ ] Prometheus 指标 + Grafana 看板：**明确推迟**——纯可观测性基础设施，不影响任何产品正确性，且本地没有 Grafana 实例可看，埋点了也没人看；等真正要上线监控时再做
-- [ ] `deploy/docker-compose.yml` 补 `api`/`scheduler`/`worker` 三个应用容器 + `Makefile`：**明确推迟**——本机开发全程手动起三个进程（脚本化的启动命令已经在这份文档和会话历史里反复用了几十次，行为已经很清楚），写 Dockerfile+compose 是部署打包工作，不是应用逻辑，值得单独一次性做完而不是现在顺手补
+- [x] Prometheus 指标 + Grafana 看板：**已完成**——新增 `internal/pkg/metrics`（HTTP 请求数/延迟、task/job 按状态计数、真实 MiniMax 花费），HTTP 指标挂在 `cmd/api` 的 Gin 中间件（用 `c.FullPath()` 而非原始路径，避免 `/jobs/:bizID` 这类参数化路由的基数爆炸），task/job 指标挂在 `projection.go` 已有的 `OnTaskRun`/`OnWorkflowRun` 钩子（调度器侧集中记录，`cmd/worker` 不需要单独开 `/metrics`）。`docker-compose.yml` 新增 `prometheus`/`grafana` 服务，`deploy/prometheus.yml` 抓取 api/scheduler，Grafana 自动装配数据源 + 一个 5 面板仪表盘。**真实验证**：整套栈跑在 Docker 里，真实流量后 `/metrics` 输出了真实的 `aigc_*` 指标，Prometheus 确认两个抓取目标 `up=1`，Grafana 数据源+仪表盘均自动装配成功，浏览器里看到 HTTP 请求面板实时渲染；额外提交一个在积分预扣阶段就失败的作业（零成本）验证了 task/job 计数器在失败路径下也能正确写入
+- [x] `deploy/docker-compose.yml` 补 `api`/`scheduler`/`worker` 三个应用容器 + `Makefile`：**已完成**——`deploy/Dockerfile` 多阶段构建（api/scheduler/worker/migrate/cli 五个目标，worker 额外装 ffmpeg），新增 `cmd/migrate`（goose 库 API + 内嵌 `migrations/*.sql`，容器内不需要 `goose` CLI），`docker-compose.yml` 新增对应服务（`migrate` 一次性跑完才启动其余服务），根目录 `Makefile` 封装本地开发和 Docker 两套命令。**真实验证**：停掉本机三进程腾出端口，`docker compose build` 真实构建四个镜像，`docker compose up` 拉起后 `migrate` 正确识别已有 schema 退出码 0，scheduler/worker 通过 docker 网络连上 mysql/redis/minio，并通过全容器化的 API 真实跑通一次 `image.single`（真实 MiniMax 调用成功）
 
 ### 前端
 
