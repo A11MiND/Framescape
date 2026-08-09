@@ -16,6 +16,7 @@ import (
 	"aigc-platform/internal/application/creditsvc"
 	"aigc-platform/internal/application/jobsvc"
 	"aigc-platform/internal/infra/cache"
+	"aigc-platform/internal/infra/executor/minimax"
 	"aigc-platform/internal/infra/persistence"
 	"aigc-platform/internal/infra/workflow/rpc"
 	httpapi "aigc-platform/internal/interfaces/http"
@@ -43,8 +44,12 @@ func main() {
 	credits := creditsvc.New(sqlDB)
 	jobs := jobsvc.New(db, eng, credits)
 	redisClient := cache.NewClient(config.RedisAddr())
+	// F1.2's anonymous trial only — see internal/interfaces/http/trial.go's
+	// doc for why cmd/api holds a MiniMax client despite the package doc's
+	// "never talks to MiniMax directly" rule.
+	minimaxClient := minimax.NewClient(config.MiniMaxBaseURL(), config.MiniMaxAPIKey())
 
-	srv := httpapi.NewServer(db, jobs, redisClient, config.JWTSecret())
+	srv := httpapi.NewServer(db, jobs, redisClient, config.JWTSecret(), minimaxClient)
 
 	httpSrv := &http.Server{Addr: config.APIAddr(), Handler: srv.Router()}
 	go func() {

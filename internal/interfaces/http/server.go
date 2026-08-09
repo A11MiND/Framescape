@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"aigc-platform/internal/application/jobsvc"
+	"aigc-platform/internal/infra/executor/minimax"
 )
 
 type Server struct {
@@ -19,10 +20,14 @@ type Server struct {
 	jobs      *jobsvc.Service
 	redis     *redis.Client
 	jwtSecret string
+	// minimax backs F1.2's anonymous trial only — see trial.go's doc for why
+	// this is a deliberate, narrow exception to "cmd/api never talks to
+	// MiniMax directly".
+	minimax *minimax.Client
 }
 
-func NewServer(db *gorm.DB, jobs *jobsvc.Service, redisClient *redis.Client, jwtSecret string) *Server {
-	return &Server{db: db, jobs: jobs, redis: redisClient, jwtSecret: jwtSecret}
+func NewServer(db *gorm.DB, jobs *jobsvc.Service, redisClient *redis.Client, jwtSecret string, minimaxClient *minimax.Client) *Server {
+	return &Server{db: db, jobs: jobs, redis: redisClient, jwtSecret: jwtSecret, minimax: minimaxClient}
 }
 
 func (s *Server) Router() *gin.Engine {
@@ -38,6 +43,7 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/auth/register", s.handleRegister)
 		v1.POST("/auth/login", s.handleLogin)
 		v1.POST("/auth/refresh", s.handleRefresh)
+		v1.POST("/trial/image", s.handleTrialImage)
 
 		authed := v1.Group("")
 		authed.Use(s.requireAuth())

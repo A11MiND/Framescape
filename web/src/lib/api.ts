@@ -152,6 +152,15 @@ export const api = {
     request<TokenPair>('POST', '/auth/login', { email, password }, { auth: false }),
   me: () => request<MeResponse>('GET', '/me'),
 
+  // F1.2: anonymous single-image trial, gated server-side by device_id + IP.
+  trialImage: (prompt: string, deviceId: string) =>
+    request<{ image_url: string }>(
+      'POST',
+      '/trial/image',
+      { prompt, device_id: deviceId },
+      { auth: false },
+    ),
+
   createJob: (workflowName: WorkflowName, spec: Spec, idempotencyKey?: string) =>
     request<CreateJobResponse>(
       'POST',
