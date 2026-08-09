@@ -102,20 +102,23 @@ export default function Assets() {
           {assets.data?.assets.map((a) => (
             <div
               key={a.biz_id}
-              className={`group relative overflow-hidden rounded-xl border bg-zinc-900 ${
-                selected.includes(a.biz_id) ? 'border-violet-500' : 'border-zinc-800'
+              title={a.biz_id}
+              className={`group relative overflow-hidden rounded-xl border bg-zinc-900 transition ${
+                selected.includes(a.biz_id) ? 'border-violet-500' : 'border-zinc-800 hover:border-zinc-700'
               }`}
             >
               <input
                 type="checkbox"
                 checked={selected.includes(a.biz_id)}
                 onChange={() => toggleSelected(a.biz_id)}
-                className="absolute left-2 top-2 z-10 accent-violet-500"
+                className={`absolute left-2 top-2 z-10 h-4 w-4 rounded accent-violet-500 transition-opacity ${
+                  selected.includes(a.biz_id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                }`}
               />
               <button
                 onClick={() => deleteAsset.mutate(a.biz_id)}
                 title="软删除"
-                className="absolute right-2 top-2 z-10 rounded-full bg-black/60 px-2 py-0.5 text-xs text-zinc-300 opacity-0 transition hover:text-red-400 group-hover:opacity-100"
+                className="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-xs text-zinc-300 opacity-0 transition hover:text-red-400 group-hover:opacity-100"
               >
                 ✕
               </button>
@@ -124,7 +127,6 @@ export default function Assets() {
               ) : (
                 <img src={a.public_url} alt="" className="aspect-square w-full object-cover" />
               )}
-              <p className="truncate p-2 font-mono text-xs text-zinc-500">{a.biz_id}</p>
             </div>
           ))}
         </div>

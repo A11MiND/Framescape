@@ -9,7 +9,7 @@ import {
   estimateStorySplitCredits,
 } from '../lib/pricing'
 import { videoSingleSchema, RATIO_VALUES } from '../lib/videoSpec'
-import { resultAssetIds, type Tab } from '../lib/jobResult'
+import { resultAssetIds, WORKFLOW_LABEL, type Tab } from '../lib/jobResult'
 import { displayNodeError, firstSpecificError } from '../lib/errors'
 import { useToast } from '../components/Toast'
 import Nav from '../components/Nav'
@@ -27,14 +27,9 @@ import GenerationProgress from '../components/GenerationProgress'
 // covered indirectly via the asset picker, just not via drag-drop),
 // predictive next-step recommendation cards (§19.4.2).
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'image.single', label: '单图' },
-  { id: 'image.batch', label: '批量出图' },
-  { id: 'image.comic4', label: '四格漫画' },
-  { id: 'image.sequence', label: '连续生成' },
-  { id: 'video.single', label: '单段影片' },
-  { id: 'video.sequence', label: '连续影片' },
-]
+const TABS: { id: Tab; label: string }[] = (
+  ['image.single', 'image.batch', 'image.comic4', 'image.sequence', 'video.single', 'video.sequence'] as Tab[]
+).map((id) => ({ id, label: WORKFLOW_LABEL[id] }))
 
 function useCharacters() {
   return useQuery({ queryKey: ['characters'], queryFn: api.listCharacters })
@@ -245,7 +240,7 @@ export default function Studio() {
           </nav>
 
           <div>
-            <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">角色槽（F3.2）</p>
+            <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">角色槽</p>
             <div className="space-y-2">
               <CharacterSelect
                 label="A"
@@ -266,7 +261,7 @@ export default function Studio() {
           </div>
 
           <div>
-            <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">预设（F4.3）</p>
+            <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">预设</p>
             <div className="flex flex-wrap gap-1.5">
               {(presets.data?.presets ?? []).map((p) => {
                 const active = presetIds.includes(p.biz_id)
@@ -306,7 +301,7 @@ export default function Studio() {
 
           {tab === 'image.single' && (
             <div>
-              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">图生图（F5.8，可选）</p>
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">参考图（可选，图生图）</p>
               <AssetPicker
                 type="image"
                 selected={sourceImageId ? [sourceImageId] : []}
@@ -345,7 +340,7 @@ export default function Studio() {
                 <button
                   onClick={() => setComicMode('auto')}
                   className={`rounded-lg px-3 py-1.5 ${comicMode === 'auto' ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-900'}`}
-                  title="F5.4: 用 MiniMax-M3 把一段剧情自动拆成 4 格画面描述"
+                  title="用 AI 把一段剧情自动拆成 4 格画面描述"
                 >
                   剧情自动拆 4 格
                 </button>
@@ -475,7 +470,7 @@ export default function Studio() {
                 className={hasRef ? 'opacity-40' : ''}
                 title={hasRef ? '已选择参考素材，首尾帧模式不可用，点击移除参考素材以切换' : undefined}
               >
-                <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">首尾帧（F6.2/F6.3）</p>
+                <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">首尾帧</p>
                 <div className="space-y-2">
                   <div>
                     <p className="mb-1 text-xs text-zinc-600">首帧</p>
@@ -504,7 +499,7 @@ export default function Studio() {
                 className={hasFirstLast ? 'opacity-40' : ''}
                 title={hasFirstLast ? '已选择首尾帧，参考素材模式不可用，点击移除首尾帧以切换' : undefined}
               >
-                <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">参考素材（F6.4）</p>
+                <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">参考素材</p>
                 <div className="space-y-2">
                   <div>
                     <p className="mb-1 text-xs text-zinc-600">参考图片</p>
@@ -535,14 +530,14 @@ export default function Studio() {
                 </div>
               </div>
 
-              <label className="flex items-center gap-2 text-sm text-zinc-400" title="MiniMax H3-Context-IR：生成前用模型深度理解并润色提示词，按 token 额外计费（F6.10）">
+              <label className="flex items-center gap-2 text-sm text-zinc-400" title="生成前用 AI 深度理解并润色你的提示词，按用量额外计费">
                 <input
                   type="checkbox"
                   checked={promptEnhance}
                   onChange={(e) => setPromptEnhance(e.target.checked)}
                   className="accent-violet-500"
                 />
-                H3-Context-IR 提示词增强（+约 {estimatePromptEnhanceCredits()} 积分）
+                AI 提示词增强（+约 {estimatePromptEnhanceCredits()} 积分）
               </label>
             </div>
           )}

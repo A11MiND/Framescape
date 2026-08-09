@@ -34,10 +34,12 @@ export default function Presets() {
             </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {items.map((p) => (
-                <div key={p.biz_id} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+                <div
+                  key={p.biz_id}
+                  className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 transition hover:border-zinc-700"
+                >
                   <p className="font-medium">{p.name}</p>
-                  <p className="mt-1 font-mono text-xs text-zinc-500">{p.prompt_fragment}</p>
-                  <p className="mt-2 text-xs text-zinc-600">优先级 {p.priority}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-zinc-500">{p.prompt_fragment}</p>
                 </div>
               ))}
             </div>

@@ -26,7 +26,7 @@ export const videoSingleSchema = z
     if (hasFirstLast && hasRef) {
       ctx.addIssue({
         code: 'custom',
-        message: 'F6.5：首尾帧模式和参考素材模式不能同时使用',
+        message: '首尾帧模式和参考素材模式不能同时使用',
       })
     }
     if (!hasFirstLast && !hasRef && !RATIO_VALUES.includes(v.ratio as (typeof RATIO_VALUES)[number])) {

@@ -59,7 +59,7 @@ export default function PreviewGate({
   return (
     <div className="w-full space-y-4">
       <p className="text-sm text-zinc-400">
-        预览门（F6.8）：{shots.length} 段已生成 768P 草稿，逐段选择保留 / 重做 / 升级 2K
+        {shots.length} 段已生成 768P 草稿，逐段选择保留 / 重做 / 升级 2K
       </p>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">

@@ -77,14 +77,23 @@ func (s *Server) handleTrialImage(c *gin.Context) {
 		c.JSON(http.StatusBadGateway, errBody("upstream_error", "生成失败，请重试"))
 		return
 	}
+	// Never surface resp.BaseResp.StatusMsg directly — it's MiniMax's own raw
+	// (English) upstream text, not something an anonymous visitor should see
+	// verbatim. §10.4's 1026 (sensitive content) is the one case worth a
+	// specific, actionable message; everything else collapses to a generic
+	// one, same as the network/transport branch above.
 	if resp.BaseResp.StatusCode != 0 {
 		s.redis.Del(ctx, deviceKey)
-		c.JSON(http.StatusUnprocessableEntity, errBody("generation_failed", resp.BaseResp.StatusMsg))
+		msg := "生成失败，请重试"
+		if resp.BaseResp.StatusCode == 1026 {
+			msg = "描述涉及敏感内容，请修改后重试"
+		}
+		c.JSON(http.StatusUnprocessableEntity, errBody("generation_failed", msg))
 		return
 	}
 	if len(resp.Data.ImageURLs) == 0 {
 		s.redis.Del(ctx, deviceKey)
-		c.JSON(http.StatusUnprocessableEntity, errBody("generation_failed", "no image returned"))
+		c.JSON(http.StatusUnprocessableEntity, errBody("generation_failed", "生成失败，请重试"))
 		return
 	}
 

@@ -64,7 +64,13 @@ export default function WorkflowGraph({ job }: { job: JobResponse }) {
           elementsSelectable
         >
           <Background color="#3f3f46" gap={16} />
-          <Controls showInteractive={false} />
+          {/* react-flow's Controls buttons keep their own light background
+              (--xy-controls-button-background-color-default), but the icon
+              uses currentColor — without an explicit color here it inherits
+              this app's near-white body text color, rendering an invisible
+              white-on-white icon. Force a dark color to match the widget's
+              own light theme regardless of our app-wide dark theme. */}
+          <Controls showInteractive={false} style={{ color: '#18181b' }} />
         </ReactFlow>
       </div>
 

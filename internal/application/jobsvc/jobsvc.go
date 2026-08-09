@@ -294,6 +294,12 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 	if title == "" && len(spec.Shots) > 0 {
 		title = spec.Shots[0]
 	}
+	if title == "" && spec.Story != "" {
+		// F5.4's auto-split path: spec.Text/Panels/Shots are all empty, only
+		// Story is set — without this, the job (and JobDetail's page title)
+		// would show a blank heading.
+		title = spec.Story
+	}
 	job := &persistence.Job{
 		BizID:           bizID,
 		UserID:          userID,

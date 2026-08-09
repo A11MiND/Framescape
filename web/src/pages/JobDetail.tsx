@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api, type JobResponse } from '../lib/api'
-import { resultAssetIds, type Tab } from '../lib/jobResult'
+import { resultAssetIds, WORKFLOW_LABEL, type Tab } from '../lib/jobResult'
 import { displayNodeError, firstSpecificError } from '../lib/errors'
 import { useToast } from '../components/Toast'
 import Nav from '../components/Nav'
@@ -50,8 +50,12 @@ export default function JobDetail() {
           <>
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-lg font-medium">{job.title}</h1>
-                <p className="text-sm text-zinc-500">{job.workflow_name}</p>
+                <h1 className="text-lg font-medium">
+                  {job.title || WORKFLOW_LABEL[job.workflow_name as Tab] || job.workflow_name}
+                </h1>
+                <p className="text-sm text-zinc-500">
+                  {WORKFLOW_LABEL[job.workflow_name as Tab] ?? job.workflow_name}
+                </p>
               </div>
               <PhaseBadge phase={job.status === 'succeeded' ? 'Succeeded' : job.status === 'failed' ? 'Failed' : 'Running'} />
             </div>
