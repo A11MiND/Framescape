@@ -112,6 +112,7 @@ func (p *ConcatPlugin) Execute(ctx context.Context, req *executor.ExecuteRequest
 	defer os.RemoveAll(tmpDir)
 
 	inputPaths := make([]string, 0, total)
+	durations := make([]float64, 0, total)
 	maxW, maxH := 0, 0
 	for i, assetID := range orderedAssetIDs {
 		url, err := p.reader.PublicURL(ctx, assetID)
@@ -129,14 +130,19 @@ func (p *ConcatPlugin) Execute(ctx context.Context, req *executor.ExecuteRequest
 		if w*h > maxW*maxH {
 			maxW, maxH = w, h
 		}
+		dur, err := ffprobeDuration(ctx, path)
+		if err != nil {
+			return &model.ExecOutputs{Code: model.ExecCodeError, Message: fmt.Sprintf("probe duration shot %d: %v", i+1, err)}, nil
+		}
 		inputPaths = append(inputPaths, path)
+		durations = append(durations, dur)
 	}
 	if maxW == 0 || maxH == 0 {
 		return &model.ExecOutputs{Code: model.ExecCodeError, Message: "could not determine target resolution"}, nil
 	}
 
 	outPath := tmpDir + "/concat-output.mp4"
-	if err := runConcatFilter(ctx, inputPaths, outPath, maxW, maxH); err != nil {
+	if err := runConcatFilter(ctx, inputPaths, durations, outPath, maxW, maxH); err != nil {
 		return &model.ExecOutputs{Code: model.ExecCodeError, Message: "ffmpeg concat: " + err.Error()}, nil
 	}
 
@@ -225,12 +231,20 @@ func ffprobeDimensions(ctx context.Context, path string) (width, height int, err
 	return width, height, nil
 }
 
+// crossfadeSeconds is PRD §5.4's "段间 0.2s 交叉淡化" — a fixed constant
+// rather than a tunable parameter since the PRD only ever specifies this one
+// value.
+const crossfadeSeconds = 0.2
+
 // runConcatFilter re-encodes every input to targetW x targetH (letterboxed,
 // aspect preserved — segments won't all share an aspect ratio since t2va
 // shots pick their own `ratio` while i2va/r2va shots are forced adaptive)
-// and concatenates via filter_complex, not the concat demuxer's stream-copy
-// mode, since mixed 768P/2K segments can't be copy-concatenated.
-func runConcatFilter(ctx context.Context, inputPaths []string, outPath string, targetW, targetH int) error {
+// and joins them via a chained xfade/acrossfade filter_complex graph (not
+// the concat demuxer's stream-copy mode, since mixed 768P/2K segments can't
+// be copy-concatenated, and not the plain `concat` filter either, since that
+// only supports hard cuts). A single input skips the crossfade chain
+// entirely — there's nothing to transition between.
+func runConcatFilter(ctx context.Context, inputPaths []string, durations []float64, outPath string, targetW, targetH int) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
@@ -244,10 +258,32 @@ func runConcatFilter(ctx context.Context, inputPaths []string, outPath string, t
 		fmt.Fprintf(&filter, "[%d:v]scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1[v%d];",
 			i, targetW, targetH, targetW, targetH, i)
 	}
-	for i := range inputPaths {
-		fmt.Fprintf(&filter, "[v%d][%d:a]", i, i)
+
+	if len(inputPaths) == 1 {
+		filter.WriteString("[v0]copy[outv];[0:a]acopy[outa]")
+	} else {
+		// Chained xfade: each transition's `offset` is where in the *running
+		// chain so far* (not the original clip) the next clip starts
+		// overlapping — chainDur tracks that running length, shrinking by
+		// crossfadeSeconds after each transition since the overlap eats into
+		// what would otherwise be the concatenated total duration. Every shot
+		// is generated at 4-15s (§3.2), comfortably longer than a 0.2s
+		// overlap, so no clamping against a too-short clip is needed here.
+		chainDur := durations[0]
+		prevV, prevA := "v0", "0:a"
+		for i := 1; i < len(inputPaths); i++ {
+			offset := chainDur - crossfadeSeconds
+			outV := fmt.Sprintf("vx%d", i)
+			outA := fmt.Sprintf("ax%d", i)
+			fmt.Fprintf(&filter, "[%s][v%d]xfade=transition=fade:duration=%.3f:offset=%.3f[%s];",
+				prevV, i, crossfadeSeconds, offset, outV)
+			fmt.Fprintf(&filter, "[%s][%d:a]acrossfade=d=%.3f:c1=tri:c2=tri[%s];",
+				prevA, i, crossfadeSeconds, outA)
+			prevV, prevA = outV, outA
+			chainDur = chainDur + durations[i] - crossfadeSeconds
+		}
+		fmt.Fprintf(&filter, "[%s]copy[outv];[%s]acopy[outa]", prevV, prevA)
 	}
-	fmt.Fprintf(&filter, "concat=n=%d:v=1:a=1[outv][outa]", len(inputPaths))
 
 	// libopenh264, not libx264: this project's target ffmpeg builds (this
 	// dev machine's, and any non-GPL Linux distro build) are commonly built
