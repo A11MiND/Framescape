@@ -16,6 +16,7 @@ import (
 
 	"github.com/BabySid/aether/executor"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
 	"aigc-platform/internal/application/creditsvc"
@@ -124,6 +125,7 @@ func main() {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.GET("/internal/health", func(c *gin.Context) { c.Status(http.StatusOK) })
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	rpc.NewServer(eng).Register(r)
 
 	srv := &http.Server{Addr: config.SchedulerAddr(), Handler: r}

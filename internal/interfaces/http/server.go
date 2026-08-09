@@ -6,13 +6,17 @@ package httpapi
 
 import (
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
 	"aigc-platform/internal/application/jobsvc"
 	"aigc-platform/internal/infra/executor/minimax"
+	"aigc-platform/internal/pkg/metrics"
 )
 
 type Server struct {
@@ -34,8 +38,10 @@ func (s *Server) Router() *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(corsMiddleware())
+	r.Use(metricsMiddleware())
 
 	r.GET("/internal/health", func(c *gin.Context) { c.Status(http.StatusOK) })
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	r.POST("/internal/callbacks/minimax", s.handleMiniMaxCallback)
 
 	v1 := r.Group("/api/v1")
@@ -61,6 +67,24 @@ func (s *Server) Router() *gin.Engine {
 		authed.GET("/presets", s.handleListPresets)
 	}
 	return r
+}
+
+// metricsMiddleware records aigc_http_requests_total/aigc_http_request_duration_seconds
+// for every request. Uses c.FullPath() (the route pattern, e.g.
+// "/api/v1/jobs/:bizID") rather than c.Request.URL.Path so a biz_id in the
+// URL doesn't create a new label series per request — the classic
+// Prometheus cardinality trap for path-parameterized routes.
+func metricsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+		path := c.FullPath()
+		if path == "" {
+			path = "unmatched"
+		}
+		metrics.HTTPRequestsTotal.WithLabelValues(c.Request.Method, path, strconv.Itoa(c.Writer.Status())).Inc()
+		metrics.HTTPRequestDuration.WithLabelValues(c.Request.Method, path).Observe(time.Since(start).Seconds())
+	}
 }
 
 // corsMiddleware is a permissive dev-only CORS policy so the Vite dev server

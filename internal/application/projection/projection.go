@@ -37,6 +37,7 @@ import (
 	"aigc-platform/internal/infra/executor/minimax"
 	aetherengine "aigc-platform/internal/infra/workflow/aether"
 	"aigc-platform/internal/pkg/logger"
+	"aigc-platform/internal/pkg/metrics"
 )
 
 // ChannelForRun is the Redis Pub/Sub channel a given workflow run's events
@@ -109,6 +110,13 @@ func (p *Projector) onTaskRun(ctx context.Context, tr *store.TaskRun) {
 	if tr.Status != nil {
 		phase = string(*tr.Status)
 	}
+	if isTerminalPhase(phase) {
+		executorType := ""
+		if wf, err := p.workflowJSON(ctx, tr.WorkflowRunID); err == nil {
+			executorType = aetherengine.ResolveExecutorType(wf, tr.TemplateName)
+		}
+		metrics.TaskRunsTotal.WithLabelValues(executorType, phase).Inc()
+	}
 	var outputs map[string]any
 	errMsg := ""
 	if tr.Outputs != nil {
@@ -132,6 +140,10 @@ func (p *Projector) onWorkflowRun(ctx context.Context, wr *store.WorkflowRun) {
 	}
 	if isTerminalPhase(phase) {
 		p.maybeRefundCredits(ctx, wr.RunID)
+		var workflowName string
+		if err := p.db.QueryRowContext(ctx, `SELECT workflow_name FROM jobs WHERE workflow_run_id = ?`, wr.RunID).Scan(&workflowName); err == nil {
+			metrics.JobsTotal.WithLabelValues(workflowName, phase).Inc()
+		}
 	}
 	p.publish(ctx, wr.RunID, Event{
 		Type: "job_update", Phase: phase, Outputs: outputs, WorkflowRunID: wr.RunID,
@@ -183,6 +195,11 @@ func (p *Projector) maybeCommitCredits(ctx context.Context, jobID uint64, tr *st
 	if _, err := p.db.ExecContext(ctx, `UPDATE jobs SET credit_settled = credit_settled + ? WHERE id = ?`, amount, jobID); err != nil {
 		log.Error("projection: update jobs.credit_settled failed", zap.Uint64("job_id", jobID), zap.Error(err))
 	}
+	executorType := ""
+	if wf, err := p.workflowJSON(ctx, tr.WorkflowRunID); err == nil {
+		executorType = aetherengine.ResolveExecutorType(wf, tr.TemplateName)
+	}
+	metrics.CreditsCommittedYuan.WithLabelValues(executorType).Add(costYuan)
 }
 
 // maybeRecordModeration implements F8.4's audit trail: any task that fails

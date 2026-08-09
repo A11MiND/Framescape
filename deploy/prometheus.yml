@@ -1,0 +1,17 @@
+# Scrapes cmd/api and cmd/scheduler's /metrics endpoints (internal/pkg/metrics,
+# wired in internal/interfaces/http/server.go and cmd/scheduler/main.go).
+# cmd/worker has no HTTP server of its own — every task it executes still
+# gets counted here via projection.go's OnTaskRun hook, which runs in
+# cmd/scheduler regardless of which worker instance executed the task, so a
+# separate worker scrape target isn't needed for task-level metrics.
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: "aigc-api"
+    static_configs:
+      - targets: ["api:8080"]
+
+  - job_name: "aigc-scheduler"
+    static_configs:
+      - targets: ["scheduler:8090"]
