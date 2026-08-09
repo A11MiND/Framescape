@@ -171,6 +171,24 @@ export const api = {
     const qs = params.toString()
     return request<{ assets: AssetResponse[] }>('GET', qs ? `/assets?${qs}` : '/assets')
   },
+  deleteAsset: (bizId: string) => request<void>('DELETE', `/assets/${bizId}`),
+  // Binary zip response, not JSON — bypasses the generic request() helper.
+  batchDownloadAssets: async (assetIds: string[]): Promise<Blob> => {
+    const token = useAuthStore.getState().accessToken
+    const resp = await fetch(`${API_BASE}/assets/batch-download`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ asset_ids: assetIds }),
+    })
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({ code: 'unknown', message: resp.statusText }))
+      throw new ApiError(data.code ?? 'unknown', data.message ?? resp.statusText)
+    }
+    return resp.blob()
+  },
 
   listCharacters: () => request<{ characters: Character[] }>('GET', '/characters'),
   createCharacter: (name: string, description: string, refAssetIds: string[], seed: number) =>

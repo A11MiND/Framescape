@@ -48,6 +48,8 @@ func (s *Server) Router() *gin.Engine {
 		authed.POST("/jobs/:bizID/resume", s.handleResumeJob)
 		authed.GET("/assets", s.handleListAssets)
 		authed.GET("/assets/:bizID", s.handleGetAsset)
+		authed.DELETE("/assets/:bizID", s.handleDeleteAsset)
+		authed.POST("/assets/batch-download", s.handleBatchDownloadAssets)
 		authed.POST("/characters", s.handleCreateCharacter)
 		authed.GET("/characters", s.handleListCharacters)
 		authed.GET("/presets", s.handleListPresets)
