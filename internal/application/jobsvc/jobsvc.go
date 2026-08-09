@@ -228,7 +228,21 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 		args["ratio"] = spec.Ratio
 		args["first-frame-asset-id"] = spec.FirstFrameAssetID
 		args["last-frame-asset-id"] = spec.LastFrameAssetID
-		args["reference-image-asset-ids"] = nonNil(spec.ReferenceImageAssetIDs)
+		refImageIDs := spec.ReferenceImageAssetIDs
+		// F6.4's character-driven auto reference: if the caller bound a
+		// character (F3.2) but didn't already pass explicit reference
+		// images/first-last-frame, fall back to that character's own F3.1
+		// reference images instead of requiring the caller to re-pick the
+		// same assets by hand. An explicit pass-through always wins — this
+		// never overrides asset IDs the caller actually supplied.
+		if len(refImageIDs) == 0 && spec.FirstFrameAssetID == "" && spec.LastFrameAssetID == "" && len(spec.Characters) > 0 {
+			autoRefs, err := s.resolveCharacterRefAssetIDs(ctx, userID, spec.Characters)
+			if err != nil {
+				return nil, err
+			}
+			refImageIDs = autoRefs
+		}
+		args["reference-image-asset-ids"] = nonNil(refImageIDs)
 		args["reference-video-asset-ids"] = nonNil(spec.ReferenceVideoAssetIDs)
 		args["reference-audio-asset-ids"] = nonNil(spec.ReferenceAudioAssetIDs)
 		estimatedCredits = creditsvc.EstimateVideoCredits(duration, resolution)
@@ -294,6 +308,37 @@ func (s *Service) resolveCharacters(ctx context.Context, userID uint64, slots []
 			return nil, fmt.Errorf("character %q (slot %s) not found: %w", slot.CharacterID, slot.Slot, err)
 		}
 		out = append(out, prompt.Character{Description: row.Description, Seed: row.Seed})
+	}
+	return out, nil
+}
+
+// resolveCharacterRefAssetIDs implements F6.4's character-driven auto
+// reference (§5.3 step 1): the union, in slot order, of every bound
+// character's own F3.1 reference images. Only used by video.single when the
+// caller didn't already pass explicit reference/first-last-frame asset IDs —
+// see the "video.single" case in Create(). A separate query from
+// resolveCharacters (rather than widening its return type) since every other
+// caller of resolveCharacters only needs the text-compilation subset.
+func (s *Service) resolveCharacterRefAssetIDs(ctx context.Context, userID uint64, slots []CharacterSlot) ([]string, error) {
+	if len(slots) == 0 {
+		return nil, nil
+	}
+	var out []string
+	for _, slot := range slots {
+		var row persistence.Character
+		if err := s.db.WithContext(ctx).
+			Where("biz_id = ? AND user_id = ? AND deleted_at IS NULL", slot.CharacterID, userID).
+			First(&row).Error; err != nil {
+			return nil, fmt.Errorf("character %q (slot %s) not found: %w", slot.CharacterID, slot.Slot, err)
+		}
+		if len(row.RefAssetIDs) == 0 {
+			continue
+		}
+		var ids []string
+		if err := json.Unmarshal(row.RefAssetIDs, &ids); err != nil {
+			return nil, fmt.Errorf("decode character %q ref_asset_ids: %w", slot.CharacterID, err)
+		}
+		out = append(out, ids...)
 	}
 	return out, nil
 }
