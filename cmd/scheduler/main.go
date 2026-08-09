@@ -66,13 +66,15 @@ func main() {
 		log.Fatal("ping redis", zap.Error(err))
 	}
 	credits := creditsvc.New(sqlDB)
-	proj := projection.New(sqlDB, redisClient, credits)
-	mysqlStore.SetChangeCallback(proj.Callback())
-
 	// The scheduler never calls Execute() on these (Dispatch goes through
 	// asynq to cmd/worker) — it only needs the registry so Aether can
 	// validate that submitted workflows reference known executor types.
+	// F8.3's post-hoc review is the one exception: it's a projection-layer
+	// side effect, not a dispatched task, so it makes its own direct
+	// MiniMax call from here.
 	minimaxClient := minimax.NewClient(config.MiniMaxBaseURL(), config.MiniMaxAPIKey())
+	proj := projection.New(sqlDB, redisClient, credits, minimaxClient, sink)
+	mysqlStore.SetChangeCallback(proj.Callback())
 	registry := executor.NewRegistry()
 	must(registry.Register(mock.NewImagePlugin(sink)), log)
 	must(registry.Register(mock.NewVideoPlugin(sink)), log)

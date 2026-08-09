@@ -19,15 +19,22 @@ package projection
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
 
 	"github.com/BabySid/aether/store"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"aigc-platform/internal/application/creditsvc"
+	"aigc-platform/internal/infra/executor/assetstore"
+	"aigc-platform/internal/infra/executor/minimax"
 	aetherengine "aigc-platform/internal/infra/workflow/aether"
 	"aigc-platform/internal/pkg/logger"
 )
@@ -53,10 +60,15 @@ type Projector struct {
 	db      *sql.DB
 	redis   *redis.Client
 	credits *creditsvc.Service
+	// minimax/reader are only used by F8.3's maybeReviewAsset — nil-safe
+	// (that hook just no-ops) so existing callers/tests that don't care
+	// about post-hoc review don't need to change.
+	minimax *minimax.Client
+	reader  assetstore.Reader
 }
 
-func New(db *sql.DB, redisClient *redis.Client, credits *creditsvc.Service) *Projector {
-	return &Projector{db: db, redis: redisClient, credits: credits}
+func New(db *sql.DB, redisClient *redis.Client, credits *creditsvc.Service, minimaxClient *minimax.Client, reader assetstore.Reader) *Projector {
+	return &Projector{db: db, redis: redisClient, credits: credits, minimax: minimaxClient, reader: reader}
 }
 
 // Callback returns the aetherengine.ChangeCallback wired to this projector,
@@ -90,6 +102,7 @@ func (p *Projector) onTaskRun(ctx context.Context, tr *store.TaskRun) {
 		}
 		p.maybeCommitCredits(ctx, jobID, tr)
 		p.maybeRecordModeration(ctx, jobID, tr)
+		p.maybeReviewAsset(ctx, jobID, tr)
 	}
 
 	phase := ""
@@ -206,6 +219,129 @@ func (p *Projector) maybeRecordModeration(ctx context.Context, jobID uint64, tr 
 		tr.RunID, jobID, userID, executorType, msg); err != nil {
 		log.Error("projection: insert moderation_records failed", zap.String("task_run_id", tr.RunID), zap.Error(err))
 	}
+}
+
+// maybeReviewAsset implements F8.3's post-generation review: F8.1/F8.2 only
+// catch what MiniMax's own generation-time filter flags (calibrated for
+// their content policy, not for downstream concerns like R14's "真人肖像、
+// 二次元IP" — real portraits, anime/manga IP), so a successful minimax.image
+// output still gets a second, independent look. Runs MiniMax-M3's vision
+// input against the finished asset and logs to the same moderation_records
+// table F8.4 uses (distinguished by the "post_review:" message prefix,
+// following this codebase's existing convention of prefix-tagging
+// synthesized messages rather than adding a new column for one more
+// variant) — but only when flagged: an all-clear result logs nothing, same
+// as F8.4 only logging actual rejections, not every successful generation.
+// This is advisory only — never blocks or fails the job — so it runs
+// detached from ctx in a goroutine: MiniMax's own generation-time check
+// already gates whether the asset exists at all, and reviewing a
+// still-cheap ~1-3s vision call in the hot state-transition path would add
+// user-visible latency to every single successful generation for no
+// product benefit.
+func (p *Projector) maybeReviewAsset(ctx context.Context, jobID uint64, tr *store.TaskRun) {
+	if p.minimax == nil || p.reader == nil || tr.Status == nil || string(*tr.Status) != "Succeeded" || tr.Outputs == nil {
+		return
+	}
+	wf, err := p.workflowJSON(ctx, tr.WorkflowRunID)
+	if err != nil {
+		return
+	}
+	executorType := aetherengine.ResolveExecutorType(wf, tr.TemplateName)
+	if executorType != "minimax.image" {
+		// Scoped to images for now — video review would need frame
+		// extraction or MiniMax-M3's video input, a further enhancement
+		// beyond this P1 feature's scope.
+		return
+	}
+	outputs := aetherengine.ParamsToMap(tr.Outputs.Parameters)
+	assetID, _ := outputs["asset-id"].(string)
+	if assetID == "" {
+		return
+	}
+
+	log := logger.From(ctx)
+	var userID uint64
+	if err := p.db.QueryRowContext(ctx, `SELECT user_id FROM jobs WHERE id = ?`, jobID).Scan(&userID); err != nil {
+		log.Error("projection: look up job user_id for asset review failed", zap.Uint64("job_id", jobID), zap.Error(err))
+		return
+	}
+
+	go func() {
+		reviewCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		flagged, reason, err := p.reviewAsset(reviewCtx, assetID)
+		if err != nil {
+			log.Error("projection: post-hoc asset review failed", zap.String("asset_id", assetID), zap.Error(err))
+			return
+		}
+		if !flagged {
+			return
+		}
+		if _, err := p.db.ExecContext(reviewCtx, `
+			INSERT INTO moderation_records (task_run_id, job_id, user_id, executor_type, provider_message)
+			VALUES (?, ?, ?, ?, ?)
+			ON DUPLICATE KEY UPDATE task_run_id = task_run_id`,
+			tr.RunID, jobID, userID, executorType, "post_review: "+reason); err != nil {
+			log.Error("projection: insert post-review moderation_records failed", zap.String("task_run_id", tr.RunID), zap.Error(err))
+		}
+	}()
+}
+
+// reviewAsset asks MiniMax-M3 (vision input) a strict yes/no content-safety
+// question about one image asset. Returns flagged=true only when the
+// model's first line is exactly "FLAG" — any other response (including a
+// malformed one) is treated as a pass, since this check is advisory and a
+// false negative here is far cheaper than a false positive silently
+// flagging normal content.
+func (p *Projector) reviewAsset(ctx context.Context, assetBizID string) (flagged bool, reason string, err error) {
+	url, err := p.reader.PublicURL(ctx, assetBizID)
+	if err != nil {
+		return false, "", fmt.Errorf("look up asset %s: %w", assetBizID, err)
+	}
+	// Same constraint as everywhere else this codebase touches MiniMax: our
+	// object storage isn't internet-reachable, so a raw URL back to our own
+	// MinIO gets rejected ("disallowed url", confirmed by a real 400 before
+	// this fix). Inlining the bytes as a data URI sidesteps it, same fix as
+	// image.go's buildSubjectReferenceDataURI for F5.8.
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return false, "", fmt.Errorf("build download request: %w", err)
+	}
+	httpResp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return false, "", fmt.Errorf("download asset %s: %w", assetBizID, err)
+	}
+	defer httpResp.Body.Close()
+	data, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return false, "", fmt.Errorf("read asset %s: %w", assetBizID, err)
+	}
+	dataURI := "data:" + http.DetectContentType(data) + ";base64," + base64.StdEncoding.EncodeToString(data)
+
+	resp, err := p.minimax.ChatCompletion(ctx, minimax.ChatCompletionRequest{
+		Model: "MiniMax-M3",
+		Messages: []minimax.ChatMessage{{
+			Role: "user",
+			Content: []map[string]any{
+				{"type": "image_url", "image_url": map[string]string{"url": dataURI}},
+				{"type": "text", "text": "You are a content-safety reviewer for an AI image generation product (R14: watch for real identifiable people's likenesses and well-known copyrighted characters, alongside standard NSFW/violence concerns). Look at the image. If it clearly contains any of these concerns, reply with exactly \"FLAG: <one short reason>\" as the first line. Otherwise reply with exactly \"OK\" and nothing else."},
+			},
+		}},
+		Temperature:         0,
+		MaxCompletionTokens: 60,
+		Thinking:            &minimax.ThinkingConfig{Type: "disabled"},
+	})
+	if err != nil {
+		return false, "", err
+	}
+	if len(resp.Choices) == 0 {
+		return false, "", nil
+	}
+	content := strings.TrimSpace(resp.Choices[0].Message.Content)
+	if !strings.HasPrefix(content, "FLAG") {
+		return false, "", nil
+	}
+	return true, strings.TrimSpace(strings.TrimPrefix(content, "FLAG:")), nil
 }
 
 // maybeRefundCredits implements §12.3's terminal-state settlement: whatever

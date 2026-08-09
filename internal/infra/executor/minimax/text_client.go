@@ -16,9 +16,16 @@ import (
 // image_generation/video_generation endpoints, this surface uses real HTTP
 // status codes for errors (no body-embedded base_resp), same as the video
 // endpoints — classifyVideoError is reused for both for that reason.
+// Content is `any` rather than `string` because the OpenAI-compatible
+// surface accepts either a plain string (F5.4's story-split usage) or an
+// array of typed content parts for multimodal/vision input (F8.3's
+// post-hoc asset review, e.g. [{"type":"image_url","image_url":{"url":...}},
+// {"type":"text","text":...}]) — both marshal correctly through the same
+// field since json.Marshal handles a string or a []map[string]any identically
+// whether the static type holding it is `any` or the concrete type itself.
 type ChatMessage struct {
 	Role    string `json:"role"`
-	Content string `json:"content"`
+	Content any    `json:"content"`
 }
 
 // ThinkingConfig lets a caller turn off MiniMax-M3's default reasoning mode
