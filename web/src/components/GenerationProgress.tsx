@@ -45,8 +45,16 @@ export default function GenerationProgress({ kind }: { kind: 'image' | 'video' }
 
   return (
     <div className="flex flex-col items-center gap-4 text-zinc-400">
-      <div className="flex items-center gap-2">
-        <div className="h-5 w-5 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+      <div className="flex items-center gap-3">
+        <div className="flex h-5 items-center gap-1">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <span
+              key={i}
+              className="animate-bar-wave h-full w-1 rounded-full bg-sky-500"
+              style={{ animationDelay: `${i * 0.12}s` }}
+            />
+          ))}
+        </div>
         <span className="text-sm text-zinc-300">生成中，请勿关闭页面…</span>
         <span className="font-mono text-xs text-zinc-500">已用时 {formatElapsed(elapsed)}</span>
       </div>

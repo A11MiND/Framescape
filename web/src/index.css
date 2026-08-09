@@ -11,3 +11,14 @@ body {
   color: #fafafa; /* zinc-50 */
   font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
+
+/* Bar-wave loader (GenerationProgress) — Tailwind has no built-in keyframes
+   for this shape, so it's defined once here rather than inline per-bar. */
+@keyframes bar-wave {
+  0%, 40%, 100% { transform: scaleY(0.35); }
+  20% { transform: scaleY(1); }
+}
+
+.animate-bar-wave {
+  animation: bar-wave 1s ease-in-out infinite;
+}
