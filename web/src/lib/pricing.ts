@@ -22,3 +22,10 @@ export function estimateVideoCredits(durationSeconds: number, resolution: string
   const rate = VIDEO_RATE_YUAN[resolution] ?? VIDEO_RATE_YUAN['768P']
   return creditsFromYuan(durationSeconds * rate)
 }
+
+// F6.10's H3-Context-IR node bills per token (§3.4: ¥5.80/M input, ¥23.00/M
+// output), not duration — mirrors creditsvc.EstimatePromptEnhanceCredits'
+// same conservative ~500 in / ~1500 out token assumption for a live estimate.
+export function estimatePromptEnhanceCredits(): number {
+  return creditsFromYuan((500 / 1_000_000) * 5.8 + (1500 / 1_000_000) * 23.0)
+}

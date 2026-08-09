@@ -259,3 +259,14 @@ func EstimateVideoCredits(durationSeconds int, resolution string) int {
 	}
 	return CreditsFromYuan(float64(durationSeconds) * rate)
 }
+
+// EstimatePromptEnhanceCredits is F6.10's hold-time safety margin for the
+// optional H3-Context-IR node: real cost is settled per §3.4's token-based
+// pricing from the node's own cost-yuan output (same commit/refund path as
+// every other node), so this only needs to be a conservative upper bound, not
+// exact. ~500 prompt + ~1500 completion tokens is a generous estimate for a
+// single video prompt's worth of structured-description output.
+func EstimatePromptEnhanceCredits() int {
+	const estInputTokens, estOutputTokens = 500.0, 1500.0
+	return CreditsFromYuan(estInputTokens/1_000_000*5.80 + estOutputTokens/1_000_000*23.00)
+}

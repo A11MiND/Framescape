@@ -70,6 +70,11 @@ type Spec struct {
 	ReferenceImageAssetIDs []string `json:"reference_image_asset_ids,omitempty"`
 	ReferenceVideoAssetIDs []string `json:"reference_video_asset_ids,omitempty"`
 	ReferenceAudioAssetIDs []string `json:"reference_audio_asset_ids,omitempty"`
+	// PromptEnhance is F6.10 (§3.4): opt-in H3-Context-IR prompt-enhancement
+	// node before gen-video, only meaningful for video.single. Routes to the
+	// video-single-enhanced workflow file instead of video-single — see
+	// definitions' selection logic in Create().
+	PromptEnhance bool `json:"prompt_enhance,omitempty"`
 
 	// video.sequence only (F6.7/F6.8, PRD §5.4/§5.5). Shots reuses the same
 	// field image.sequence already uses (N shot descriptions); the only
@@ -125,6 +130,9 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 	defFile, ok := definitions[workflowName]
 	if !ok {
 		return nil, fmt.Errorf("unknown workflow_name %q", workflowName)
+	}
+	if workflowName == "video.single" && spec.PromptEnhance {
+		defFile = "video-single-enhanced"
 	}
 	raw, err := workflowdefs.FS.ReadFile(defFile + ".json")
 	if err != nil {
@@ -224,6 +232,9 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 		args["reference-video-asset-ids"] = nonNil(spec.ReferenceVideoAssetIDs)
 		args["reference-audio-asset-ids"] = nonNil(spec.ReferenceAudioAssetIDs)
 		estimatedCredits = creditsvc.EstimateVideoCredits(duration, resolution)
+		if spec.PromptEnhance {
+			estimatedCredits += creditsvc.EstimatePromptEnhanceCredits()
+		}
 	}
 
 	// §12.3: hold before Submit, never after — a failed hold (insufficient

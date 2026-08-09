@@ -108,6 +108,7 @@ export interface Spec {
   reference_video_asset_ids?: string[]
   reference_audio_asset_ids?: string[]
   recalibrate_every?: number
+  prompt_enhance?: boolean // F6.10, video.single only
 }
 
 export type WorkflowName =

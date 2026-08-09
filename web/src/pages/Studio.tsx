@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { api, type Spec, type WorkflowName, type JobResponse } from '../lib/api'
-import { estimateImageCredits, estimateVideoCredits } from '../lib/pricing'
+import { estimateImageCredits, estimateVideoCredits, estimatePromptEnhanceCredits } from '../lib/pricing'
 import { videoSingleSchema, RATIO_VALUES } from '../lib/videoSpec'
 import { resultAssetIds, type Tab } from '../lib/jobResult'
 import { displayNodeError, firstSpecificError } from '../lib/errors'
@@ -62,6 +62,7 @@ export default function Studio() {
   const [lastFrameAssetId, setLastFrameAssetId] = useState('')
   const [refImageIds, setRefImageIds] = useState<string[]>([])
   const [refVideoIds, setRefVideoIds] = useState<string[]>([])
+  const [promptEnhance, setPromptEnhance] = useState(false)
 
   // video.sequence-only state (F6.7/F6.8). The draft submission only needs
   // shots/duration/ratio/recalibrateEvery — resolution isn't asked here
@@ -105,7 +106,8 @@ export default function Studio() {
           : tab === 'image.sequence'
             ? estimateImageCredits(shots.filter((s) => s.trim()).length || 1)
             : tab === 'video.single'
-              ? estimateVideoCredits(duration, resolution)
+              ? estimateVideoCredits(duration, resolution) +
+                (promptEnhance ? estimatePromptEnhanceCredits() : 0)
               : // video.sequence: draft is always 768P (jobsvc.createVideoSequence's
                 // own hold formula) — the 2K delta only gets held later, at Resume,
                 // for whichever shots the user actually upgrades at the gate.
@@ -145,6 +147,7 @@ export default function Studio() {
         if (lastFrameAssetId) spec.last_frame_asset_id = lastFrameAssetId
         if (refImageIds.length) spec.reference_image_asset_ids = refImageIds
         if (refVideoIds.length) spec.reference_video_asset_ids = refVideoIds
+        if (promptEnhance) spec.prompt_enhance = true
       } else {
         const trimmedShots = vsShots.filter((s) => s.trim())
         if (trimmedShots.length === 0) throw new Error('至少需要一段镜头描述')
@@ -474,6 +477,16 @@ export default function Studio() {
                   </div>
                 </div>
               </div>
+
+              <label className="flex items-center gap-2 text-sm text-zinc-400" title="MiniMax H3-Context-IR：生成前用模型深度理解并润色提示词，按 token 额外计费（F6.10）">
+                <input
+                  type="checkbox"
+                  checked={promptEnhance}
+                  onChange={(e) => setPromptEnhance(e.target.checked)}
+                  className="accent-violet-500"
+                />
+                H3-Context-IR 提示词增强（+约 {estimatePromptEnhanceCredits()} 积分）
+              </label>
             </div>
           )}
 
