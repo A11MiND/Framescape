@@ -270,3 +270,12 @@ func EstimatePromptEnhanceCredits() int {
 	const estInputTokens, estOutputTokens = 500.0, 1500.0
 	return CreditsFromYuan(estInputTokens/1_000_000*5.80 + estOutputTokens/1_000_000*23.00)
 }
+
+// EstimateStorySplitCredits is F5.4's hold-time safety margin for
+// minimax.text.split_story — same "conservative upper bound, real cost
+// settles from the node's own cost-yuan output" reasoning as
+// EstimatePromptEnhanceCredits.
+func EstimateStorySplitCredits() int {
+	const estInputTokens, estOutputTokens = 300.0, 400.0
+	return CreditsFromYuan(estInputTokens/1_000_000*2.10 + estOutputTokens/1_000_000*8.40)
+}

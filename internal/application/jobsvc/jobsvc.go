@@ -51,6 +51,7 @@ type Spec struct {
 	Text       string          `json:"text"`
 	N          int             `json:"n,omitempty"`          // image.batch only: 2..9 (PRD F5.2)
 	Panels     []string        `json:"panels,omitempty"`     // image.comic4 only: exactly 4 panel prompts (PRD F5.3)
+	Story      string          `json:"story,omitempty"`      // image.comic4 only, F5.4: auto-split into 4 panels instead of Panels; ignored if Panels is set
 	Shots      []string        `json:"shots,omitempty"`      // image.sequence only: N shot descriptions (PRD F5.5)
 	Characters []CharacterSlot `json:"characters,omitempty"` // F3.2
 	PresetIDs  []string        `json:"preset_ids,omitempty"` // F4.3
@@ -136,6 +137,9 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 	if workflowName == "video.single" && spec.PromptEnhance {
 		defFile = "video-single-enhanced"
 	}
+	if workflowName == "image.comic4" && len(spec.Panels) == 0 && spec.Story != "" {
+		defFile = "image-comic4-auto"
+	}
 	raw, err := workflowdefs.FS.ReadFile(defFile + ".json")
 	if err != nil {
 		return nil, fmt.Errorf("load workflow definition %q: %w", defFile, err)
@@ -175,23 +179,32 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 		args["n"] = strconv.Itoa(n)
 		estimatedCredits = creditsvc.EstimateImageCredits(n)
 	case "image.comic4":
-		if len(spec.Panels) != 4 {
-			return nil, fmt.Errorf("image.comic4 requires exactly 4 panels, got %d", len(spec.Panels))
+		switch {
+		case len(spec.Panels) == 4:
+			// Items are objects, not bare strings: a loop body task's inputs are
+			// populated directly from each item's own fields — loop.arguments
+			// {{...}} interpolation does not resolve for values pulled from
+			// inputs.parameters/workflow.parameters inside a loop (empirically
+			// verified against the real engine; see docs/aether-validation-report.md
+			// §四 W4 addendum). user-id has to ride along on every item since
+			// there is no other way to get a constant into the loop body.
+			panels := make([]map[string]any, 4)
+			for i, panelText := range spec.Panels {
+				compiled := prompt.Compile(prompt.Input{Text: panelText, Characters: characters, Presets: presets, Seed: spec.Seed})
+				panels[i] = map[string]any{"prompt": compiled.Prompt, "user-id": strconv.FormatUint(userID, 10)}
+			}
+			args["panels"] = panels
+			estimatedCredits = creditsvc.EstimateImageCredits(4)
+		case spec.Story != "":
+			// F5.4: routed to image-comic4-auto.json (see defFile selection
+			// above), whose split-story node builds the panels array itself —
+			// no character/preset compilation on the auto-split path, see
+			// story_split.go's doc.
+			args["story"] = spec.Story
+			estimatedCredits = creditsvc.EstimateImageCredits(4) + creditsvc.EstimateStorySplitCredits()
+		default:
+			return nil, fmt.Errorf("image.comic4 requires exactly 4 panels, or a story to auto-split")
 		}
-		// Items are objects, not bare strings: a loop body task's inputs are
-		// populated directly from each item's own fields — loop.arguments
-		// {{...}} interpolation does not resolve for values pulled from
-		// inputs.parameters/workflow.parameters inside a loop (empirically
-		// verified against the real engine; see docs/aether-validation-report.md
-		// §四 W4 addendum). user-id has to ride along on every item since
-		// there is no other way to get a constant into the loop body.
-		panels := make([]map[string]any, 4)
-		for i, panelText := range spec.Panels {
-			compiled := prompt.Compile(prompt.Input{Text: panelText, Characters: characters, Presets: presets, Seed: spec.Seed})
-			panels[i] = map[string]any{"prompt": compiled.Prompt, "user-id": strconv.FormatUint(userID, 10)}
-		}
-		args["panels"] = panels
-		estimatedCredits = creditsvc.EstimateImageCredits(4)
 	case "image.sequence":
 		if len(spec.Shots) == 0 {
 			return nil, fmt.Errorf("image.sequence requires at least 1 shot")

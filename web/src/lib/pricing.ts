@@ -29,3 +29,9 @@ export function estimateVideoCredits(durationSeconds: number, resolution: string
 export function estimatePromptEnhanceCredits(): number {
   return creditsFromYuan((500 / 1_000_000) * 5.8 + (1500 / 1_000_000) * 23.0)
 }
+
+// F5.4's story-split node (MiniMax-M3) — same conservative token-count
+// assumption as creditsvc.EstimateStorySplitCredits.
+export function estimateStorySplitCredits(): number {
+  return creditsFromYuan((300 / 1_000_000) * 2.1 + (400 / 1_000_000) * 8.4)
+}

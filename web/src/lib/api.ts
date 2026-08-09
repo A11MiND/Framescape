@@ -94,6 +94,7 @@ export interface Spec {
   text?: string
   n?: number
   panels?: string[]
+  story?: string // image.comic4 only, F5.4: auto-split into 4 panels instead of panels
   shots?: string[]
   characters?: CharacterSlot[]
   preset_ids?: string[]

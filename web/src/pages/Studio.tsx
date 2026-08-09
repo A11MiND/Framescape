@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { api, type Spec, type WorkflowName, type JobResponse } from '../lib/api'
-import { estimateImageCredits, estimateVideoCredits, estimatePromptEnhanceCredits } from '../lib/pricing'
+import {
+  estimateImageCredits,
+  estimateVideoCredits,
+  estimatePromptEnhanceCredits,
+  estimateStorySplitCredits,
+} from '../lib/pricing'
 import { videoSingleSchema, RATIO_VALUES } from '../lib/videoSpec'
 import { resultAssetIds, type Tab } from '../lib/jobResult'
 import { displayNodeError, firstSpecificError } from '../lib/errors'
@@ -65,6 +70,10 @@ export default function Studio() {
   const [promptEnhance, setPromptEnhance] = useState(false)
   // image.single-only state (F5.8): optional image-to-image source.
   const [sourceImageId, setSourceImageId] = useState('')
+  // image.comic4-only state (F5.4): auto-split one story into 4 panels
+  // instead of writing each panel by hand.
+  const [comicMode, setComicMode] = useState<'manual' | 'auto'>('manual')
+  const [story, setStory] = useState('')
 
   // video.sequence-only state (F6.7/F6.8). The draft submission only needs
   // shots/duration/ratio/recalibrateEvery — resolution isn't asked here
@@ -104,7 +113,7 @@ export default function Studio() {
       : tab === 'image.batch'
         ? estimateImageCredits(n)
         : tab === 'image.comic4'
-          ? estimateImageCredits(4)
+          ? estimateImageCredits(4) + (comicMode === 'auto' ? estimateStorySplitCredits() : 0)
           : tab === 'image.sequence'
             ? estimateImageCredits(shots.filter((s) => s.trim()).length || 1)
             : tab === 'video.single'
@@ -135,7 +144,12 @@ export default function Studio() {
         if (tab === 'image.batch') spec.n = n
         if (tab === 'image.single' && sourceImageId) spec.source_image_asset_id = sourceImageId
       } else if (tab === 'image.comic4') {
-        spec.panels = panels
+        if (comicMode === 'auto') {
+          if (!story.trim()) throw new Error('请输入剧情描述')
+          spec.story = story
+        } else {
+          spec.panels = panels
+        }
       } else if (tab === 'image.sequence') {
         spec.shots = shots.filter((s) => s.trim())
       } else if (tab === 'video.single') {
@@ -320,19 +334,47 @@ export default function Studio() {
           )}
 
           {tab === 'image.comic4' && (
-            <div className="grid grid-cols-2 gap-3">
-              {panels.map((p, i) => (
+            <div className="space-y-3">
+              <div className="flex gap-2 text-sm">
+                <button
+                  onClick={() => setComicMode('manual')}
+                  className={`rounded-lg px-3 py-1.5 ${comicMode === 'manual' ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-900'}`}
+                >
+                  逐格手写
+                </button>
+                <button
+                  onClick={() => setComicMode('auto')}
+                  className={`rounded-lg px-3 py-1.5 ${comicMode === 'auto' ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-900'}`}
+                  title="F5.4: 用 MiniMax-M3 把一段剧情自动拆成 4 格画面描述"
+                >
+                  剧情自动拆 4 格
+                </button>
+              </div>
+
+              {comicMode === 'manual' ? (
+                <div className="grid grid-cols-2 gap-3">
+                  {panels.map((p, i) => (
+                    <textarea
+                      key={i}
+                      value={p}
+                      onChange={(e) =>
+                        setPanels((cur) => cur.map((c, ci) => (ci === i ? e.target.value : c)))
+                      }
+                      rows={3}
+                      className="resize-none rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm outline-none focus:border-violet-500"
+                      placeholder={`格 ${i + 1}`}
+                    />
+                  ))}
+                </div>
+              ) : (
                 <textarea
-                  key={i}
-                  value={p}
-                  onChange={(e) =>
-                    setPanels((cur) => cur.map((c, ci) => (ci === i ? e.target.value : c)))
-                  }
-                  rows={3}
-                  className="resize-none rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm outline-none focus:border-violet-500"
-                  placeholder={`格 ${i + 1}`}
+                  value={story}
+                  onChange={(e) => setStory(e.target.value)}
+                  rows={4}
+                  className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-900 p-4 outline-none focus:border-violet-500"
+                  placeholder="一段完整的剧情描述，系统会自动拆成 4 个连续分镜"
                 />
-              ))}
+              )}
             </div>
           )}
 
