@@ -101,21 +101,52 @@ func (s *Service) Hold(ctx context.Context, userID uint64, idemKey, refType, ref
 // delta (this credit permanently leaves escrow, spent on a real provider
 // call). idemKey is "task_run:{taskRunID}:commit" — each TaskRunID commits
 // at most once no matter how many times its completion event is delivered.
-func (s *Service) Commit(ctx context.Context, userID uint64, idemKey, taskRunID string, costYuan float64) error {
+// Commit returns the amount actually deducted from held, which callers must
+// use for any downstream bookkeeping (jobs.credit_settled) instead of
+// recomputing CreditsFromYuan(costYuan) themselves — see the comment below
+// for why those two numbers can legitimately differ.
+func (s *Service) Commit(ctx context.Context, userID uint64, idemKey, taskRunID string, costYuan float64) (int, error) {
 	amount := CreditsFromYuan(costYuan)
 	if amount <= 0 {
-		return nil
+		return 0, nil
 	}
-	return s.withTx(ctx, func(tx *sql.Tx) error {
+	var actual int
+	err := s.withTx(ctx, func(tx *sql.Tx) error {
 		if exists, err := idemKeyExists(ctx, tx, idemKey); err != nil || exists {
 			return err
 		}
-		// held can't go negative — a node's actual cost should never exceed
-		// what was held for the whole job (the estimate is deliberately
-		// generous), but clamp defensively via GREATEST rather than trust it.
+		// Read held under this transaction's row lock — the actual deduction
+		// has to be computed from a value that can't change between this read
+		// and the UPDATE below.
+		var heldBefore int
+		if err := tx.QueryRowContext(ctx, `SELECT held FROM credit_accounts WHERE user_id = ? FOR UPDATE`, userID).Scan(&heldBefore); err != nil {
+			return fmt.Errorf("commit: read held: %w", err)
+		}
+		// held can't go negative. A node's actual cost is *usually* covered
+		// by what was held for the whole job (the estimate is deliberately
+		// generous), but it can legitimately be exceeded: image.comic4/
+		// image.sequence bill each Loop node independently, so §12.2's
+		// "minimum 1 credit" floor applies per node, not once across the
+		// batch estimate — 4 panels at ¥0.025 each floor to 4 credits total,
+		// not the 2 a single combined-cost estimate assumes. Same shape for
+		// any token-priced node (H3-Context-IR, MiniMax-M3) whose real usage
+		// runs past its estimate. When held is insufficient, only what's
+		// actually there leaves the system — the shortfall is an unbilled
+		// loss the platform absorbs, not phantom credits vanishing from the
+		// ledger. Logging the pre-clamp nominal `amount` here unconditionally
+		// (instead of this actual, clamped deduction) is exactly what broke
+		// balance+held==SUM(credit_ledger.amount) in production data — held
+		// legitimately floored at 0 while the ledger kept logging -1 per
+		// commit past that point, traced by hand from real accumulated data
+		// before this fix (credit_ledger.held_after showing repeated 0s while
+		// amount kept decrementing).
+		actual = amount
+		if heldBefore < actual {
+			actual = heldBefore
+		}
 		if _, err := tx.ExecContext(ctx, `
-			UPDATE credit_accounts SET held = GREATEST(held - ?, 0), version = version + 1
-			WHERE user_id = ?`, amount, userID); err != nil {
+			UPDATE credit_accounts SET held = held - ?, version = version + 1
+			WHERE user_id = ?`, actual, userID); err != nil {
 			return fmt.Errorf("commit: update credit_accounts: %w", err)
 		}
 		balance, held, err := readAccount(ctx, tx, userID)
@@ -123,11 +154,12 @@ func (s *Service) Commit(ctx context.Context, userID uint64, idemKey, taskRunID 
 			return err
 		}
 		return insertLedger(ctx, tx, ledgerRow{
-			UserID: userID, Direction: "commit", Amount: -amount, BalanceAfter: balance, HeldAfter: held,
+			UserID: userID, Direction: "commit", Amount: -actual, BalanceAfter: balance, HeldAfter: held,
 			RefType: "task_run", RefID: taskRunID, IdemKey: idemKey,
-			Remark: fmt.Sprintf("committed %d credits (cost %.4f yuan)", amount, costYuan),
+			Remark: fmt.Sprintf("committed %d credits (cost %.4f yuan)", actual, costYuan),
 		})
 	})
+	return actual, err
 }
 
 // Refund implements §12.3's terminal-state settlement: whatever's left in
@@ -145,9 +177,30 @@ func (s *Service) Refund(ctx context.Context, userID uint64, idemKey, jobBizID s
 		if exists, err := idemKeyExists(ctx, tx, idemKey); err != nil || exists {
 			return err
 		}
+		// Same reasoning as Commit's fix: the caller's `amount` (jobs.
+		// credit_held - jobs.credit_settled) is only correct if every prior
+		// commit against this job billed exactly what it claimed — clamp
+		// against what's actually left in held rather than trusting the
+		// caller's arithmetic, so a stale/incorrect credit_settled can't mint
+		// balance that was never really held (unconditionally crediting the
+		// full nominal `amount` back to balance while held could only give up
+		// less would inflate balance+held with zero ledger trace, since
+		// refund's ledger amount is always 0 by design — the other way this
+		// invariant can break).
+		var heldBefore int
+		if err := tx.QueryRowContext(ctx, `SELECT held FROM credit_accounts WHERE user_id = ? FOR UPDATE`, userID).Scan(&heldBefore); err != nil {
+			return fmt.Errorf("refund: read held: %w", err)
+		}
+		actual := amount
+		if heldBefore < actual {
+			actual = heldBefore
+		}
+		if actual <= 0 {
+			return nil
+		}
 		if _, err := tx.ExecContext(ctx, `
-			UPDATE credit_accounts SET balance = balance + ?, held = GREATEST(held - ?, 0), version = version + 1
-			WHERE user_id = ?`, amount, amount, userID); err != nil {
+			UPDATE credit_accounts SET balance = balance + ?, held = held - ?, version = version + 1
+			WHERE user_id = ?`, actual, actual, userID); err != nil {
 			return fmt.Errorf("refund: update credit_accounts: %w", err)
 		}
 		balance, held, err := readAccount(ctx, tx, userID)
@@ -157,7 +210,7 @@ func (s *Service) Refund(ctx context.Context, userID uint64, idemKey, jobBizID s
 		return insertLedger(ctx, tx, ledgerRow{
 			UserID: userID, Direction: "refund", Amount: 0, BalanceAfter: balance, HeldAfter: held,
 			RefType: "job", RefID: jobBizID, IdemKey: idemKey,
-			Remark: fmt.Sprintf("refunded %d unused held credits", amount),
+			Remark: fmt.Sprintf("refunded %d unused held credits", actual),
 		})
 	})
 }
@@ -250,6 +303,24 @@ func EstimateImageCredits(n int) int {
 		n = 1
 	}
 	return CreditsFromYuan(float64(n) * imageRateYuan)
+}
+
+// EstimatePerNodeImageCredits is for workflows where each image is its own
+// independently-billed node — image.comic4/image.sequence's Loop issues one
+// minimax.image call per panel/shot, unlike image.batch's single call for
+// n images. Each node pays §12.2's "minimum 1 credit" floor on its own, so
+// summing n independent floors is the correct hold estimate; using
+// EstimateImageCredits(n)'s single-combined-cost formula instead
+// undercounts whenever n separate floors exceed one batch floor (4 panels
+// at ¥0.025 each floor to 4 credits total, not the 2 a combined-cost
+// estimate assumes) — this exact mismatch is what broke
+// balance+held==SUM(credit_ledger.amount) in production data (see
+// Commit's doc for the other half of that fix).
+func EstimatePerNodeImageCredits(n int) int {
+	if n <= 0 {
+		n = 1
+	}
+	return n * CreditsFromYuan(imageRateYuan)
 }
 
 func EstimateVideoCredits(durationSeconds int, resolution string) int {

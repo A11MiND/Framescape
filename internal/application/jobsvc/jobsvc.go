@@ -194,14 +194,18 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 				panels[i] = map[string]any{"prompt": compiled.Prompt, "user-id": strconv.FormatUint(userID, 10)}
 			}
 			args["panels"] = panels
-			estimatedCredits = creditsvc.EstimateImageCredits(4)
+			// Per-node, not EstimateImageCredits(4): each panel is its own
+			// minimax.image call (Loop body), so each pays the per-node
+			// credit floor independently — see EstimatePerNodeImageCredits's
+			// doc for why the combined-cost formula undercounts this.
+			estimatedCredits = creditsvc.EstimatePerNodeImageCredits(4)
 		case spec.Story != "":
 			// F5.4: routed to image-comic4-auto.json (see defFile selection
 			// above), whose split-story node builds the panels array itself —
 			// no character/preset compilation on the auto-split path, see
 			// story_split.go's doc.
 			args["story"] = spec.Story
-			estimatedCredits = creditsvc.EstimateImageCredits(4) + creditsvc.EstimateStorySplitCredits()
+			estimatedCredits = creditsvc.EstimatePerNodeImageCredits(4) + creditsvc.EstimateStorySplitCredits()
 		default:
 			return nil, fmt.Errorf("image.comic4 requires exactly 4 panels, or a story to auto-split")
 		}
@@ -224,7 +228,8 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 			shots[i] = map[string]any{"prompt": compiled.Prompt, "seed": seedStr, "user-id": strconv.FormatUint(userID, 10)}
 		}
 		args["shots"] = shots
-		estimatedCredits = creditsvc.EstimateImageCredits(len(spec.Shots))
+		// Per-node, same reasoning as image.comic4's Loop above.
+		estimatedCredits = creditsvc.EstimatePerNodeImageCredits(len(spec.Shots))
 	case "video.single":
 		// §3.2's 7000-char cap, not image's 1500 (PRD §3.1) — video.go itself
 		// also hard-truncates at 7000 as a backstop, same belt-and-braces

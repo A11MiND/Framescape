@@ -187,12 +187,17 @@ func (p *Projector) maybeCommitCredits(ctx context.Context, jobID uint64, tr *st
 	}
 
 	idemKey := "task_run:" + tr.RunID + ":commit"
-	if err := p.credits.Commit(ctx, userID, idemKey, tr.RunID, costYuan); err != nil {
+	actual, err := p.credits.Commit(ctx, userID, idemKey, tr.RunID, costYuan)
+	if err != nil {
 		log.Error("projection: commit credits failed", zap.String("task_run_id", tr.RunID), zap.Error(err))
 		return
 	}
-	amount := creditsvc.CreditsFromYuan(costYuan)
-	if _, err := p.db.ExecContext(ctx, `UPDATE jobs SET credit_settled = credit_settled + ? WHERE id = ?`, amount, jobID); err != nil {
+	// Use the amount Commit() actually deducted from held, not
+	// creditsvc.CreditsFromYuan(costYuan) recomputed here — they can
+	// legitimately differ (Commit's own doc explains why), and crediting
+	// jobs.credit_settled with the wrong one is exactly what let
+	// maybeRefundCredits's held-settled arithmetic drift from reality.
+	if _, err := p.db.ExecContext(ctx, `UPDATE jobs SET credit_settled = credit_settled + ? WHERE id = ?`, actual, jobID); err != nil {
 		log.Error("projection: update jobs.credit_settled failed", zap.Uint64("job_id", jobID), zap.Error(err))
 	}
 	executorType := ""
