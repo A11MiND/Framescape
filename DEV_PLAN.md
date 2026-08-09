@@ -227,9 +227,9 @@ PRD §16 已给出 7 周里程碑表（目标/交付物/验收）。本文档把
 - video asset 的 `width`/`height` 列目前落库为 0（首尾帧图片是有的，只是视频行本身没填）——不影响任何当前功能（前端还没做，没有消费方读它），真要修最省事的方式是等 W6 拼接执行器顺手从抽帧结果回填
 - ~~F6.4（角色参考图 → `reference_image`...）未接入 `video.single`~~ **已在后续 P1 补齐轮次完成**，见 §2 P1 清单表
 
-### ⚠️ 新发现、未修复：积分对账不等式被打破
+### ✅ 已修复：积分对账不等式被打破
 
-P1 补齐轮次的 upkeep 日志里，`SUM(credit_ledger.amount) == balance + held` 这条 §12.3 的核心恒等式对 smoketest 账号出现了真实偏差（例如 `balance=6, held=0, ledger_sum=1`，后来又观察到 `ledger_sum=-1`，偏差在扩大而不是稳定值，说明不是一次性的历史脏数据）。**这不是本轮任何 P1 功能改动引入的**——七个新功能里唯一动 `credit_ledger.amount` 的路径都是复用既有的 `maybeCommitCredits`/`Hold`/`Refund`，没有新写路径。根因尚未排查（怀疑与本轮高频并发提交/退款有关，但未验证），需要单独一次会话专门排查，不要跟功能开发混在一起做。
+根因已查清并修复：`creditsvc.Commit()` 在 `held` 已经被 `GREATEST(held-amount,0)` 封底到 0 之后，仍然无条件把封底前的 `amount` 写进 `credit_ledger`，导致账本记的扣款比 `held` 实际能扣的更多。两个真实触发源：①`image.comic4`/`image.sequence` 的 Loop 每格独立计费，§12.2"最低扣1积分"是按节点算的，`EstimateImageCredits(4)` 却按合并总价算，4 格各花 ¥0.025 分别封底成 4 积分而不是合并封底的 2 积分；②F6.10 的 token 预估在真实用量偏高时会被合理超支。修复：`Commit()` 改为读取真实 `held` 做 clamp 后把**实际扣除额**写入账本（而不是名义额），新增 `EstimatePerNodeImageCredits` 修正 comic4/sequence 的预扣公式，`Refund()` 做了同样的防御性 clamp。新增 `creditsvc_test.go` 复现真实场景（预扣3、连续5次各扣1积分）做回归测试，并对测试账号历史偏差补了一条纠正记录。
 ### 前端
 
 - [ ] 单段影片创作台 tab、F6.5 模式互斥前端拦截（zod + UI 禁用态双保险）、ratio 校验提示：**推迟**，和 W3/W4 一样的判断——后端互斥/条件校验已经是真实的第二道防线并实测验证（见上），前端接入是纯粘合工作，等专门做前端时统一补
