@@ -1,0 +1,146 @@
+package binding
+
+import "testing"
+
+func TestInterpolate_NoPlaceholder(t *testing.T) {
+	env := EvalVars{"x": 42}
+	val, ok := Interpolate("hello world", env)
+	if ok {
+		t.Fatal("expected wasInterpolated=false for string without placeholders")
+	}
+	if val != "hello world" {
+		t.Fatalf("expected %q, got %v", "hello world", val)
+	}
+}
+
+func TestInterpolate_SingleToken_TypePreserved(t *testing.T) {
+	env := EvalVars{"num": 99}
+	val, ok := Interpolate("{{num}}", env)
+	if !ok {
+		t.Fatal("expected wasInterpolated=true")
+	}
+	if val != 99 {
+		t.Fatalf("expected int 99, got %v (%T)", val, val)
+	}
+}
+
+func TestInterpolate_SingleToken_StringValue(t *testing.T) {
+	env := EvalVars{"greeting": "hello"}
+	val, ok := Interpolate("{{greeting}}", env)
+	if !ok {
+		t.Fatal("expected wasInterpolated=true")
+	}
+	if val != "hello" {
+		t.Fatalf("expected %q, got %v", "hello", val)
+	}
+}
+
+func TestInterpolate_SingleToken_KeyNotFound(t *testing.T) {
+	env := EvalVars{}
+	val, ok := Interpolate("{{missing}}", env)
+	// Key not found: original string returned unchanged, wasInterpolated=false
+	if ok {
+		t.Fatal("expected wasInterpolated=false when key not found")
+	}
+	if val != "{{missing}}" {
+		t.Fatalf("expected original placeholder, got %v", val)
+	}
+}
+
+func TestInterpolate_MultiToken(t *testing.T) {
+	env := EvalVars{"a": "foo", "b": "bar"}
+	val, ok := Interpolate("prefix-{{a}}-{{b}}-suffix", env)
+	if !ok {
+		t.Fatal("expected wasInterpolated=true")
+	}
+	if val != "prefix-foo-bar-suffix" {
+		t.Fatalf("unexpected result: %v", val)
+	}
+}
+
+func TestInterpolate_MultiToken_MissingKeyPreserved(t *testing.T) {
+	env := EvalVars{"a": "A"}
+	val, ok := Interpolate("{{a}}-{{missing}}", env)
+	if !ok {
+		t.Fatal("expected wasInterpolated=true because {{a}} was replaced")
+	}
+	if val != "A-{{missing}}" {
+		t.Fatalf("unexpected result: %v", val)
+	}
+}
+
+func TestInterpolate_UnclosedBrace(t *testing.T) {
+	env := EvalVars{"x": "X"}
+	// No closing }} → no interpolation, must not panic
+	_, ok := Interpolate("{{x", env)
+	if ok {
+		t.Fatal("expected wasInterpolated=false for unclosed brace")
+	}
+}
+
+func TestInterpolateString_NonStringValue(t *testing.T) {
+	env := EvalVars{"n": 3.14}
+	s := InterpolateString("{{n}}", env)
+	// fmt.Sprint(3.14) → "3.14"
+	if s != "3.14" {
+		t.Fatalf("expected %q, got %q", "3.14", s)
+	}
+}
+
+func TestInterpolateString_NoPlaceholder(t *testing.T) {
+	s := InterpolateString("plain text", EvalVars{})
+	if s != "plain text" {
+		t.Fatalf("expected %q, got %q", "plain text", s)
+	}
+}
+
+// ---- ExtractNamespaces ----
+
+func TestExtractNamespaces_MultipleNamespaces(t *testing.T) {
+	ns := ExtractNamespaces("os={{system.os}} tenant={{tenant.name}} idx={{loop_iter.index}}")
+	want := map[string]bool{"system": true, "tenant": true, "loop_iter": true}
+	if len(ns) != len(want) {
+		t.Fatalf("expected %d namespaces, got %d: %v", len(want), len(ns), ns)
+	}
+	for _, n := range ns {
+		if !want[n] {
+			t.Errorf("unexpected namespace %q", n)
+		}
+	}
+}
+
+func TestExtractNamespaces_NoBraces(t *testing.T) {
+	ns := ExtractNamespaces("plain text with no placeholders")
+	if len(ns) != 0 {
+		t.Fatalf("expected empty, got %v", ns)
+	}
+}
+
+func TestExtractNamespaces_BareKey(t *testing.T) {
+	// No dot → no namespace
+	ns := ExtractNamespaces("{{barekey}}")
+	if len(ns) != 0 {
+		t.Fatalf("expected empty for bare key, got %v", ns)
+	}
+}
+
+func TestExtractNamespaces_Deduplicated(t *testing.T) {
+	ns := ExtractNamespaces("{{system.os}} {{system.arch}}")
+	if len(ns) != 1 || ns[0] != "system" {
+		t.Fatalf("expected [system], got %v", ns)
+	}
+}
+
+func TestExtractNamespaces_UnclosedBrace(t *testing.T) {
+	ns := ExtractNamespaces("{{system.os")
+	if len(ns) != 0 {
+		t.Fatalf("expected empty for unclosed brace, got %v", ns)
+	}
+}
+
+func TestExtractNamespaces_WhitespaceInKey(t *testing.T) {
+	ns := ExtractNamespaces("{{ system.os }}")
+	if len(ns) != 1 || ns[0] != "system" {
+		t.Fatalf("expected [system], got %v", ns)
+	}
+}

@@ -1,0 +1,57 @@
+{
+  "apiVersion": "aether/v1",
+  "kind": "Workflow",
+  "metadata": {
+    "name": "image-single",
+    "annotations": {
+      "description": "F5.1 单图: PromptSpec.text -> workflow.parameters.prompt -> 1 次 minimax.image (n=1)。"
+    }
+  },
+  "spec": {
+    "entrypoint": "main",
+    "arguments": {
+      "parameters": [
+        { "name": "prompt", "type": "string" },
+        { "name": "user-id", "type": "string" }
+      ]
+    },
+    "templates": [
+      {
+        "dag": {
+          "name": "main",
+          "tasks": [
+            {
+              "name": "gen",
+              "template": "gen-image",
+              "arguments": {
+                "parameters": [
+                  { "name": "prompt", "valueFrom": { "parameter": "workflow.parameters.prompt" } },
+                  { "name": "user-id", "valueFrom": { "parameter": "workflow.parameters.user-id" } }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "task": {
+          "name": "gen-image",
+          "executor": { "type": "minimax.image" },
+          "inputs": {
+            "parameters": [
+              { "name": "prompt", "type": "string" },
+              { "name": "user-id", "type": "string" },
+              { "name": "n", "type": "string", "value": "1" }
+            ]
+          },
+          "phaseConditions": {
+            "succeeded": "outputs.parameters[\"success-count\"] == outputs.parameters[\"requested-n\"]",
+            "failed": "outputs.parameters[\"success-count\"] < outputs.parameters[\"requested-n\"]"
+          },
+          "retry": { "limit": 2 },
+          "timeout": "3m"
+        }
+      }
+    ]
+  }
+}

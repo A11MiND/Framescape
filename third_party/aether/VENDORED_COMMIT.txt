@@ -1,0 +1,11 @@
+002e3b7eedf9b16b83d54b0f69cb121293a5a614 (2026-06-15T16:08:30+08:00)
+Source: https://github.com/BabySid/aether
+License: BSD-3-Clause (see LICENSE in this directory)
+
+LOCAL PATCHES (applied on top of the pinned commit above, not upstream):
+- engine_loop.go, startLoopController's "zero iterations" branch (W6,
+  aigc-platform): fixed a deadlock + broken downstream binding when a Loop's
+  itemsFrom resolves to an empty array. Full rationale in the inline comment
+  at the patch site and in docs/aether-validation-report.md's W6 section.
+  Re-check this patch (or upstream a fix) if this vendored copy is ever
+  updated to a newer commit.

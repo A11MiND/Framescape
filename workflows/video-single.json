@@ -1,0 +1,101 @@
+{
+  "apiVersion": "aether/v1",
+  "kind": "Workflow",
+  "metadata": {
+    "name": "video-single",
+    "annotations": {
+      "description": "F6.1-F6.4 单段影片: minimax.video (t2va/i2va/r2va, 模式由传入哪些引用字段决定) -> local.ffmpeg.extract 抽首尾帧 (F2.6, 连续影片衔接的素材来源)。"
+    }
+  },
+  "spec": {
+    "entrypoint": "main",
+    "arguments": {
+      "parameters": [
+        { "name": "prompt", "type": "string" },
+        { "name": "duration", "type": "string" },
+        { "name": "resolution", "type": "string" },
+        { "name": "ratio", "type": "string" },
+        { "name": "first-frame-asset-id", "type": "string" },
+        { "name": "last-frame-asset-id", "type": "string" },
+        { "name": "reference-image-asset-ids", "type": "array" },
+        { "name": "reference-video-asset-ids", "type": "array" },
+        { "name": "reference-audio-asset-ids", "type": "array" },
+        { "name": "user-id", "type": "string" }
+      ]
+    },
+    "templates": [
+      {
+        "dag": {
+          "name": "main",
+          "tasks": [
+            {
+              "name": "gen",
+              "template": "gen-video",
+              "arguments": {
+                "parameters": [
+                  { "name": "prompt", "valueFrom": { "parameter": "workflow.parameters.prompt" } },
+                  { "name": "duration", "valueFrom": { "parameter": "workflow.parameters.duration" } },
+                  { "name": "resolution", "valueFrom": { "parameter": "workflow.parameters.resolution" } },
+                  { "name": "ratio", "valueFrom": { "parameter": "workflow.parameters.ratio" } },
+                  { "name": "first-frame-asset-id", "valueFrom": { "parameter": "workflow.parameters.first-frame-asset-id" } },
+                  { "name": "last-frame-asset-id", "valueFrom": { "parameter": "workflow.parameters.last-frame-asset-id" } },
+                  { "name": "reference-image-asset-ids", "valueFrom": { "parameter": "workflow.parameters.reference-image-asset-ids" } },
+                  { "name": "reference-video-asset-ids", "valueFrom": { "parameter": "workflow.parameters.reference-video-asset-ids" } },
+                  { "name": "reference-audio-asset-ids", "valueFrom": { "parameter": "workflow.parameters.reference-audio-asset-ids" } },
+                  { "name": "user-id", "valueFrom": { "parameter": "workflow.parameters.user-id" } }
+                ]
+              }
+            },
+            {
+              "name": "extract",
+              "template": "extract-frames",
+              "dependencies": ["gen"],
+              "arguments": {
+                "parameters": [
+                  { "name": "video-asset-id", "valueFrom": { "parameter": "tasks.gen.outputs.parameters.asset-id" } },
+                  { "name": "user-id", "valueFrom": { "parameter": "workflow.parameters.user-id" } }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "task": {
+          "name": "gen-video",
+          "executor": { "type": "minimax.video" },
+          "inputs": {
+            "parameters": [
+              { "name": "prompt", "type": "string" },
+              { "name": "duration", "type": "string" },
+              { "name": "resolution", "type": "string" },
+              { "name": "ratio", "type": "string" },
+              { "name": "first-frame-asset-id", "type": "string" },
+              { "name": "last-frame-asset-id", "type": "string" },
+              { "name": "reference-image-asset-ids", "type": "array" },
+              { "name": "reference-video-asset-ids", "type": "array" },
+              { "name": "reference-audio-asset-ids", "type": "array" },
+              { "name": "user-id", "type": "string" }
+            ]
+          },
+          "retry": { "limit": 1 },
+          "timeout": "30m"
+        }
+      },
+      {
+        "task": {
+          "name": "extract-frames",
+          "executor": { "type": "local.ffmpeg.extract" },
+          "inputs": {
+            "parameters": [
+              { "name": "video-asset-id", "type": "string" },
+              { "name": "user-id", "type": "string" }
+            ]
+          },
+          "retry": { "limit": 1 },
+          "timeout": "2m"
+        }
+      }
+    ]
+  }
+}

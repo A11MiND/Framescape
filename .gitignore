@@ -1,0 +1,14 @@
+# Go
+/bin/
+*.test
+*.out
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+
+# Vendored aether is checked in deliberately (§2.3 闸门二) — do not ignore it.
