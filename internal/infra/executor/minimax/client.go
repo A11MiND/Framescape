@@ -55,18 +55,29 @@ type ImageStyle struct {
 	StyleWeight float64 `json:"style_weight,omitempty"`
 }
 
+// SubjectReferenceItem is F5.8's image-to-image mechanism (verified against
+// platform.minimaxi.com's image generation guide): a single reference image
+// whose subject the output preserves while following the text prompt.
+// MiniMax's image_generation only documents "character" as a type and only
+// supports one reference image per request.
+type SubjectReferenceItem struct {
+	Type      string `json:"type"`       // "character"
+	ImageFile string `json:"image_file"` // URL or data URI
+}
+
 type ImageGenerationRequest struct {
-	Model           string      `json:"model"`
-	Prompt          string      `json:"prompt"`
-	N               int         `json:"n,omitempty"`
-	AspectRatio     string      `json:"aspect_ratio,omitempty"`
-	Width           int         `json:"width,omitempty"`
-	Height          int         `json:"height,omitempty"`
-	Seed            *int64      `json:"seed,omitempty"`
-	Style           *ImageStyle `json:"style,omitempty"`
-	ResponseFormat  string      `json:"response_format,omitempty"`
-	PromptOptimizer *bool       `json:"prompt_optimizer,omitempty"`
-	AigcWatermark   *bool       `json:"aigc_watermark,omitempty"`
+	Model            string                 `json:"model"`
+	Prompt           string                 `json:"prompt"`
+	N                int                    `json:"n,omitempty"`
+	AspectRatio      string                 `json:"aspect_ratio,omitempty"`
+	Width            int                    `json:"width,omitempty"`
+	Height           int                    `json:"height,omitempty"`
+	Seed             *int64                 `json:"seed,omitempty"`
+	Style            *ImageStyle            `json:"style,omitempty"`
+	ResponseFormat   string                 `json:"response_format,omitempty"`
+	PromptOptimizer  *bool                  `json:"prompt_optimizer,omitempty"`
+	AigcWatermark    *bool                  `json:"aigc_watermark,omitempty"`
+	SubjectReference []SubjectReferenceItem `json:"subject_reference,omitempty"`
 }
 
 type ImageGenerationResponse struct {

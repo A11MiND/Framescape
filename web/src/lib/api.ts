@@ -98,6 +98,7 @@ export interface Spec {
   characters?: CharacterSlot[]
   preset_ids?: string[]
   seed?: number
+  source_image_asset_id?: string // F5.8, image.single only
   // video.single / video.sequence fields, unused by the image forms.
   duration_seconds?: number
   resolution?: string

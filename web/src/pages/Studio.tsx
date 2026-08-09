@@ -63,6 +63,8 @@ export default function Studio() {
   const [refImageIds, setRefImageIds] = useState<string[]>([])
   const [refVideoIds, setRefVideoIds] = useState<string[]>([])
   const [promptEnhance, setPromptEnhance] = useState(false)
+  // image.single-only state (F5.8): optional image-to-image source.
+  const [sourceImageId, setSourceImageId] = useState('')
 
   // video.sequence-only state (F6.7/F6.8). The draft submission only needs
   // shots/duration/ratio/recalibrateEvery — resolution isn't asked here
@@ -131,6 +133,7 @@ export default function Studio() {
       if (tab === 'image.single' || tab === 'image.batch') {
         spec.text = text
         if (tab === 'image.batch') spec.n = n
+        if (tab === 'image.single' && sourceImageId) spec.source_image_asset_id = sourceImageId
       } else if (tab === 'image.comic4') {
         spec.panels = panels
       } else if (tab === 'image.sequence') {
@@ -285,6 +288,18 @@ export default function Studio() {
               className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-900 p-4 outline-none focus:border-violet-500"
               placeholder="两人在天台对峙，黄昏逆光，风很大"
             />
+          )}
+
+          {tab === 'image.single' && (
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">图生图（F5.8，可选）</p>
+              <AssetPicker
+                type="image"
+                selected={sourceImageId ? [sourceImageId] : []}
+                onToggle={(id) => setSourceImageId((cur) => (cur === id ? '' : id))}
+                max={1}
+              />
+            </div>
           )}
 
           {tab === 'image.batch' && (

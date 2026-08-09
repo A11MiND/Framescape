@@ -55,7 +55,7 @@ func main() {
 	registry := executor.NewRegistry()
 	must(registry.Register(mock.NewImagePlugin(sink)), log)
 	must(registry.Register(mock.NewVideoPlugin(sink)), log)
-	must(registry.Register(minimax.NewImagePlugin(minimaxClient, sink)), log)
+	must(registry.Register(minimax.NewImagePlugin(minimaxClient, sink, sink)), log)
 	must(registry.Register(minimax.NewFileUploadPlugin(minimaxClient, sink, fileCache)), log)
 	videoLimiter := minimax.NewVideoLimiter(redisClient, "default", config.MiniMaxVideoConcurrency())
 	must(registry.Register(minimax.NewVideoPlugin(minimaxClient, sink, sink, fileCache, redisClient, config.MiniMaxCallbackURL(), videoLimiter)), log)

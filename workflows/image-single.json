@@ -12,7 +12,8 @@
     "arguments": {
       "parameters": [
         { "name": "prompt", "type": "string" },
-        { "name": "user-id", "type": "string" }
+        { "name": "user-id", "type": "string" },
+        { "name": "source-image-asset-id", "type": "string" }
       ]
     },
     "templates": [
@@ -26,7 +27,8 @@
               "arguments": {
                 "parameters": [
                   { "name": "prompt", "valueFrom": { "parameter": "workflow.parameters.prompt" } },
-                  { "name": "user-id", "valueFrom": { "parameter": "workflow.parameters.user-id" } }
+                  { "name": "user-id", "valueFrom": { "parameter": "workflow.parameters.user-id" } },
+                  { "name": "source-image-asset-id", "valueFrom": { "parameter": "workflow.parameters.source-image-asset-id" } }
                 ]
               }
             }
@@ -41,7 +43,8 @@
             "parameters": [
               { "name": "prompt", "type": "string" },
               { "name": "user-id", "type": "string" },
-              { "name": "n", "type": "string", "value": "1" }
+              { "name": "n", "type": "string", "value": "1" },
+              { "name": "source-image-asset-id", "type": "string" }
             ]
           },
           "phaseConditions": {

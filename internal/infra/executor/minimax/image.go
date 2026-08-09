@@ -2,7 +2,9 @@ package minimax
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"net/http"
 	"strconv"
 
 	"github.com/BabySid/aether/executor"
@@ -36,15 +38,23 @@ type ImageConfig struct {
 	PromptOptimizer *bool   `json:"prompt-optimizer"`
 	AigcWatermark   *bool   `json:"aigc-watermark"`
 	UserID          string  `json:"user-id"`
+	// SourceImageAssetID is F5.8's image-to-image input: when set, the
+	// referenced asset is downloaded and sent as MiniMax's subject_reference
+	// (a data URI, not mm_file:// — subject_reference isn't listed among the
+	// purposes MiniMax's file-upload API documents, so this sidesteps that
+	// ambiguity entirely by inlining the bytes instead of trying to reuse the
+	// video-generation-input upload/cache path).
+	SourceImageAssetID string `json:"source-image-asset-id"`
 }
 
 type ImagePlugin struct {
 	client *Client
 	sink   assetstore.Sink
+	reader assetstore.Reader
 }
 
-func NewImagePlugin(client *Client, sink assetstore.Sink) *ImagePlugin {
-	return &ImagePlugin{client: client, sink: sink}
+func NewImagePlugin(client *Client, sink assetstore.Sink, reader assetstore.Reader) *ImagePlugin {
+	return &ImagePlugin{client: client, sink: sink, reader: reader}
 }
 
 func (p *ImagePlugin) Type() string { return "minimax.image" }
@@ -103,6 +113,13 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 			weight = 0.8
 		}
 		mmReq.Style = &ImageStyle{StyleType: cfg.StyleType, StyleWeight: weight}
+	}
+	if cfg.SourceImageAssetID != "" {
+		dataURI, err := p.buildSubjectReferenceDataURI(ctx, cfg.SourceImageAssetID)
+		if err != nil {
+			return errOutputs(model.ExecCodeError, "source_image: "+err.Error()), nil
+		}
+		mmReq.SubjectReference = []SubjectReferenceItem{{Type: "character", ImageFile: dataURI}}
 	}
 
 	resp, err := p.client.GenerateImage(ctx, mmReq)
@@ -193,6 +210,25 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 		CostYuan:      float64(len(assetIDs)) * costPerImageYuan,
 		MinimaxTaskID: resp.ID,
 	})
+}
+
+// buildSubjectReferenceDataURI resolves a local asset to the data URI
+// subject_reference.image_file expects (F5.8). Reuses the same
+// PublicURL-then-fetch path uploadOrGetCached uses for video references,
+// just without the MiniMax file-upload/cache step — inlining the bytes
+// avoids needing a purpose value MiniMax's file API doesn't document for
+// image generation at all.
+func (p *ImagePlugin) buildSubjectReferenceDataURI(ctx context.Context, assetBizID string) (string, error) {
+	url, err := p.reader.PublicURL(ctx, assetBizID)
+	if err != nil {
+		return "", fmt.Errorf("look up asset %s: %w", assetBizID, err)
+	}
+	data, err := downloadBytes(ctx, url)
+	if err != nil {
+		return "", fmt.Errorf("download asset %s: %w", assetBizID, err)
+	}
+	mime := http.DetectContentType(data)
+	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data), nil
 }
 
 func errOutputs(code int, msg string) *model.ExecOutputs {

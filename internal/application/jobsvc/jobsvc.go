@@ -55,6 +55,8 @@ type Spec struct {
 	Characters []CharacterSlot `json:"characters,omitempty"` // F3.2
 	PresetIDs  []string        `json:"preset_ids,omitempty"` // F4.3
 	Seed       *int64          `json:"seed,omitempty"`       // explicit override; else a bound character's fixed seed wins
+	// SourceImageAssetID is F5.8's image-to-image input, image.single only.
+	SourceImageAssetID string `json:"source_image_asset_id,omitempty"`
 
 	// video.single only (F6.1-F6.3; PRD §3.2). Exactly one of
 	// {FirstFrameAssetID, LastFrameAssetID} vs the three Reference*AssetIDs
@@ -161,6 +163,7 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 	case "image.single":
 		compiled := prompt.Compile(prompt.Input{Text: spec.Text, Characters: characters, Presets: presets, Seed: spec.Seed})
 		args["prompt"] = compiled.Prompt
+		args["source-image-asset-id"] = spec.SourceImageAssetID
 		estimatedCredits = creditsvc.EstimateImageCredits(1)
 	case "image.batch":
 		compiled := prompt.Compile(prompt.Input{Text: spec.Text, Characters: characters, Presets: presets, Seed: spec.Seed})
