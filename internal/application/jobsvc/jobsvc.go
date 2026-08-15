@@ -426,12 +426,9 @@ func (s *Service) List(ctx context.Context, userID uint64, status string, cursor
 // way it always has, the next time anything calls Get (see Get's own
 // terminal-phase sync, a few lines up).
 func (s *Service) Cancel(ctx context.Context, userID uint64, bizID string) error {
-	job, _, err := s.Get(ctx, bizID)
+	job, _, err := s.Get(ctx, userID, bizID)
 	if err != nil {
 		return err
-	}
-	if job.UserID != userID {
-		return fmt.Errorf("job %q not found", bizID)
 	}
 	if job.Status == "succeeded" || job.Status == "failed" || job.Status == "cancelled" {
 		return nil // already stopped — same "no-op past terminal" shape as Resume
@@ -513,9 +510,18 @@ func (s *Service) resolvePresets(ctx context.Context, presetIDs []string) ([]pro
 // stays the authoritative source; job_nodes (populated via
 // internal/application/projection, DEV_PLAN.md §6) exists for list views
 // and SSE, not to replace this read path.
-func (s *Service) Get(ctx context.Context, bizID string) (*persistence.Job, *workflow.Run, error) {
+//
+// Scoped by userID — a job's biz_id is a ULID, not a secret, and every
+// direct caller of this method (handleGetJob, handleJobEvents) sits behind
+// requireAuth but was never checking that the token's own user is the
+// job's owner, which meant any authenticated user who obtained another
+// user's job biz_id (shared link, log line, browser history) could read
+// its full spec — including prompt text — and live-subscribe to its SSE
+// stream. List/Cancel/Resume already scoped their own queries by user_id;
+// this was the one read path that didn't.
+func (s *Service) Get(ctx context.Context, userID uint64, bizID string) (*persistence.Job, *workflow.Run, error) {
 	var job persistence.Job
-	if err := s.db.WithContext(ctx).Where("biz_id = ?", bizID).First(&job).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("biz_id = ? AND user_id = ?", bizID, userID).First(&job).Error; err != nil {
 		return nil, nil, fmt.Errorf("job %q not found: %w", bizID, err)
 	}
 	run, err := s.eng.Get(ctx, workflow.RunID(job.WorkflowRunID))

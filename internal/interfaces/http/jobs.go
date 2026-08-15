@@ -125,7 +125,7 @@ func (s *Server) handleCancelJob(c *gin.Context) {
 }
 
 func (s *Server) handleGetJob(c *gin.Context) {
-	job, run, err := s.jobs.Get(c.Request.Context(), c.Param("bizID"))
+	job, run, err := s.jobs.Get(c.Request.Context(), userID(c), c.Param("bizID"))
 	if err != nil {
 		c.JSON(http.StatusNotFound, errBody("not_found", err.Error()))
 		return

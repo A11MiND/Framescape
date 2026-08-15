@@ -18,7 +18,7 @@ import (
 // this silently never reaches the browser — noted in deploy docs, not
 // enforceable from here.
 func (s *Server) handleJobEvents(c *gin.Context) {
-	job, _, err := s.jobs.Get(c.Request.Context(), c.Param("bizID"))
+	job, _, err := s.jobs.Get(c.Request.Context(), userID(c), c.Param("bizID"))
 	if err != nil {
 		c.JSON(http.StatusNotFound, errBody("not_found", err.Error()))
 		return
