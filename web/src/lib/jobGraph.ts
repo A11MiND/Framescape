@@ -7,6 +7,9 @@ export interface GraphNode {
   error: string
   outputs: Record<string, unknown> | null
   sublabel?: string // e.g. "3/4 完成" for a Loop container
+  creditCost?: number
+  startedAt?: string | null
+  finishedAt?: string | null
 }
 
 export interface JobGraph {
@@ -51,6 +54,9 @@ function toGraphNode(n: JobNode | undefined, id: string, label: string, sublabel
     error: n?.error ?? '',
     outputs: n?.outputs ?? null,
     sublabel,
+    creditCost: n?.credit_cost,
+    startedAt: n?.started_at,
+    finishedAt: n?.finished_at,
   }
 }
 

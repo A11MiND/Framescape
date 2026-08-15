@@ -2,12 +2,14 @@ package httpapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 
 	"aigc-platform/internal/application/jobsvc"
+	"aigc-platform/internal/infra/persistence"
 )
 
 type createJobRequest struct {
@@ -131,10 +133,24 @@ func (s *Server) handleGetJob(c *gin.Context) {
 		return
 	}
 
+	// job_nodes is the projection table (populated by
+	// internal/application/projection), not the engine's own live state —
+	// it's the only place credit_cost/started_at/finished_at exist at all
+	// (the workflow.Engine port has no notion of credits, and only tracks
+	// UpdatedAt, not a first-seen-Running timestamp). Keyed by
+	// name|loop_index to match run.Nodes below, the same identity pair
+	// job_nodes' own uk constraint uses.
+	var projRows []persistence.JobNode
+	_ = s.db.WithContext(c.Request.Context()).Where("job_id = ?", job.ID).Find(&projRows).Error
+	projByKey := make(map[string]persistence.JobNode, len(projRows))
+	for _, r := range projRows {
+		projByKey[fmt.Sprintf("%s|%d", r.NodeName, r.LoopIndex)] = r
+	}
+
 	nodes := make([]gin.H, 0)
 	if run != nil {
 		for _, n := range run.Nodes {
-			nodes = append(nodes, gin.H{
+			row := gin.H{
 				"name":    n.Name,
 				"phase":   n.Phase,
 				"outputs": n.Outputs,
@@ -149,7 +165,13 @@ func (s *Server) handleGetJob(c *gin.Context) {
 				// blob instead of each panel's own status — see
 				// jobGraph.ts's buildJobGraph for the consumer this unlocks.
 				"loop_index": n.LoopIndex,
-			})
+			}
+			if pr, ok := projByKey[fmt.Sprintf("%s|%d", n.Name, n.LoopIndex)]; ok {
+				row["credit_cost"] = pr.CreditCost
+				row["started_at"] = pr.StartedAt
+				row["finished_at"] = pr.FinishedAt
+			}
+			nodes = append(nodes, row)
 		}
 	}
 

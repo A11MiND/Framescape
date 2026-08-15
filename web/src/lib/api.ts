@@ -102,6 +102,12 @@ export interface JobNode {
   // why this exists: it's what lets image.comic4/image.sequence show each
   // panel/shot's own status instead of one aggregated "k/n done" box.
   loop_index: number
+  // Only present once this specific task_run_id has a matching row in the
+  // job_nodes projection table (handleGetJob's own doc) — absent for a
+  // node the projector hasn't seen yet, not just zero/empty.
+  credit_cost?: number
+  started_at?: string | null
+  finished_at?: string | null
 }
 
 export interface JobResponse {

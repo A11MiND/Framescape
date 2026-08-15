@@ -200,6 +200,17 @@ func (p *Projector) maybeCommitCredits(ctx context.Context, jobID uint64, tr *st
 	if _, err := p.db.ExecContext(ctx, `UPDATE jobs SET credit_settled = credit_settled + ? WHERE id = ?`, actual, jobID); err != nil {
 		log.Error("projection: update jobs.credit_settled failed", zap.Uint64("job_id", jobID), zap.Error(err))
 	}
+	// job_nodes.credit_cost existed on the table since the first migration
+	// but nothing ever wrote it — §19.4.6's node detail drawer wants
+	// per-node "消耗积分", not just the job-level total this same `actual`
+	// already feeds into jobs.credit_settled above. Same non-transactional
+	// best-effort write as that line (this whole function already treats a
+	// failed secondary write as log-and-continue, never as a reason to
+	// retry or fail the commit itself — the credits side of this already
+	// succeeded by this point).
+	if _, err := p.db.ExecContext(ctx, `UPDATE job_nodes SET credit_cost = credit_cost + ? WHERE task_run_id = ?`, actual, tr.RunID); err != nil {
+		log.Error("projection: update job_nodes.credit_cost failed", zap.String("task_run_id", tr.RunID), zap.Error(err))
+	}
 	executorType := ""
 	if wf, err := p.workflowJSON(ctx, tr.WorkflowRunID); err == nil {
 		executorType = aetherengine.ResolveExecutorType(wf, tr.TemplateName)
@@ -442,15 +453,26 @@ func (p *Projector) upsertJobNode(ctx context.Context, jobID uint64, tr *store.T
 		executorType = aetherengine.ResolveExecutorType(wf, tr.TemplateName)
 	}
 
+	// started_at/finished_at existed on job_nodes since the first migration
+	// but nothing ever wrote them either (same gap as credit_cost above) —
+	// §19.4.6's node detail drawer wants "耗时". IF(?, NOW(3), NULL) sets
+	// each only on the delivery where it first becomes true (Running /
+	// any terminal phase); COALESCE on the UPDATE side means a later
+	// duplicate or out-of-order delivery for the same task_run_id can never
+	// clobber an already-recorded timestamp with a later one.
+	isRunning := status == "Running"
+	isTerminal := isTerminalPhase(status)
 	_, err := p.db.ExecContext(ctx, `
 		INSERT INTO job_nodes
-			(job_id, task_run_id, node_name, loop_index, parent_scope, executor_type, phase, exec_code, asset_ids, error_msg)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(job_id, task_run_id, node_name, loop_index, parent_scope, executor_type, phase, exec_code, asset_ids, error_msg, started_at, finished_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, IF(?, NOW(3), NULL), IF(?, NOW(3), NULL))
 		ON DUPLICATE KEY UPDATE
 			phase = VALUES(phase), exec_code = VALUES(exec_code), asset_ids = VALUES(asset_ids),
-			error_msg = VALUES(error_msg), executor_type = VALUES(executor_type)`,
+			error_msg = VALUES(error_msg), executor_type = VALUES(executor_type),
+			started_at = COALESCE(started_at, VALUES(started_at)),
+			finished_at = COALESCE(finished_at, VALUES(finished_at))`,
 		jobID, tr.RunID, tr.TaskName, aetherengine.LoopIndexFromScope(tr.Scope), tr.Scope, executorType,
-		status, execCode, assetIDsJSON, errMsg,
+		status, execCode, assetIDsJSON, errMsg, isRunning, isTerminal,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert job_nodes: %w", err)

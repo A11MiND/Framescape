@@ -26,12 +26,20 @@ function TaskNode({ data }: NodeProps) {
 
 const nodeTypes = { task: TaskNode }
 
+function formatDuration(startedAt?: string | null, finishedAt?: string | null): string {
+  if (!startedAt) return ''
+  if (!finishedAt) return '进行中…'
+  const ms = new Date(finishedAt).getTime() - new Date(startedAt).getTime()
+  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
+}
+
 // F7.2: react-flow rendering of the job's DAG, phase-colored per §19.2,
-// click-for-detail per §19.4.6. Loop iterations aren't individually
-// addressable in the current GET /jobs/{bizID} shape (see jobGraph.ts's
-// doc), so this shows Loop containers as one annotated node rather than
-// the PRD mockup's fully-expandable per-iteration boxes — an honest
-// simplification given what the API actually returns today, not a bug.
+// click-for-detail per §19.4.6 (input/output/耗时/消耗积分/错误信息 — the
+// node detail drawer this whole component's side panel is). Loop
+// iterations render as individual nodes per jobGraph.ts's own doc; the
+// side panel's timing/cost come from job_nodes (the projection table,
+// populated by internal/application/projection — see handleGetJob's doc
+// for why this data lives there and not on the engine's own NodeState).
 export default function WorkflowGraph({ job }: { job: JobResponse }) {
   const graph = useMemo(() => buildJobGraph(job), [job])
   const [selected, setSelected] = useState<GraphNode | null>(null)
@@ -83,6 +91,16 @@ export default function WorkflowGraph({ job }: { job: JobResponse }) {
             </button>
           </div>
           <PhaseBadge phase={selected.phase} />
+          {(selected.startedAt || !!selected.creditCost) && (
+            <div className="mt-3 flex gap-4 text-xs text-zinc-500">
+              {selected.startedAt && <span>耗时 {formatDuration(selected.startedAt, selected.finishedAt)}</span>}
+              {!!selected.creditCost && (
+                <span>
+                  消耗 <span className="text-violet-400">✦ {selected.creditCost}</span>
+                </span>
+              )}
+            </div>
+          )}
           {selected.error && (
             <p className="mt-3 text-sm text-red-400">{displayNodeError(selected.error)}</p>
           )}
