@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"archive/zip"
+	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,17 +18,16 @@ import (
 	"aigc-platform/internal/pkg/id"
 )
 
-// handleGetAsset is the W1 subset of F2.4/F2.5 (full asset library — filters,
-// pagination, "以此再生成" — lands in W3+). For now it exists so the Studio
-// page can render what the mock/minimax executor actually produced instead
-// of a client-side placeholder.
+// handleGetAsset is F2.5's detail read: the full record, not the list
+// projection assetToJSON gives everywhere else — see assetDetailJSON's own
+// doc for what the difference is and why it's only worth paying for here.
 func (s *Server) handleGetAsset(c *gin.Context) {
 	var a persistence.Asset
 	if err := s.db.Where("biz_id = ? AND user_id = ?", c.Param("bizID"), userID(c)).First(&a).Error; err != nil {
 		c.JSON(http.StatusNotFound, errBody("not_found", "asset not found"))
 		return
 	}
-	c.JSON(http.StatusOK, assetToJSON(a))
+	c.JSON(http.StatusOK, s.assetDetailJSON(c.Request.Context(), a))
 }
 
 // handleListAssets is F2.4's list surface, minus the moderation/soft-delete
@@ -279,13 +280,52 @@ func sanitizeExt(filename string) string {
 	return b.String()
 }
 
+// assetToJSON is the list-view projection (handleListAssets, and the two
+// upload handlers' own response) — every field here is already loaded on
+// the row, no extra query. resolution_tag has existed on the assets table
+// since the very first migration but had no HTTP field until now — see
+// §19.4.7's "视频资产卡片右上角常驻显示 768P/2K 标签".
 func assetToJSON(a persistence.Asset) gin.H {
 	return gin.H{
-		"biz_id":     a.BizID,
-		"type":       a.Type,
-		"public_url": a.PublicURL,
-		"mime":       a.Mime,
-		"width":      a.Width,
-		"height":     a.Height,
+		"biz_id":         a.BizID,
+		"type":           a.Type,
+		"public_url":     a.PublicURL,
+		"mime":           a.Mime,
+		"width":          a.Width,
+		"height":         a.Height,
+		"resolution_tag": a.ResolutionTag,
+		"created_at":     a.CreatedAt,
 	}
+}
+
+// assetDetailJSON is handleGetAsset's richer single-asset projection
+// (F2.5): everything assetToJSON has, plus the generation params every
+// executor already writes to assets.meta (model/prompt/seed — see e.g.
+// minimax/image.go's Materialize call) and, when this asset came from a
+// job rather than an upload, that job's biz_id so the detail page can link
+// back to it and offer "以此再生成" (§19.0②). The job lookup is a second
+// query (through job_nodes, the only table that maps a task_run_id to a
+// job_id) — worth it here since this is a single-row fetch, not something
+// handleListAssets should ever pay N times over.
+func (s *Server) assetDetailJSON(ctx context.Context, a persistence.Asset) gin.H {
+	out := assetToJSON(a)
+	out["source"] = a.Source
+
+	var meta map[string]any
+	if len(a.Meta) > 0 {
+		_ = json.Unmarshal(a.Meta, &meta)
+	}
+	out["meta"] = meta
+
+	jobBizID := ""
+	if a.FromTaskRunID != "" {
+		_ = s.db.WithContext(ctx).Table("job_nodes").
+			Select("jobs.biz_id").
+			Joins("JOIN jobs ON jobs.id = job_nodes.job_id").
+			Where("job_nodes.task_run_id = ?", a.FromTaskRunID).
+			Limit(1).
+			Scan(&jobBizID).Error
+	}
+	out["job_biz_id"] = jobBizID
+	return out
 }

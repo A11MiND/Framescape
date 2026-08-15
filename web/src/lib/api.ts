@@ -117,6 +117,13 @@ export interface AssetResponse {
   mime: string
   width: number
   height: number
+  resolution_tag: string
+  created_at: string
+  // Only present on the single-asset GET (assetDetailJSON), never on
+  // listAssets' lean per-row projection — see that handler's own doc.
+  source?: string
+  meta?: Record<string, unknown>
+  job_biz_id?: string
 }
 
 // CharacterSlot/Spec mirror internal/application/jobsvc.CharacterSlot/Spec's

@@ -1,15 +1,15 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import AppShell from '../components/AppShell'
 import { useToast } from '../components/Toast'
 
-// F2.4/F2.5: browse every asset the user has ever generated, filterable by
-// type. "以此再生成" (regenerate from this) is out of scope here — Studio's
-// AssetPicker already covers the one concrete case that matters right now
-// (picking existing assets as video.single/character material); a dedicated
-// "send this asset into a new job" action is a bigger cross-page flow than
-// this pass covers.
+// F2.4: browse every asset the user has ever generated, filterable by type.
+// F2.5's "以此再生成"/generation-params view lives one level deeper, at
+// /assets/:id (AssetDetail.tsx) — this grid's job is just getting the user
+// there, plus the bulk-operation surface (select/delete/batch-download)
+// that only makes sense at the grid level.
 type Filter = 'all' | 'image' | 'video'
 
 export default function Assets() {
@@ -17,6 +17,7 @@ export default function Assets() {
   const [selected, setSelected] = useState<string[]>([])
   const queryClient = useQueryClient()
   const pushToast = useToast()
+  const navigate = useNavigate()
 
   const assets = useQuery({
     queryKey: ['assets', filter === 'all' ? undefined : filter, 'library'],
@@ -102,35 +103,55 @@ export default function Assets() {
             <div
               key={a.biz_id}
               title={a.biz_id}
-              className={`group relative overflow-hidden rounded-xl border bg-zinc-900 transition ${
+              onClick={() => navigate(`/assets/${a.biz_id}`)}
+              className={`group relative cursor-pointer overflow-hidden rounded-xl border bg-zinc-900 transition ${
                 selected.includes(a.biz_id) ? 'border-violet-500' : 'border-zinc-800 hover:border-zinc-700'
               }`}
             >
               <input
                 type="checkbox"
                 checked={selected.includes(a.biz_id)}
-                onChange={() => toggleSelected(a.biz_id)}
+                onChange={(e) => {
+                  e.stopPropagation()
+                  toggleSelected(a.biz_id)
+                }}
+                onClick={(e) => e.stopPropagation()}
                 className={`absolute left-2 top-2 z-10 h-4 w-4 rounded accent-violet-500 transition-opacity ${
                   selected.includes(a.biz_id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                 }`}
               />
               <button
-                onClick={() => deleteAsset.mutate(a.biz_id)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  deleteAsset.mutate(a.biz_id)
+                }}
                 title="软删除"
                 className="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-xs text-zinc-300 opacity-0 transition hover:text-red-400 group-hover:opacity-100"
               >
                 ✕
               </button>
               {a.type === 'video' ? (
-                <video src={a.public_url} controls className="aspect-square w-full bg-black object-contain" />
+                <video
+                  src={a.public_url}
+                  controls
+                  onClick={(e) => e.stopPropagation()}
+                  className="aspect-square w-full bg-black object-contain"
+                />
               ) : (
                 <img src={a.public_url} alt="" className="aspect-square w-full object-cover" />
               )}
-              {a.width > 0 && a.height > 0 && (
-                <span className="pointer-events-none absolute bottom-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-zinc-300">
-                  {a.width}×{a.height}
-                </span>
-              )}
+              <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex gap-1">
+                {a.resolution_tag && (
+                  <span className="rounded bg-violet-500/80 px-1.5 py-0.5 font-mono text-[10px] font-medium text-white">
+                    {a.resolution_tag}
+                  </span>
+                )}
+                {a.width > 0 && a.height > 0 && (
+                  <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-zinc-300">
+                    {a.width}×{a.height}
+                  </span>
+                )}
+              </div>
             </div>
           ))}
         </div>

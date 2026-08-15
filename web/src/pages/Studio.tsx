@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, keepPreviousData } from '@tanstack/react-query'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api, ApiError, type Spec, type WorkflowName, type JobResponse } from '../lib/api'
 import {
   estimateImageCredits,
@@ -74,6 +74,7 @@ export default function Studio() {
   const accessToken = useAuthStore((s) => s.accessToken)
   const isGuest = !accessToken
   const navigate = useNavigate()
+  const location = useLocation()
 
   const [tab, setTab] = useState<Tab>('image.single')
   const [text, setText] = useState('一只狐狸站在雪地上，水彩风格')
@@ -107,6 +108,66 @@ export default function Studio() {
   const [vsDuration, setVsDuration] = useState(5)
   const [vsRatio, setVsRatio] = useState<(typeof RATIO_VALUES)[number]>('16:9')
   const [vsRecalibrateEvery, setVsRecalibrateEvery] = useState(3)
+
+  // F2.5's "以此再生成": AssetDetail navigates here with the source job's
+  // exact workflow_name/spec in router state — buildSpec()'s inverse,
+  // mapping that Spec back onto every piece of local state it came from.
+  // Guarded to run once per navigation (not on every render): it's meant
+  // to seed the form, not keep clobbering whatever the user types next.
+  useEffect(() => {
+    const prefill = (location.state as { prefillJob?: { workflowName: Tab; spec: Spec } } | null)?.prefillJob
+    if (!prefill) return
+    const { workflowName, spec } = prefill
+    setTab(workflowName)
+    setBizId(null)
+
+    setSlotA(spec.characters?.find((c) => c.slot === 'A')?.character_id ?? '')
+    setSlotB(spec.characters?.find((c) => c.slot === 'B')?.character_id ?? '')
+    setPresetIds(spec.preset_ids ?? [])
+
+    if (workflowName === 'image.single' || workflowName === 'image.batch') {
+      setText(spec.text ?? '')
+      if (spec.n) setN(spec.n)
+      setSourceImageId(spec.source_image_asset_id ?? '')
+    } else if (workflowName === 'image.comic4') {
+      if (spec.panels?.length === 4) {
+        setComicMode('manual')
+        setPanels(spec.panels)
+      } else if (spec.story) {
+        setComicMode('auto')
+        setStory(spec.story)
+      }
+    } else if (workflowName === 'image.sequence') {
+      setShots(spec.shots?.length ? spec.shots : [''])
+    } else if (workflowName === 'video.single') {
+      setVText(spec.text ?? '')
+      if (spec.duration_seconds) setDuration(spec.duration_seconds)
+      if (spec.resolution === '768P' || spec.resolution === '2K') setResolution(spec.resolution)
+      if (spec.ratio) setRatio(spec.ratio as (typeof RATIO_VALUES)[number])
+      if (spec.first_frame_asset_id || spec.last_frame_asset_id) {
+        setRefMode('firstLast')
+        setFirstFrameAssetId(spec.first_frame_asset_id ?? '')
+        setLastFrameAssetId(spec.last_frame_asset_id ?? '')
+      } else if (spec.reference_image_asset_ids?.length || spec.reference_video_asset_ids?.length) {
+        setRefMode('reference')
+        setRefImageIds(spec.reference_image_asset_ids ?? [])
+        setRefVideoIds(spec.reference_video_asset_ids ?? [])
+      } else {
+        setRefMode('none')
+      }
+      setPromptEnhance(!!spec.prompt_enhance)
+    } else if (workflowName === 'video.sequence') {
+      setVsShots(spec.shots?.length ? spec.shots : [''])
+      if (spec.duration_seconds) setVsDuration(spec.duration_seconds)
+      if (spec.ratio) setVsRatio(spec.ratio as (typeof RATIO_VALUES)[number])
+      if (spec.recalibrate_every) setVsRecalibrateEvery(spec.recalibrate_every)
+    }
+
+    // Clear the router state so refreshing or navigating back here later
+    // doesn't silently re-apply a stale prefill over new edits.
+    navigate('.', { replace: true, state: {} })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state])
 
   const me = useMe(!isGuest)
   const characters = useCharacters(!isGuest)

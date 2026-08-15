@@ -4,6 +4,7 @@ import Studio from './pages/Studio'
 import Characters from './pages/Characters'
 import Presets from './pages/Presets'
 import Assets from './pages/Assets'
+import AssetDetail from './pages/AssetDetail'
 import Jobs from './pages/Jobs'
 import JobDetail from './pages/JobDetail'
 import Credits from './pages/Credits'
@@ -48,6 +49,14 @@ export default function App() {
         element={
           <RequireAuth>
             <Assets />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/assets/:assetId"
+        element={
+          <RequireAuth>
+            <AssetDetail />
           </RequireAuth>
         }
       />
