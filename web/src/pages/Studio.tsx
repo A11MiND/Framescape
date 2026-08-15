@@ -12,6 +12,7 @@ import { videoSingleSchema, RATIO_VALUES } from '../lib/videoSpec'
 import { resultAssetIds, WORKFLOW_LABEL, type Tab } from '../lib/jobResult'
 import { displayNodeError, firstSpecificError } from '../lib/errors'
 import { suggestActions, type SuggestedAction } from '../lib/suggestions'
+import { shotMode, SHOT_MODE_LABEL, SHOT_MODE_CLASS } from '../lib/shotPlan'
 import { useToast } from '../components/Toast'
 import AppShell from '../components/AppShell'
 import { AssetPicker } from '../components/AssetPicker'
@@ -563,12 +564,46 @@ export default function Studio() {
           )}
 
           {tab === 'video.sequence' && (
-            <ShotList
-              shots={vsShots}
-              setShots={setVsShots}
-              placeholder={(i) => `第 ${i + 1} 段镜头描述`}
-              addLabel="+ 添加一段"
-            />
+            <div className="space-y-2">
+              {vsShots.map((s, i) => {
+                const mode = shotMode(i + 1, vsRecalibrateEvery, !!slotA)
+                return (
+                  <div key={i} className="flex items-center gap-2">
+                    <span
+                      title={SHOT_MODE_LABEL[mode]}
+                      className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-mono ${SHOT_MODE_CLASS[mode]}`}
+                    >
+                      {mode}
+                    </span>
+                    <input
+                      value={s}
+                      onChange={(e) => setVsShots((cur) => cur.map((c, ci) => (ci === i ? e.target.value : c)))}
+                      className="flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-violet-500"
+                      placeholder={`第 ${i + 1} 段镜头描述`}
+                    />
+                    {vsShots.length > 1 && (
+                      <button
+                        onClick={() => setVsShots((cur) => cur.filter((_, ci) => ci !== i))}
+                        className="shrink-0 rounded-lg border border-zinc-800 px-2 text-zinc-500 hover:text-red-400"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+              <button
+                onClick={() => setVsShots((cur) => [...cur, ''])}
+                className="text-sm text-violet-400 hover:text-violet-300"
+              >
+                + 添加一段
+              </button>
+              {vsShots.length > 4 && (
+                <p className="text-xs text-amber-500">
+                  ⚠ 镜头数 &gt;4，已自动每 {vsRecalibrateEvery} 段重新锚定一次角色，防止漂移
+                </p>
+              )}
+            </div>
           )}
 
           {/* ── Capsule parameter row ──────────────────────────── */}
