@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
-import Nav from '../components/Nav'
+import AppShell from '../components/AppShell'
 import { useToast } from '../components/Toast'
 
 // F2.4/F2.5: browse every asset the user has ever generated, filterable by
@@ -52,8 +52,7 @@ export default function Assets() {
     setSelected((cur) => (cur.includes(bizId) ? cur.filter((id) => id !== bizId) : [...cur, bizId]))
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-50">
-      <Nav />
+    <AppShell>
       <div className="mx-auto max-w-5xl px-6 py-8">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-lg font-medium">素材库</h1>
@@ -127,10 +126,15 @@ export default function Assets() {
               ) : (
                 <img src={a.public_url} alt="" className="aspect-square w-full object-cover" />
               )}
+              {a.width > 0 && a.height > 0 && (
+                <span className="pointer-events-none absolute bottom-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-zinc-300">
+                  {a.width}×{a.height}
+                </span>
+              )}
             </div>
           ))}
         </div>
       </div>
-    </div>
+    </AppShell>
   )
 }

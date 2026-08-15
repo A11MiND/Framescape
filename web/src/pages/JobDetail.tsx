@@ -1,15 +1,16 @@
 import { useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { api, type JobResponse } from '../lib/api'
 import { resultAssetIds, WORKFLOW_LABEL, type Tab } from '../lib/jobResult'
 import { displayNodeError, firstSpecificError } from '../lib/errors'
 import { useToast } from '../components/Toast'
-import Nav from '../components/Nav'
+import AppShell from '../components/AppShell'
 import PhaseBadge from '../components/PhaseBadge'
 import WorkflowGraph from '../components/WorkflowGraph'
 import PreviewGate from '../components/PreviewGate'
 import GenerationProgress from '../components/GenerationProgress'
+import { useJobStream } from '../hooks/useJobStream'
+import { api } from '../lib/api'
+import { useQuery } from '@tanstack/react-query'
 
 // PRD §19.4.6's job detail / DAG view — fully reconstructible from the URL
 // alone (unlike Studio's inline results, which only exist for the job just
@@ -19,15 +20,7 @@ export default function JobDetail() {
   const { bizId } = useParams<{ bizId: string }>()
   const pushToast = useToast()
 
-  const jobQuery = useQuery<JobResponse>({
-    queryKey: ['job', bizId],
-    queryFn: () => api.getJob(bizId!),
-    enabled: !!bizId,
-    refetchInterval: (query) => {
-      const status = query.state.data?.status
-      return status === 'succeeded' || status === 'failed' ? false : 1500
-    },
-  })
+  const jobQuery = useJobStream(bizId)
 
   useEffect(() => {
     if (jobQuery.isError) {
@@ -41,8 +34,7 @@ export default function JobDetail() {
   const assetIds = job ? resultAssetIds(job, job.workflow_name as Tab) : []
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-50">
-      <Nav />
+    <AppShell>
       <div className="mx-auto max-w-5xl space-y-6 px-6 py-8">
         {!job && <p className="text-zinc-500">加载中…</p>}
 
@@ -65,6 +57,9 @@ export default function JobDetail() {
             {job.status !== 'succeeded' && job.status !== 'failed' && !gateSuspended && (
               <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
                 <GenerationProgress kind={job.workflow_name.startsWith('video') ? 'video' : 'image'} />
+                {jobQuery.streamState === 'reconnecting' && (
+                  <p className="mt-2 text-center text-xs text-amber-500">实时连接不稳定，重新连接中…</p>
+                )}
               </div>
             )}
 
@@ -93,7 +88,7 @@ export default function JobDetail() {
           </>
         )}
       </div>
-    </div>
+    </AppShell>
   )
 }
 

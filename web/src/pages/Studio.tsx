@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
-import { api, type Spec, type WorkflowName, type JobResponse } from '../lib/api'
+import { Link, useNavigate } from 'react-router-dom'
+import { api, ApiError, type Spec, type WorkflowName, type JobResponse } from '../lib/api'
 import {
   estimateImageCredits,
   estimateVideoCredits,
@@ -11,37 +11,69 @@ import {
 import { videoSingleSchema, RATIO_VALUES } from '../lib/videoSpec'
 import { resultAssetIds, WORKFLOW_LABEL, type Tab } from '../lib/jobResult'
 import { displayNodeError, firstSpecificError } from '../lib/errors'
+import { suggestActions, type SuggestedAction } from '../lib/suggestions'
 import { useToast } from '../components/Toast'
-import Nav from '../components/Nav'
+import AppShell from '../components/AppShell'
 import { AssetPicker } from '../components/AssetPicker'
 import PreviewGate from '../components/PreviewGate'
 import GenerationProgress from '../components/GenerationProgress'
+import PresetCarousel from '../components/PresetCarousel'
+import AnimatedNumber from '../components/AnimatedNumber'
+import { useAuthStore } from '../lib/authStore'
+import { getDeviceId } from '../lib/deviceId'
+import { useJobStream } from '../hooks/useJobStream'
 
-// PRD §19.4.1's full creation studio (3-column: form-tab nav + character
-// slots + material upload / main result view / params + preset scroller) is
-// a much larger build than this — this covers the functional core for the
-// five forms (F5.1-F5.5 image + F6.1-F6.5 video.single + F6.7/F6.8
-// video.sequence's preview gate): tab switch, character/preset selection,
-// live client-side cost estimate, submit, poll, render results. Deferred
-// deliberately: drag-drop material upload with role-tagging (F6.4 is P1 and
-// covered indirectly via the asset picker, just not via drag-drop),
-// predictive next-step recommendation cards (§19.4.2).
+// PRD §19.4.1's full creation studio, now mounted at `/` per §19.3 ("创作台
+// （首页，登录/匿名皆可进入）") instead of behind a login wall — this is
+// the single biggest information-architecture gap the jimeng comparison
+// surfaced: the old build redirected `/` straight to `/login`, so the
+// anonymous trial (F1.2, POST /trial/image, real endpoint since W1) was
+// only reachable from a card buried on the login screen. Guests now land
+// here directly; anything that needs an authed GET (characters/presets/me)
+// is simply not fetched (`enabled: !isGuest`) rather than erroring, and the
+// composer degrades to "compose + one free trial" instead of vanishing.
+//
+// Structural change from the tab-sidebar build: six workflows collapse into
+// one composer (headline dropdown + quick-switch cards drive the same `tab`
+// state) with a capsule parameter row, mirroring jimeng's single-input
+// pattern (§19.0①) instead of six parallel forms behind six sidebar tabs.
+// Every Spec field the old build could set, this one still can — see the
+// blueprint's capsule → Spec field table.
 
-const TABS: { id: Tab; label: string }[] = (
-  ['image.single', 'image.batch', 'image.comic4', 'image.sequence', 'video.single', 'video.sequence'] as Tab[]
-).map((id) => ({ id, label: WORKFLOW_LABEL[id] }))
-
-function useCharacters() {
-  return useQuery({ queryKey: ['characters'], queryFn: api.listCharacters })
+const TAB_META: Record<Tab, { icon: string; blurb: string }> = {
+  'image.single': { icon: '🖼', blurb: '一句话生成一张图' },
+  'image.batch': { icon: '▦', blurb: '同一句话一次出多张' },
+  'image.comic4': { icon: '🗯', blurb: '共享角色与风格的四格' },
+  'image.sequence': { icon: '⛓', blurb: '同角色连续出一组图' },
+  'video.single': { icon: '🎬', blurb: '文生视频或图生视频' },
+  'video.sequence': { icon: '🎞', blurb: '768P 预览后再定稿 2K' },
 }
-function usePresets() {
-  return useQuery({ queryKey: ['presets'], queryFn: () => api.listPresets() })
+const TABS = Object.keys(TAB_META) as Tab[]
+
+// F6.5's "双保险": videoSpec.ts's zod schema is still the structural second
+// guard checked right before submit — this is the first guard, and it's now
+// enforced by construction (only one panel can ever be mounted) instead of
+// by graying out whichever panel lost the race, which is what jimeng's
+// single "全能参考" dropdown gets right that two parallel opacity-40 panels
+// don't: there's no state where the user has to read a tooltip to find out
+// why something is disabled.
+type RefMode = 'none' | 'firstLast' | 'reference'
+
+function useCharacters(enabled: boolean) {
+  return useQuery({ queryKey: ['characters'], queryFn: api.listCharacters, enabled })
 }
-function useMe() {
-  return useQuery({ queryKey: ['me'], queryFn: api.me })
+function usePresets(enabled: boolean) {
+  return useQuery({ queryKey: ['presets'], queryFn: () => api.listPresets(), enabled })
+}
+function useMe(enabled: boolean) {
+  return useQuery({ queryKey: ['me'], queryFn: api.me, enabled })
 }
 
 export default function Studio() {
+  const accessToken = useAuthStore((s) => s.accessToken)
+  const isGuest = !accessToken
+  const navigate = useNavigate()
+
   const [tab, setTab] = useState<Tab>('image.single')
   const [text, setText] = useState('一只狐狸站在雪地上，水彩风格')
   const [n, setN] = useState(4)
@@ -52,12 +84,12 @@ export default function Studio() {
   const [presetIds, setPresetIds] = useState<string[]>([])
   const [bizId, setBizId] = useState<string | null>(null)
 
-  // video.single-only state (F6.1-F6.5). Kept separate from `text` above —
-  // it has its own 7000-char cap and shares nothing with the image forms.
+  // video.single-only state (F6.1-F6.5).
   const [vText, setVText] = useState('镜头缓缓推进，一只狐狸转身望向镜头，雪花飘落')
   const [duration, setDuration] = useState(5)
   const [resolution, setResolution] = useState<'768P' | '2K'>('768P')
   const [ratio, setRatio] = useState<(typeof RATIO_VALUES)[number]>('16:9')
+  const [refMode, setRefMode] = useState<RefMode>('none')
   const [firstFrameAssetId, setFirstFrameAssetId] = useState('')
   const [lastFrameAssetId, setLastFrameAssetId] = useState('')
   const [refImageIds, setRefImageIds] = useState<string[]>([])
@@ -65,31 +97,53 @@ export default function Studio() {
   const [promptEnhance, setPromptEnhance] = useState(false)
   // image.single-only state (F5.8): optional image-to-image source.
   const [sourceImageId, setSourceImageId] = useState('')
-  // image.comic4-only state (F5.4): auto-split one story into 4 panels
-  // instead of writing each panel by hand.
+  // image.comic4-only state (F5.4).
   const [comicMode, setComicMode] = useState<'manual' | 'auto'>('manual')
   const [story, setStory] = useState('')
 
-  // video.sequence-only state (F6.7/F6.8). The draft submission only needs
-  // shots/duration/ratio/recalibrateEvery — resolution isn't asked here
-  // because the draft is always 768P (createVideoSequence's own doc:
-  // "预览门只预扣 768P 部分积分"); 2K only happens per-shot at the gate.
+  // video.sequence-only state (F6.7/F6.8).
   const [vsShots, setVsShots] = useState([''])
   const [vsDuration, setVsDuration] = useState(5)
   const [vsRatio, setVsRatio] = useState<(typeof RATIO_VALUES)[number]>('16:9')
   const [vsRecalibrateEvery, setVsRecalibrateEvery] = useState(3)
 
-  const me = useMe()
-  const characters = useCharacters()
-  const presets = usePresets()
+  const me = useMe(!isGuest)
+  const characters = useCharacters(!isGuest)
+  const presets = usePresets(!isGuest)
   const pushToast = useToast()
 
-  // F6.5's UI half of the double guard: picking either mode's material
-  // greys out the other's picker entirely, so the two can't both end up
-  // populated through the UI (videoSpec.ts's schema is the second guard,
-  // checked right before submit).
-  const hasFirstLast = firstFrameAssetId !== '' || lastFrameAssetId !== ''
-  const hasRef = refImageIds.length > 0 || refVideoIds.length > 0
+  // F1.2's anonymous trial — relocated here from the login page (§19.0's
+  // "先给价值再要注册" only works if the value is visible before the wall,
+  // not after it). Self-contained, doesn't touch jobs/credits/assets.
+  const [trialPrompt, setTrialPrompt] = useState('两人在天台对峙，黄昏逆光，风很大')
+  const [trialImageUrl, setTrialImageUrl] = useState<string | null>(null)
+  const [trialError, setTrialError] = useState<string | null>(null)
+  const [trialBusy, setTrialBusy] = useState(false)
+
+  async function runTrial() {
+    setTrialBusy(true)
+    setTrialError(null)
+    try {
+      const res = await api.trialImage(trialPrompt, getDeviceId())
+      setTrialImageUrl(res.image_url)
+    } catch (err) {
+      setTrialError(err instanceof ApiError ? err.message : '生成失败，请重试')
+    } finally {
+      setTrialBusy(false)
+    }
+  }
+
+  function setRefModeAndClear(mode: RefMode) {
+    setRefMode(mode)
+    if (mode !== 'firstLast') {
+      setFirstFrameAssetId('')
+      setLastFrameAssetId('')
+    }
+    if (mode !== 'reference') {
+      setRefImageIds([])
+      setRefVideoIds([])
+    }
+  }
 
   const videoValidation = videoSingleSchema.safeParse({
     text: vText,
@@ -114,14 +168,10 @@ export default function Studio() {
             : tab === 'video.single'
               ? estimateVideoCredits(duration, resolution) +
                 (promptEnhance ? estimatePromptEnhanceCredits() : 0)
-              : // video.sequence: draft is always 768P (jobsvc.createVideoSequence's
-                // own hold formula) — the 2K delta only gets held later, at Resume,
-                // for whichever shots the user actually upgrades at the gate.
-                estimateVideoCredits(vsDuration, '768P') *
-                (vsShots.filter((s) => s.trim()).length || 1)
+              : estimateVideoCredits(vsDuration, '768P') * (vsShots.filter((s) => s.trim()).length || 1)
 
   const balance = me.data?.balance ?? 0
-  const insufficientBalance = me.isSuccess && balance < estimate
+  const insufficientBalance = !isGuest && me.isSuccess && balance < estimate
 
   const createJob = useMutation({
     mutationFn: () => {
@@ -154,7 +204,7 @@ export default function Studio() {
         spec.text = vText
         spec.duration_seconds = duration
         spec.resolution = resolution
-        if (!hasFirstLast && !hasRef) spec.ratio = ratio
+        if (refMode === 'none') spec.ratio = ratio
         if (firstFrameAssetId) spec.first_frame_asset_id = firstFrameAssetId
         if (lastFrameAssetId) spec.last_frame_asset_id = lastFrameAssetId
         if (refImageIds.length) spec.reference_image_asset_ids = refImageIds
@@ -168,11 +218,6 @@ export default function Studio() {
         spec.ratio = vsRatio
         spec.recalibrate_every = vsRecalibrateEvery
       }
-      // A fresh key per submission — this isn't "retry the same logical
-      // request", it's "the user pressed the button again"; the key only
-      // needs to be stable *within* one submission's own retries, which
-      // TanStack Query's mutation retry (if ever enabled) would reuse since
-      // mutationFn is captured once per mutate() call.
       const idemKey = crypto.randomUUID()
       return api.createJob(tab as WorkflowName, spec, idemKey)
     },
@@ -180,121 +225,81 @@ export default function Studio() {
       setBizId(res.biz_id)
       me.refetch()
     },
-    // §19.5.3's "提交后网络错误 → Toast（可重试）" — insufficient-balance is
-    // already pre-empted by the inline block below (button disabled before
-    // this ever fires), so a createJob failure here means an unexpected
-    // submit-time error (network blip, a stale balance race) — exactly the
-    // retryable-toast case, not a blocking one.
     onError: () => pushToast('提交失败，请重试', () => createJob.mutate()),
   })
 
-  const jobQuery = useQuery<JobResponse>({
-    queryKey: ['job', bizId],
-    queryFn: () => api.getJob(bizId!),
-    enabled: !!bizId,
-    refetchInterval: (query) => {
-      const status = query.state.data?.status
-      return status === 'succeeded' || status === 'failed' ? false : 1500
-    },
-  })
+  const jobStream = useJobStream(bizId)
+  const job = jobStream.data as JobResponse | undefined
 
-  // Same §19.5.3 row, for the polling side: a run of failed GET /jobs polls
-  // (not a "the job failed" — that's job.status === 'failed', shown inline
-  // in the results card, never a toast per the table's "partial failure
-  // doesn't interrupt" row) means we've lost the network mid-job.
   useEffect(() => {
-    if (jobQuery.isError) {
-      pushToast('网络连接不稳定，无法获取作业状态', () => jobQuery.refetch())
+    if (jobStream.isError) {
+      pushToast('网络连接不稳定，无法获取作业状态', () => jobStream.refetch())
     }
-  }, [jobQuery.isError, jobQuery.refetch, pushToast])
+  }, [jobStream.isError, jobStream.refetch, pushToast])
 
-  const job = jobQuery.data
   const assetIds = resultAssetIds(job, tab)
   const running = !!bizId && job?.status !== 'succeeded' && job?.status !== 'failed'
-  // video.sequence-only: the workflow suspends at `gate` once the 768P draft
-  // chain finishes — job.status stays "running" throughout (only terminal
-  // phases update it), so this is the only way to tell "still drafting" from
-  // "waiting on the user's keep/redo/upgrade decision" apart.
   const gateNode = job?.nodes.find((n) => n.name === 'gate')
   const gateSuspended = tab === 'video.sequence' && gateNode?.phase === 'Suspended'
+  const suggestions = job && job.status === 'succeeded' ? suggestActions(job, tab, assetIds) : []
+
+  function applySuggestion(action: SuggestedAction) {
+    switch (action.kind) {
+      case 'to-video':
+        setBizId(null)
+        setTab('video.single')
+        setRefModeAndClear('firstLast')
+        setFirstFrameAssetId(action.sourceAssetId)
+        break
+      case 'more-batch':
+        createJob.mutate()
+        break
+      case 'save-character':
+      case 'save-frame-character':
+        navigate('/characters', { state: { prefillAssetId: action.sourceAssetId } })
+        break
+      case 'to-sequence':
+        setBizId(null)
+        setTab('video.sequence')
+        setVsShots(action.shots.length ? action.shots : [''])
+        break
+      case 'upgrade-2k':
+        setBizId(null)
+        setResolution('2K')
+        break
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-50">
-      <Nav />
+    <AppShell>
+      <div className="mx-auto max-w-4xl space-y-8 px-6 py-10">
+        <header className="text-center">
+          <h1 className="text-3xl font-semibold tracking-tight">
+            开启你的{' '}
+            <select
+              value={tab}
+              onChange={(e) => setTab(e.target.value as Tab)}
+              className="appearance-none border-b-2 border-dashed border-violet-500/60 bg-transparent px-1 text-violet-400 outline-none"
+            >
+              {TABS.map((t) => (
+                <option key={t} value={t} className="bg-zinc-900 text-zinc-100">
+                  {WORKFLOW_LABEL[t]}
+                </option>
+              ))}
+            </select>{' '}
+            即刻创作
+          </h1>
+          {isGuest && <p className="mt-2 text-sm text-zinc-500">先免费试用一次，注册后解锁全部形态与素材库</p>}
+        </header>
 
-      <div className="mx-auto flex max-w-5xl gap-6 px-6 py-8">
-        {/* left: tab nav + character/preset selection */}
-        <aside className="w-64 shrink-0 space-y-6">
-          <nav className="space-y-1">
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`w-full rounded-lg px-3 py-2 text-left text-sm transition ${
-                  tab === t.id ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-900'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </nav>
-
-          <div>
-            <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">角色槽</p>
-            <div className="space-y-2">
-              <CharacterSelect
-                label="A"
-                value={slotA}
-                onChange={setSlotA}
-                options={characters.data?.characters ?? []}
-              />
-              <CharacterSelect
-                label="B"
-                value={slotB}
-                onChange={setSlotB}
-                options={characters.data?.characters ?? []}
-              />
-            </div>
-            {characters.isSuccess && characters.data.characters.length === 0 && (
-              <p className="mt-1 text-xs text-zinc-600">还没有角色，去「角色库」创建</p>
-            )}
-          </div>
-
-          <div>
-            <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">预设</p>
-            <div className="flex flex-wrap gap-1.5">
-              {(presets.data?.presets ?? []).map((p) => {
-                const active = presetIds.includes(p.biz_id)
-                return (
-                  <button
-                    key={p.biz_id}
-                    onClick={() =>
-                      setPresetIds((cur) =>
-                        active ? cur.filter((id) => id !== p.biz_id) : [...cur, p.biz_id],
-                      )
-                    }
-                    className={`rounded-full border px-2.5 py-1 text-xs transition ${
-                      active
-                        ? 'border-violet-500 bg-violet-500/20 text-violet-300'
-                        : 'border-zinc-800 text-zinc-400 hover:border-zinc-700'
-                    }`}
-                  >
-                    {p.name}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </aside>
-
-        {/* main: form + submit + results */}
-        <main className="flex-1 space-y-4">
+        {/* ── Composer ─────────────────────────────────────────── */}
+        <div className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
           {(tab === 'image.single' || tab === 'image.batch') && (
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={3}
-              className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-900 p-4 outline-none focus:border-violet-500"
+              className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 p-4 outline-none focus:border-violet-500"
               placeholder="两人在天台对峙，黄昏逆光，风很大"
             />
           )}
@@ -311,35 +316,18 @@ export default function Studio() {
             </div>
           )}
 
-          {tab === 'image.batch' && (
-            <label className="flex items-center gap-2 text-sm text-zinc-400">
-              数量 n =
-              <select
-                value={n}
-                onChange={(e) => setN(Number(e.target.value))}
-                className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1"
-              >
-                {[2, 4, 6, 9].map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-
           {tab === 'image.comic4' && (
             <div className="space-y-3">
               <div className="flex gap-2 text-sm">
                 <button
                   onClick={() => setComicMode('manual')}
-                  className={`rounded-lg px-3 py-1.5 ${comicMode === 'manual' ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-900'}`}
+                  className={`rounded-lg px-3 py-1.5 ${comicMode === 'manual' ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-950'}`}
                 >
                   逐格手写
                 </button>
                 <button
                   onClick={() => setComicMode('auto')}
-                  className={`rounded-lg px-3 py-1.5 ${comicMode === 'auto' ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-900'}`}
+                  className={`rounded-lg px-3 py-1.5 ${comicMode === 'auto' ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-950'}`}
                   title="用 AI 把一段剧情自动拆成 4 格画面描述"
                 >
                   剧情自动拆 4 格
@@ -352,11 +340,9 @@ export default function Studio() {
                     <textarea
                       key={i}
                       value={p}
-                      onChange={(e) =>
-                        setPanels((cur) => cur.map((c, ci) => (ci === i ? e.target.value : c)))
-                      }
+                      onChange={(e) => setPanels((cur) => cur.map((c, ci) => (ci === i ? e.target.value : c)))}
                       rows={3}
-                      className="resize-none rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm outline-none focus:border-violet-500"
+                      className="resize-none rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm outline-none focus:border-violet-500"
                       placeholder={`格 ${i + 1}`}
                     />
                   ))}
@@ -366,7 +352,7 @@ export default function Studio() {
                   value={story}
                   onChange={(e) => setStory(e.target.value)}
                   rows={4}
-                  className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-900 p-4 outline-none focus:border-violet-500"
+                  className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 p-4 outline-none focus:border-violet-500"
                   placeholder="一段完整的剧情描述，系统会自动拆成 4 个连续分镜"
                 />
               )}
@@ -374,34 +360,12 @@ export default function Studio() {
           )}
 
           {tab === 'image.sequence' && (
-            <div className="space-y-2">
-              {shots.map((s, i) => (
-                <div key={i} className="flex gap-2">
-                  <input
-                    value={s}
-                    onChange={(e) =>
-                      setShots((cur) => cur.map((c, ci) => (ci === i ? e.target.value : c)))
-                    }
-                    className="flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm outline-none focus:border-violet-500"
-                    placeholder={`第 ${i + 1} 张`}
-                  />
-                  {shots.length > 1 && (
-                    <button
-                      onClick={() => setShots((cur) => cur.filter((_, ci) => ci !== i))}
-                      className="rounded-lg border border-zinc-800 px-2 text-zinc-500 hover:text-red-400"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              ))}
-              <button
-                onClick={() => setShots((cur) => [...cur, ''])}
-                className="text-sm text-violet-400 hover:text-violet-300"
-              >
-                + 添加一张
-              </button>
-            </div>
+            <ShotList
+              shots={shots}
+              setShots={setShots}
+              placeholder={(i) => `第 ${i + 1} 张`}
+              addLabel="+ 添加一张"
+            />
           )}
 
           {tab === 'video.single' && (
@@ -410,127 +374,83 @@ export default function Studio() {
                 value={vText}
                 onChange={(e) => setVText(e.target.value)}
                 rows={3}
-                className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-900 p-4 outline-none focus:border-violet-500"
+                className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 p-4 outline-none focus:border-violet-500"
                 placeholder="镜头缓缓推进，一只狐狸转身望向镜头，雪花飘落"
               />
 
-              <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-400">
-                <label className="flex items-center gap-2">
-                  时长
+              <div>
+                <Capsule>
+                  <span className="text-zinc-500">参考模式</span>
                   <select
-                    value={duration}
-                    onChange={(e) => setDuration(Number(e.target.value))}
-                    className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1"
+                    value={refMode}
+                    onChange={(e) => setRefModeAndClear(e.target.value as RefMode)}
+                    className="bg-transparent text-zinc-100 outline-none"
                   >
-                    {[4, 5, 6, 8, 10, 12, 15].map((v) => (
-                      <option key={v} value={v}>
-                        {v}s
-                      </option>
-                    ))}
+                    <option value="none" className="bg-zinc-900">
+                      不使用
+                    </option>
+                    <option value="firstLast" className="bg-zinc-900">
+                      首尾帧
+                    </option>
+                    <option value="reference" className="bg-zinc-900">
+                      参考素材
+                    </option>
                   </select>
-                </label>
-                <label className="flex items-center gap-2">
-                  分辨率
-                  <select
-                    value={resolution}
-                    onChange={(e) => setResolution(e.target.value as '768P' | '2K')}
-                    className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1"
-                  >
-                    <option value="768P">768P</option>
-                    <option value="2K">2K</option>
-                  </select>
-                </label>
-                <label
-                  className={`flex items-center gap-2 ${hasFirstLast || hasRef ? 'opacity-40' : ''}`}
-                  title={
-                    hasFirstLast || hasRef
-                      ? '首尾帧/参考素材模式下画面比例由素材决定（adaptive）'
-                      : undefined
-                  }
-                >
-                  画面比例
-                  <select
-                    value={ratio}
-                    onChange={(e) => setRatio(e.target.value as (typeof RATIO_VALUES)[number])}
-                    disabled={hasFirstLast || hasRef}
-                    className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 disabled:cursor-not-allowed"
-                  >
-                    {RATIO_VALUES.map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                </Capsule>
+
+                {refMode === 'firstLast' && (
+                  <div className="mt-3 space-y-2">
+                    <div>
+                      <p className="mb-1 text-xs text-zinc-600">首帧</p>
+                      <AssetPicker
+                        type="image"
+                        selected={firstFrameAssetId ? [firstFrameAssetId] : []}
+                        onToggle={(id) => setFirstFrameAssetId((cur) => (cur === id ? '' : id))}
+                        max={1}
+                      />
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs text-zinc-600">尾帧</p>
+                      <AssetPicker
+                        type="image"
+                        selected={lastFrameAssetId ? [lastFrameAssetId] : []}
+                        onToggle={(id) => setLastFrameAssetId((cur) => (cur === id ? '' : id))}
+                        max={1}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {refMode === 'reference' && (
+                  <div className="mt-3 space-y-2">
+                    <div>
+                      <p className="mb-1 text-xs text-zinc-600">参考图片</p>
+                      <AssetPicker
+                        type="image"
+                        selected={refImageIds}
+                        onToggle={(id) =>
+                          setRefImageIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs text-zinc-600">参考视频</p>
+                      <AssetPicker
+                        type="video"
+                        selected={refVideoIds}
+                        onToggle={(id) =>
+                          setRefVideoIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* F6.5: 首尾帧 and 参考素材 are mutually exclusive — selecting
-                  one greys out the other with an explanatory tooltip. */}
-              <div
-                className={hasRef ? 'opacity-40' : ''}
-                title={hasRef ? '已选择参考素材，首尾帧模式不可用，点击移除参考素材以切换' : undefined}
+              <label
+                className="flex items-center gap-2 text-sm text-zinc-400"
+                title="生成前用 AI 深度理解并润色你的提示词，按用量额外计费"
               >
-                <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">首尾帧</p>
-                <div className="space-y-2">
-                  <div>
-                    <p className="mb-1 text-xs text-zinc-600">首帧</p>
-                    <AssetPicker
-                      type="image"
-                      selected={firstFrameAssetId ? [firstFrameAssetId] : []}
-                      onToggle={(id) => setFirstFrameAssetId((cur) => (cur === id ? '' : id))}
-                      max={1}
-                      disabled={hasRef}
-                    />
-                  </div>
-                  <div>
-                    <p className="mb-1 text-xs text-zinc-600">尾帧</p>
-                    <AssetPicker
-                      type="image"
-                      selected={lastFrameAssetId ? [lastFrameAssetId] : []}
-                      onToggle={(id) => setLastFrameAssetId((cur) => (cur === id ? '' : id))}
-                      max={1}
-                      disabled={hasRef}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div
-                className={hasFirstLast ? 'opacity-40' : ''}
-                title={hasFirstLast ? '已选择首尾帧，参考素材模式不可用，点击移除首尾帧以切换' : undefined}
-              >
-                <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">参考素材</p>
-                <div className="space-y-2">
-                  <div>
-                    <p className="mb-1 text-xs text-zinc-600">参考图片</p>
-                    <AssetPicker
-                      type="image"
-                      selected={refImageIds}
-                      onToggle={(id) =>
-                        setRefImageIds((cur) =>
-                          cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id],
-                        )
-                      }
-                      disabled={hasFirstLast}
-                    />
-                  </div>
-                  <div>
-                    <p className="mb-1 text-xs text-zinc-600">参考视频</p>
-                    <AssetPicker
-                      type="video"
-                      selected={refVideoIds}
-                      onToggle={(id) =>
-                        setRefVideoIds((cur) =>
-                          cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id],
-                        )
-                      }
-                      disabled={hasFirstLast}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <label className="flex items-center gap-2 text-sm text-zinc-400" title="生成前用 AI 深度理解并润色你的提示词，按用量额外计费">
                 <input
                   type="checkbox"
                   checked={promptEnhance}
@@ -543,175 +463,372 @@ export default function Studio() {
           )}
 
           {tab === 'video.sequence' && (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                {vsShots.map((s, i) => (
-                  <div key={i} className="flex gap-2">
-                    <input
-                      value={s}
-                      onChange={(e) =>
-                        setVsShots((cur) => cur.map((c, ci) => (ci === i ? e.target.value : c)))
-                      }
-                      className="flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm outline-none focus:border-violet-500"
-                      placeholder={`第 ${i + 1} 段镜头描述`}
-                    />
-                    {vsShots.length > 1 && (
-                      <button
-                        onClick={() => setVsShots((cur) => cur.filter((_, ci) => ci !== i))}
-                        className="rounded-lg border border-zinc-800 px-2 text-zinc-500 hover:text-red-400"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <button
-                  onClick={() => setVsShots((cur) => [...cur, ''])}
-                  className="text-sm text-violet-400 hover:text-violet-300"
-                >
-                  + 添加一段
-                </button>
-              </div>
+            <ShotList
+              shots={vsShots}
+              setShots={setVsShots}
+              placeholder={(i) => `第 ${i + 1} 段镜头描述`}
+              addLabel="+ 添加一段"
+            />
+          )}
 
-              <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-400">
-                <label className="flex items-center gap-2">
-                  每段时长
-                  <select
-                    value={vsDuration}
-                    onChange={(e) => setVsDuration(Number(e.target.value))}
-                    className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1"
-                  >
-                    {[4, 5, 6, 8, 10, 12, 15].map((v) => (
-                      <option key={v} value={v}>
-                        {v}s
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="flex items-center gap-2" title="无角色绑定时，锚点段落回退为纯文字生成，需要指定画面比例">
-                  画面比例
-                  <select
-                    value={vsRatio}
-                    onChange={(e) => setVsRatio(e.target.value as (typeof RATIO_VALUES)[number])}
-                    className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1"
-                  >
+          {/* ── Capsule parameter row ──────────────────────────── */}
+          <div className="flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-4">
+            {tab === 'image.batch' && (
+              <Capsule>
+                <span className="text-zinc-500">数量</span>
+                <select value={n} onChange={(e) => setN(Number(e.target.value))} className="bg-transparent text-zinc-100 outline-none">
+                  {[2, 4, 6, 9].map((v) => (
+                    <option key={v} value={v} className="bg-zinc-900">
+                      n={v}
+                    </option>
+                  ))}
+                </select>
+              </Capsule>
+            )}
+
+            {(tab === 'video.single' || tab === 'video.sequence') && (
+              <Capsule>
+                <span className="text-zinc-500">时长</span>
+                <select
+                  value={tab === 'video.single' ? duration : vsDuration}
+                  onChange={(e) =>
+                    tab === 'video.single' ? setDuration(Number(e.target.value)) : setVsDuration(Number(e.target.value))
+                  }
+                  className="bg-transparent text-zinc-100 outline-none"
+                >
+                  {[4, 5, 6, 8, 10, 12, 15].map((v) => (
+                    <option key={v} value={v} className="bg-zinc-900">
+                      {v}s
+                    </option>
+                  ))}
+                </select>
+              </Capsule>
+            )}
+
+            {tab === 'video.single' && (
+              <Capsule>
+                <span className="text-zinc-500">解析度</span>
+                <select
+                  value={resolution}
+                  onChange={(e) => setResolution(e.target.value as '768P' | '2K')}
+                  className="bg-transparent text-zinc-100 outline-none"
+                >
+                  <option value="768P" className="bg-zinc-900">768P</option>
+                  <option value="2K" className="bg-zinc-900">2K</option>
+                </select>
+              </Capsule>
+            )}
+
+            {tab === 'video.single' && (
+              <Capsule disabled={refMode !== 'none'} title={refMode !== 'none' ? '首尾帧/参考素材模式下画面比例由素材决定' : undefined}>
+                <span className="text-zinc-500">比例</span>
+                <select
+                  value={ratio}
+                  onChange={(e) => setRatio(e.target.value as (typeof RATIO_VALUES)[number])}
+                  disabled={refMode !== 'none'}
+                  className="bg-transparent text-zinc-100 outline-none disabled:cursor-not-allowed"
+                >
+                  {RATIO_VALUES.map((r) => (
+                    <option key={r} value={r} className="bg-zinc-900">
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </Capsule>
+            )}
+
+            {tab === 'video.sequence' && (
+              <>
+                <Capsule>
+                  <span className="text-zinc-500">比例</span>
+                  <select value={vsRatio} onChange={(e) => setVsRatio(e.target.value as (typeof RATIO_VALUES)[number])} className="bg-transparent text-zinc-100 outline-none">
                     {RATIO_VALUES.map((r) => (
-                      <option key={r} value={r}>
+                      <option key={r} value={r} className="bg-zinc-900">
                         {r}
                       </option>
                     ))}
                   </select>
-                </label>
-                <label className="flex items-center gap-2" title="每 N 段重新锚定一次角色参考图（r2va），其余段落用前一段尾帧续接（i2va）">
-                  重新锚定间隔
+                </Capsule>
+                <Capsule title="每 N 段重新锚定一次角色参考图（r2va），其余段落用前一段尾帧续接（i2va）">
+                  <span className="text-zinc-500">锚定间隔</span>
                   <select
                     value={vsRecalibrateEvery}
                     onChange={(e) => setVsRecalibrateEvery(Number(e.target.value))}
-                    className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1"
+                    className="bg-transparent text-zinc-100 outline-none"
                   >
                     {[2, 3, 4, 5].map((v) => (
-                      <option key={v} value={v}>
+                      <option key={v} value={v} className="bg-zinc-900">
                         每 {v} 段
                       </option>
                     ))}
                   </select>
-                </label>
-              </div>
+                </Capsule>
+              </>
+            )}
+
+            {!isGuest && (
+              <>
+                <Capsule>
+                  <span className="text-zinc-500">角色 A</span>
+                  <CharacterSelectInline value={slotA} onChange={setSlotA} options={characters.data?.characters ?? []} />
+                </Capsule>
+                <Capsule>
+                  <span className="text-zinc-500">角色 B</span>
+                  <CharacterSelectInline value={slotB} onChange={setSlotB} options={characters.data?.characters ?? []} />
+                </Capsule>
+              </>
+            )}
+
+            <div className="flex-1" />
+
+            {!isGuest ? (
+              <>
+                <div className="text-right font-mono text-sm text-zinc-300">
+                  <span className="text-violet-400">✦</span> <AnimatedNumber value={estimate} />
+                </div>
+                <button
+                  onClick={() => createJob.mutate()}
+                  disabled={
+                    createJob.isPending || running || insufficientBalance || (tab === 'video.single' && !videoValidation.success)
+                  }
+                  className="rounded-full bg-violet-500 px-5 py-2 text-sm font-medium text-white transition hover:bg-violet-400 disabled:opacity-50"
+                >
+                  {createJob.isPending ? '提交中…' : running ? '生成中…' : '生成 →'}
+                </button>
+              </>
+            ) : (
+              <Link to="/login" className="rounded-full bg-violet-500 px-5 py-2 text-sm font-medium text-white transition hover:bg-violet-400">
+                登录后生成 →
+              </Link>
+            )}
+          </div>
+
+          {insufficientBalance && <p className="text-sm text-red-400">积分不足（余额 {balance}）</p>}
+          {tab === 'video.single' && !videoValidation.success && (
+            <p className="text-sm text-amber-400">{videoValidation.error.issues[0]?.message}</p>
+          )}
+
+          {!isGuest && characters.isSuccess && characters.data.characters.length === 0 && (
+            <p className="text-xs text-zinc-600">还没有角色，去「角色库」创建</p>
+          )}
+
+          {!isGuest && !!presets.data?.presets.length && (
+            <PresetCarousel
+              presets={presets.data.presets}
+              selected={presetIds}
+              onToggle={(id) => setPresetIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))}
+            />
+          )}
+        </div>
+
+        {/* ── Format quick-switch cards ──────────────────────────── */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          {TABS.map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`rounded-xl border p-3 text-left transition ${
+                tab === t ? 'border-violet-500 bg-violet-500/10' : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700'
+              }`}
+            >
+              <p className="text-lg leading-none">{TAB_META[t].icon}</p>
+              <p className={`mt-1.5 text-sm font-medium ${tab === t ? 'text-violet-300' : 'text-zinc-200'}`}>
+                {WORKFLOW_LABEL[t]}
+              </p>
+              <p className="mt-0.5 text-xs text-zinc-500">{TAB_META[t].blurb}</p>
+            </button>
+          ))}
+        </div>
+
+        {bizId && (
+          <Link to={`/jobs/${bizId}`} className="text-sm text-violet-400 hover:text-violet-300">
+            查看流程图 →
+          </Link>
+        )}
+
+        {/* ── Results ─────────────────────────────────────────── */}
+        <div className="min-h-80 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+          {!bizId && !isGuest && (
+            <EmptyState presets={presets.data?.presets ?? []} onPick={(fragment) => (tab === 'video.single' ? setVText(fragment) : setText(fragment))} />
+          )}
+
+          {!bizId && isGuest && (
+            <div className="mx-auto max-w-md space-y-3 text-center">
+              <p className="text-sm text-zinc-400">不用注册，先免费试用一次单图生成</p>
+              <textarea
+                value={trialPrompt}
+                onChange={(e) => setTrialPrompt(e.target.value)}
+                rows={2}
+                className="w-full resize-none rounded-lg border border-zinc-800 bg-zinc-950 p-2 text-sm outline-none focus:border-violet-500"
+              />
+              <button
+                onClick={runTrial}
+                disabled={trialBusy || !trialPrompt.trim()}
+                className="w-full rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800 disabled:opacity-50"
+              >
+                {trialBusy ? '生成中…' : '✦ 匿名试用一次'}
+              </button>
+              {trialError && <p className="text-sm text-red-400">{trialError}</p>}
+              {trialImageUrl && (
+                <div className="pt-2">
+                  <img src={trialImageUrl} alt="" className="mx-auto rounded-lg" />
+                  <p className="mt-2 text-xs text-zinc-500">喜欢这张？登录后才能保存到素材库</p>
+                </div>
+              )}
             </div>
           )}
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => createJob.mutate()}
-              disabled={
-                createJob.isPending ||
-                running ||
-                insufficientBalance ||
-                (tab === 'video.single' && !videoValidation.success)
-              }
-              className="rounded-lg bg-violet-500 px-5 py-2.5 font-medium text-white transition hover:bg-violet-400 disabled:opacity-50"
-            >
-              {createJob.isPending ? '提交中…' : `✦ ${estimate} 生成`}
-            </button>
-            {insufficientBalance && (
-              <span className="text-sm text-red-400">积分不足（余额 {balance}）</span>
-            )}
-            {tab === 'video.single' && !videoValidation.success && (
-              <span className="text-sm text-amber-400">
-                {videoValidation.error.issues[0]?.message}
-              </span>
-            )}
-          </div>
-
-          {bizId && (
-            <Link to={`/jobs/${bizId}`} className="text-sm text-violet-400 hover:text-violet-300">
-              查看流程图 →
-            </Link>
+          {gateSuspended && bizId && job && (
+            <PreviewGate bizId={bizId} job={job} duration={vsDuration} onResumed={() => jobStream.refetch()} />
           )}
 
-          <div className="mt-4 flex min-h-80 flex-wrap items-center justify-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
-            {!bizId && <p className="text-zinc-500">结果会显示在这里</p>}
-
-            {gateSuspended && bizId && job && (
-              <PreviewGate
-                bizId={bizId}
-                job={job}
-                duration={vsDuration}
-                onResumed={() => jobQuery.refetch()}
-              />
-            )}
-
-            {running && !gateSuspended && (
+          {running && !gateSuspended && (
+            <div className="flex min-h-64 flex-col items-center justify-center gap-2">
               <GenerationProgress kind={tab.startsWith('video') ? 'video' : 'image'} />
-            )}
+              {jobStream.streamState === 'reconnecting' && (
+                <p className="text-xs text-amber-500">实时连接不稳定，重新连接中…</p>
+              )}
+            </div>
+          )}
 
-            {job?.status === 'failed' && (
-              <p className="text-red-400">
-                生成失败：{displayNodeError(job && firstSpecificError(job.nodes))}
-              </p>
-            )}
+          {job?.status === 'failed' && (
+            <p className="text-center text-red-400">生成失败：{displayNodeError(job && firstSpecificError(job.nodes))}</p>
+          )}
 
-            {job?.status === 'succeeded' &&
-              assetIds.map((id) => (
-                <div key={id} className="text-center">
-                  <p className="mb-1 font-mono text-xs text-zinc-500">{id}</p>
-                  <GeneratedMedia assetId={id} />
+          {job?.status === 'succeeded' && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                {assetIds.map((id) => (
+                  <div key={id} className="text-center">
+                    <p className="mb-1 font-mono text-xs text-zinc-500">{id}</p>
+                    <GeneratedMedia assetId={id} />
+                  </div>
+                ))}
+              </div>
+
+              {suggestions.length > 0 && (
+                <div className="flex flex-wrap items-center justify-center gap-2 border-t border-zinc-800 pt-4">
+                  <span className="text-xs text-zinc-500">猜你想接着做：</span>
+                  {suggestions.map((s) => (
+                    <button
+                      key={s.kind}
+                      onClick={() => applySuggestion(s)}
+                      className="rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-200 transition hover:border-violet-500 hover:text-violet-300"
+                    >
+                      {s.icon} {s.label}
+                    </button>
+                  ))}
                 </div>
-              ))}
-          </div>
-        </main>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </AppShell>
+  )
+}
+
+function Capsule({ children, disabled, title }: { children: ReactNode; disabled?: boolean; title?: string }) {
+  return (
+    <div
+      title={title}
+      className={`flex items-center gap-1.5 rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-300 ${disabled ? 'opacity-40' : ''}`}
+    >
+      {children}
+    </div>
+  )
+}
+
+function ShotList({
+  shots,
+  setShots,
+  placeholder,
+  addLabel,
+}: {
+  shots: string[]
+  setShots: React.Dispatch<React.SetStateAction<string[]>>
+  placeholder: (i: number) => string
+  addLabel: string
+}) {
+  return (
+    <div className="space-y-2">
+      {shots.map((s, i) => (
+        <div key={i} className="flex gap-2">
+          <input
+            value={s}
+            onChange={(e) => setShots((cur) => cur.map((c, ci) => (ci === i ? e.target.value : c)))}
+            className="flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-violet-500"
+            placeholder={placeholder(i)}
+          />
+          {shots.length > 1 && (
+            <button
+              onClick={() => setShots((cur) => cur.filter((_, ci) => ci !== i))}
+              className="rounded-lg border border-zinc-800 px-2 text-zinc-500 hover:text-red-400"
+            >
+              ×
+            </button>
+          )}
+        </div>
+      ))}
+      <button onClick={() => setShots((cur) => [...cur, ''])} className="text-sm text-violet-400 hover:text-violet-300">
+        {addLabel}
+      </button>
+    </div>
+  )
+}
+
+// §19.4.1's cold-start "灵感引导" empty state: reuses preset cover images
+// (already fetched for the carousel above) instead of a bare "结果会显示在
+// 这里" placeholder — clicking one drops its prompt fragment straight into
+// the active input.
+function EmptyState({ presets, onPick }: { presets: { biz_id: string; name: string; cover_url: string; prompt_fragment: string }[]; onPick: (fragment: string) => void }) {
+  const sample = presets.slice(0, 4)
+  if (sample.length === 0) {
+    return <p className="text-center text-zinc-500">结果会显示在这里</p>
+  }
+  return (
+    <div className="mx-auto max-w-md text-center">
+      <p className="mb-3 text-sm text-zinc-500">猜你想生成：</p>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {sample.map((p) => (
+          <button
+            key={p.biz_id}
+            onClick={() => onPick(p.prompt_fragment)}
+            className="group overflow-hidden rounded-xl border border-zinc-800 transition hover:border-violet-500"
+          >
+            {p.cover_url ? (
+              <img src={p.cover_url} alt="" className="aspect-square w-full object-cover" />
+            ) : (
+              <div className="aspect-square w-full bg-zinc-800" />
+            )}
+            <p className="truncate bg-zinc-950 px-2 py-1 text-xs text-zinc-400 group-hover:text-violet-300">{p.name}</p>
+          </button>
+        ))}
       </div>
     </div>
   )
 }
 
-function CharacterSelect({
-  label,
+function CharacterSelectInline({
   value,
   onChange,
   options,
 }: {
-  label: string
   value: string
   onChange: (v: string) => void
   options: { biz_id: string; name: string }[]
 }) {
   return (
-    <label className="flex items-center gap-2 text-sm">
-      <span className="w-4 text-zinc-500">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-zinc-300"
-      >
-        <option value="">未选择</option>
-        {options.map((c) => (
-          <option key={c.biz_id} value={c.biz_id}>
-            {c.name}
-          </option>
-        ))}
-      </select>
-    </label>
+    <select value={value} onChange={(e) => onChange(e.target.value)} className="bg-transparent text-zinc-100 outline-none">
+      <option value="" className="bg-zinc-900">
+        未选择
+      </option>
+      {options.map((c) => (
+        <option key={c.biz_id} value={c.biz_id} className="bg-zinc-900">
+          {c.name}
+        </option>
+      ))}
+    </select>
   )
 }
 
@@ -728,13 +845,7 @@ function GeneratedMedia({ assetId }: { assetId: string }) {
     return <div className="h-64 w-64 animate-pulse rounded-lg bg-zinc-800" />
   }
   if (data.type === 'video') {
-    return (
-      <video
-        src={data.public_url}
-        controls
-        className="h-64 w-64 rounded-lg bg-black object-contain"
-      />
-    )
+    return <video src={data.public_url} controls className="h-64 w-64 rounded-lg bg-black object-contain" />
   }
   return <img src={data.public_url} alt="generated" className="h-64 w-64 rounded-lg object-cover" />
 }

@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Character } from '../lib/api'
-import Nav from '../components/Nav'
+import AppShell from '../components/AppShell'
 import { AssetPicker } from '../components/AssetPicker'
 
 // F3.1: name + description + 1-3 reference images + a fixed seed. There's no
@@ -9,12 +10,20 @@ import { AssetPicker } from '../components/AssetPicker'
 // side-effects), so the ref-image picker draws from the user's own already-
 // generated image assets rather than a file input.
 export default function Characters() {
-  const [creating, setCreating] = useState(false)
+  const location = useLocation()
+  const prefillAssetId = (location.state as { prefillAssetId?: string } | null)?.prefillAssetId
+  const [creating, setCreating] = useState(!!prefillAssetId)
   const characters = useQuery({ queryKey: ['characters'], queryFn: api.listCharacters })
 
+  // Studio's "存为角色" / "抽帧存为角色" suggestions (§19.4.2) land here with
+  // the just-generated asset preselected — opens the form instead of making
+  // the user hunt for the same thumbnail again in the picker below.
+  useEffect(() => {
+    if (prefillAssetId) setCreating(true)
+  }, [prefillAssetId])
+
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-50">
-      <Nav />
+    <AppShell>
       <div className="mx-auto max-w-5xl px-6 py-8">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-lg font-medium">角色库</h1>
@@ -28,6 +37,7 @@ export default function Characters() {
 
         {creating && (
           <CreateCharacterForm
+            initialSelected={prefillAssetId ? [prefillAssetId] : []}
             onDone={() => {
               setCreating(false)
               characters.refetch()
@@ -43,7 +53,7 @@ export default function Characters() {
           {characters.data?.characters.map((c) => <CharacterCard key={c.biz_id} character={c} />)}
         </div>
       </div>
-    </div>
+    </AppShell>
   )
 }
 
@@ -70,11 +80,17 @@ function RefThumb({ assetId }: { assetId: string }) {
   return <img src={data.public_url} alt="" className="h-16 w-16 rounded-lg object-cover" />
 }
 
-function CreateCharacterForm({ onDone }: { onDone: () => void }) {
+function CreateCharacterForm({
+  initialSelected,
+  onDone,
+}: {
+  initialSelected: string[]
+  onDone: () => void
+}) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1_000_000))
-  const [selected, setSelected] = useState<string[]>([])
+  const [selected, setSelected] = useState<string[]>(initialSelected)
   const qc = useQueryClient()
 
   const create = useMutation({

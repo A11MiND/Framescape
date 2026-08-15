@@ -34,6 +34,12 @@ export default function PreviewGate({
     }))
     .sort((a, b) => a.index - b.index)
 
+  // job.spec.shots is 0-indexed; shot-N DAG nodes are 1-indexed (§5.4's
+  // planShots: idx := i + 1, video_sequence.go) — this is the one place
+  // that mapping matters client-side, to echo back what the user actually
+  // wrote for each 768P draft they're now deciding on.
+  const originalPrompts = job.spec.shots ?? []
+
   const [buckets, setBuckets] = useState<Record<number, Bucket>>({})
   const [overrides, setOverrides] = useState<Record<number, string>>({})
 
@@ -42,6 +48,11 @@ export default function PreviewGate({
 
   const upgradeCount = Object.values(buckets).filter((b) => b === 'upgrade').length
   const upgradeCost = estimateVideoCredits(duration, '2K') * upgradeCount
+  // §19.4.5 P0: "必须同时显示「当前选择」和「全都升 2K」两个数字，让省钱这
+  // 件事可感知" — the direct-2K comparison this whole preview-gate/768P
+  // strategy exists to justify (§3.6).
+  const allUpgradeCost = estimateVideoCredits(duration, '2K') * shots.length
+  const savedPct = allUpgradeCost > 0 ? Math.round((1 - upgradeCost / allUpgradeCost) * 100) : 0
 
   const resume = useMutation({
     mutationFn: () => {
@@ -67,6 +78,11 @@ export default function PreviewGate({
           <div key={s.index} className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
             <p className="mb-2 text-xs text-zinc-500">第 {s.index} 段</p>
             <ShotPreview assetId={s.assetId} />
+            {originalPrompts[s.index - 1] && (
+              <p className="mt-1.5 line-clamp-2 text-xs text-zinc-500" title={originalPrompts[s.index - 1]}>
+                {originalPrompts[s.index - 1]}
+              </p>
+            )}
             <div className="mt-2 flex gap-1 text-xs">
               {(['keep', 'redo', 'upgrade'] as Bucket[]).map((b) => (
                 <button
@@ -94,15 +110,30 @@ export default function PreviewGate({
         ))}
       </div>
 
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => resume.mutate()}
-          disabled={resume.isPending}
-          className="rounded-lg bg-violet-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-violet-400 disabled:opacity-50"
-        >
-          {resume.isPending ? '提交中…' : `确认并合成${upgradeCount > 0 ? ` (✦ +${upgradeCost} 升级)` : ''}`}
-        </button>
-        {resume.isError && <p className="text-sm text-red-400">{(resume.error as Error).message}</p>}
+      <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+        <p className="text-sm text-zinc-400">
+          当前选择：升级 {upgradeCount} 段
+          {Object.values(buckets).filter((b) => b === 'redo').length > 0 &&
+            ` · 重做 ${Object.values(buckets).filter((b) => b === 'redo').length} 段`}
+        </p>
+        <p className="text-sm text-zinc-300">
+          将消耗 <span className="font-mono text-violet-300">✦ {upgradeCost}</span>
+          <span className="text-zinc-600">
+            {' '}
+            （对比：全部直接出 2K 需 <span className="font-mono">✦ {allUpgradeCost}</span>
+            {upgradeCount > 0 && savedPct > 0 ? `，省 ${savedPct}%` : ''}）
+          </span>
+        </p>
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            onClick={() => resume.mutate()}
+            disabled={resume.isPending}
+            className="rounded-lg bg-violet-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-violet-400 disabled:opacity-50"
+          >
+            {resume.isPending ? '提交中…' : `确认并合成${upgradeCount > 0 ? ` (✦ +${upgradeCost} 升级)` : ''}`}
+          </button>
+          {resume.isError && <p className="text-sm text-red-400">{(resume.error as Error).message}</p>}
+        </div>
       </div>
     </div>
   )
