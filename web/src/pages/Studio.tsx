@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, keepPreviousData } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, ApiError, type Spec, type WorkflowName, type JobResponse } from '../lib/api'
 import {
@@ -22,6 +22,7 @@ import AnimatedNumber from '../components/AnimatedNumber'
 import { useAuthStore } from '../lib/authStore'
 import { getDeviceId } from '../lib/deviceId'
 import { useJobStream } from '../hooks/useJobStream'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 
 // PRD §19.4.1's full creation studio, now mounted at `/` per §19.3 ("创作台
 // （首页，登录/匿名皆可进入）") instead of behind a login wall — this is
@@ -156,7 +157,59 @@ export default function Studio() {
     referenceVideoAssetIds: refVideoIds,
   })
 
-  const estimate =
+  // Shared by the mutation and the estimate query below — kept as one
+  // function so the two can never build a different Spec for what looks to
+  // the user like "the same submission," not two separate copies of this
+  // switch that could quietly drift apart.
+  function buildSpec(): Spec {
+    const characterSlots = [
+      slotA && { slot: 'A', character_id: slotA },
+      slotB && { slot: 'B', character_id: slotB },
+    ].filter(Boolean) as Spec['characters']
+
+    const spec: Spec = {
+      characters: characterSlots?.length ? characterSlots : undefined,
+      preset_ids: presetIds.length ? presetIds : undefined,
+    }
+    if (tab === 'image.single' || tab === 'image.batch') {
+      spec.text = text
+      if (tab === 'image.batch') spec.n = n
+      if (tab === 'image.single' && sourceImageId) spec.source_image_asset_id = sourceImageId
+    } else if (tab === 'image.comic4') {
+      if (comicMode === 'auto') {
+        spec.story = story
+      } else {
+        spec.panels = panels
+      }
+    } else if (tab === 'image.sequence') {
+      spec.shots = shots.filter((s) => s.trim())
+    } else if (tab === 'video.single') {
+      spec.text = vText
+      spec.duration_seconds = duration
+      spec.resolution = resolution
+      if (refMode === 'none') spec.ratio = ratio
+      if (firstFrameAssetId) spec.first_frame_asset_id = firstFrameAssetId
+      if (lastFrameAssetId) spec.last_frame_asset_id = lastFrameAssetId
+      if (refImageIds.length) spec.reference_image_asset_ids = refImageIds
+      if (refVideoIds.length) spec.reference_video_asset_ids = refVideoIds
+      if (promptEnhance) spec.prompt_enhance = true
+    } else {
+      spec.shots = vsShots.filter((s) => s.trim())
+      spec.duration_seconds = vsDuration
+      spec.ratio = vsRatio
+      spec.recalibrate_every = vsRecalibrateEvery
+    }
+    return spec
+  }
+
+  // Instant local guess (pricing.ts mirrors jobsvc.EstimateCredits' formulas
+  // exactly) shown until the debounced §13.3 POST /jobs/estimate call
+  // resolves and becomes the source of truth — avoids the number sitting at
+  // "✦ 0" for the ~300ms+RTT before the first real estimate lands, while
+  // still converging on the server's number (the one that actually gets
+  // held) rather than a client-side guess that could drift from it if
+  // pricing ever changes server-side.
+  const localEstimateGuess =
     tab === 'image.single'
       ? estimateImageCredits(1)
       : tab === 'image.batch'
@@ -170,56 +223,34 @@ export default function Studio() {
                 (promptEnhance ? estimatePromptEnhanceCredits() : 0)
               : estimateVideoCredits(vsDuration, '768P') * (vsShots.filter((s) => s.trim()).length || 1)
 
+  const debouncedSpecKey = useDebouncedValue(JSON.stringify({ tab, spec: buildSpec() }), 300)
+  const estimateQuery = useQuery({
+    queryKey: ['estimate', debouncedSpecKey],
+    queryFn: () => {
+      const parsed = JSON.parse(debouncedSpecKey) as { tab: WorkflowName; spec: Spec }
+      return api.estimateJob(parsed.tab, parsed.spec)
+    },
+    enabled: !isGuest,
+    placeholderData: keepPreviousData,
+  })
+  const estimate = estimateQuery.data?.credits_total ?? localEstimateGuess
+
   const balance = me.data?.balance ?? 0
   const insufficientBalance = !isGuest && me.isSuccess && balance < estimate
 
   const createJob = useMutation({
     mutationFn: () => {
-      const characterSlots = [
-        slotA && { slot: 'A', character_id: slotA },
-        slotB && { slot: 'B', character_id: slotB },
-      ].filter(Boolean) as Spec['characters']
-
-      const spec: Spec = {
-        characters: characterSlots?.length ? characterSlots : undefined,
-        preset_ids: presetIds.length ? presetIds : undefined,
+      if (tab === 'image.comic4' && comicMode === 'auto' && !story.trim()) {
+        throw new Error('请输入剧情描述')
       }
-      if (tab === 'image.single' || tab === 'image.batch') {
-        spec.text = text
-        if (tab === 'image.batch') spec.n = n
-        if (tab === 'image.single' && sourceImageId) spec.source_image_asset_id = sourceImageId
-      } else if (tab === 'image.comic4') {
-        if (comicMode === 'auto') {
-          if (!story.trim()) throw new Error('请输入剧情描述')
-          spec.story = story
-        } else {
-          spec.panels = panels
-        }
-      } else if (tab === 'image.sequence') {
-        spec.shots = shots.filter((s) => s.trim())
-      } else if (tab === 'video.single') {
-        if (!videoValidation.success) {
-          throw new Error(videoValidation.error.issues[0]?.message ?? '参数不合法')
-        }
-        spec.text = vText
-        spec.duration_seconds = duration
-        spec.resolution = resolution
-        if (refMode === 'none') spec.ratio = ratio
-        if (firstFrameAssetId) spec.first_frame_asset_id = firstFrameAssetId
-        if (lastFrameAssetId) spec.last_frame_asset_id = lastFrameAssetId
-        if (refImageIds.length) spec.reference_image_asset_ids = refImageIds
-        if (refVideoIds.length) spec.reference_video_asset_ids = refVideoIds
-        if (promptEnhance) spec.prompt_enhance = true
-      } else {
-        const trimmedShots = vsShots.filter((s) => s.trim())
-        if (trimmedShots.length === 0) throw new Error('至少需要一段镜头描述')
-        spec.shots = trimmedShots
-        spec.duration_seconds = vsDuration
-        spec.ratio = vsRatio
-        spec.recalibrate_every = vsRecalibrateEvery
+      if (tab === 'video.single' && !videoValidation.success) {
+        throw new Error(videoValidation.error.issues[0]?.message ?? '参数不合法')
+      }
+      if (tab === 'video.sequence' && vsShots.filter((s) => s.trim()).length === 0) {
+        throw new Error('至少需要一段镜头描述')
       }
       const idemKey = crypto.randomUUID()
-      return api.createJob(tab as WorkflowName, spec, idemKey)
+      return api.createJob(tab as WorkflowName, buildSpec(), idemKey)
     },
     onSuccess: (res) => {
       setBizId(res.biz_id)
@@ -230,6 +261,14 @@ export default function Studio() {
 
   const jobStream = useJobStream(bizId)
   const job = jobStream.data as JobResponse | undefined
+
+  // F7.4: mirrors JobDetail's own cancelJob mutation (same endpoint, same
+  // "no optimistic update, just refetch" reasoning — see that file's doc).
+  const cancelJob = useMutation({
+    mutationFn: () => api.cancelJob(bizId!),
+    onSuccess: () => jobStream.refetch(),
+    onError: () => pushToast('取消失败，请重试', () => cancelJob.mutate()),
+  })
 
   useEffect(() => {
     if (jobStream.isError) {
@@ -683,11 +722,18 @@ export default function Studio() {
           )}
 
           {running && !gateSuspended && (
-            <div className="flex min-h-64 flex-col items-center justify-center gap-2">
+            <div className="flex min-h-64 flex-col items-center justify-center gap-3">
               <GenerationProgress kind={tab.startsWith('video') ? 'video' : 'image'} />
               {jobStream.streamState === 'reconnecting' && (
                 <p className="text-xs text-amber-500">实时连接不稳定，重新连接中…</p>
               )}
+              <button
+                onClick={() => cancelJob.mutate()}
+                disabled={cancelJob.isPending}
+                className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-400 transition hover:border-red-500 hover:text-red-400 disabled:opacity-50"
+              >
+                {cancelJob.isPending ? '取消中…' : '取消作业'}
+              </button>
             </div>
           )}
 

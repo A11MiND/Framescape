@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { resultAssetIds, WORKFLOW_LABEL, type Tab } from '../lib/jobResult'
+import { resultAssetIds, statusToPhase, WORKFLOW_LABEL, type Tab } from '../lib/jobResult'
 import { displayNodeError, firstSpecificError } from '../lib/errors'
 import { useToast } from '../components/Toast'
 import AppShell from '../components/AppShell'
@@ -9,8 +9,8 @@ import WorkflowGraph from '../components/WorkflowGraph'
 import PreviewGate from '../components/PreviewGate'
 import GenerationProgress from '../components/GenerationProgress'
 import { useJobStream } from '../hooks/useJobStream'
-import { api } from '../lib/api'
-import { useQuery } from '@tanstack/react-query'
+import { api, ApiError } from '../lib/api'
+import { useMutation, useQuery } from '@tanstack/react-query'
 
 // PRD §19.4.6's job detail / DAG view — fully reconstructible from the URL
 // alone (unlike Studio's inline results, which only exist for the job just
@@ -32,6 +32,17 @@ export default function JobDetail() {
   const gateNode = job?.nodes.find((n) => n.name === 'gate')
   const gateSuspended = job?.workflow_name === 'video.sequence' && gateNode?.phase === 'Suspended'
   const assetIds = job ? resultAssetIds(job, job.workflow_name as Tab) : []
+  const running = job && job.status !== 'succeeded' && job.status !== 'failed' && job.status !== 'cancelled'
+
+  // F7.4: stops the run and lets the existing terminal-phase machinery
+  // (jobsvc.Service.Cancel's own doc) settle credits — this just fires the
+  // request and refetches, no optimistic update, since the job's actual
+  // status still only flips once the engine and projection layer catch up.
+  const cancelJob = useMutation({
+    mutationFn: () => api.cancelJob(bizId!),
+    onSuccess: () => jobQuery.refetch(),
+    onError: (err) => pushToast(err instanceof ApiError ? err.message : '取消失败，请重试', () => cancelJob.mutate()),
+  })
 
   return (
     <AppShell>
@@ -49,7 +60,18 @@ export default function JobDetail() {
                   {WORKFLOW_LABEL[job.workflow_name as Tab] ?? job.workflow_name}
                 </p>
               </div>
-              <PhaseBadge phase={job.status === 'succeeded' ? 'Succeeded' : job.status === 'failed' ? 'Failed' : 'Running'} />
+              <div className="flex items-center gap-3">
+                <PhaseBadge phase={statusToPhase(job.status)} />
+                {running && (
+                  <button
+                    onClick={() => cancelJob.mutate()}
+                    disabled={cancelJob.isPending}
+                    className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-red-500 hover:text-red-400 disabled:opacity-50"
+                  >
+                    {cancelJob.isPending ? '取消中…' : '取消作业'}
+                  </button>
+                )}
+              </div>
             </div>
 
             <WorkflowGraph job={job} />

@@ -182,6 +182,36 @@ export interface ResumeVideoSequenceRequest {
   redo_prompt_overrides?: Record<number, string>
 }
 
+// JobSummary is GET /jobs's per-row shape (F7.1) — a lighter projection than
+// JobResponse (no nodes[]/spec, GET /jobs/{bizID} is still where those come
+// from), plus the credit/progress counters the list view needs that the
+// detail endpoint never had to expose.
+export interface JobSummary {
+  biz_id: string
+  workflow_name: string
+  title: string
+  status: string
+  node_total: number
+  node_done: number
+  node_failed: number
+  credit_estimated: number
+  credit_held: number
+  credit_settled: number
+  created_at: string
+  finished_at: string | null
+}
+
+export interface CreditLedgerEntry {
+  direction: string
+  amount: number
+  balance_after: number
+  held_after: number
+  ref_type: string
+  ref_id: string
+  remark: string
+  created_at: string
+}
+
 export const api = {
   register: (email: string, password: string) =>
     request<TokenPair>('POST', '/auth/register', { email, password }, { auth: false }),
@@ -208,6 +238,26 @@ export const api = {
   getJob: (bizId: string) => request<JobResponse>('GET', `/jobs/${bizId}`),
   resumeJob: (bizId: string, body: ResumeVideoSequenceRequest) =>
     request<void>('POST', `/jobs/${bizId}/resume`, body),
+  cancelJob: (bizId: string) => request<void>('POST', `/jobs/${bizId}/cancel`),
+
+  // F7.1: newest-first, optional status filter, cursor pagination (see
+  // jobsvc.Service.List's doc for the cursor shape — a decreasing numeric id).
+  listJobs: (opts: { status?: string; cursor?: string; limit?: number } = {}) => {
+    const params = new URLSearchParams()
+    if (opts.status) params.set('status', opts.status)
+    if (opts.cursor) params.set('cursor', opts.cursor)
+    if (opts.limit) params.set('limit', String(opts.limit))
+    const qs = params.toString()
+    return request<{ jobs: JobSummary[]; next_cursor?: string }>('GET', qs ? `/jobs?${qs}` : '/jobs')
+  },
+
+  // §13.3: quotes the credit figure a submission with this exact
+  // workflow_name/spec would hold, without holding anything — Studio calls
+  // this (debounced) instead of computing the number itself, so pricing
+  // logic has exactly one home (jobsvc.EstimateCredits) instead of two that
+  // can drift.
+  estimateJob: (workflowName: WorkflowName, spec: Spec) =>
+    request<{ credits_total: number }>('POST', '/jobs/estimate', { workflow_name: workflowName, spec }),
 
   getAsset: (bizId: string) => request<AssetResponse>('GET', `/assets/${bizId}`),
   listAssets: (opts: { type?: 'image' | 'video'; limit?: number } = {}) => {
@@ -218,6 +268,24 @@ export const api = {
     return request<{ assets: AssetResponse[] }>('GET', qs ? `/assets?${qs}` : '/assets')
   },
   deleteAsset: (bizId: string) => request<void>('DELETE', `/assets/${bizId}`),
+
+  // F2.1's presigned direct-upload pair. getUploadURL never touches object
+  // storage itself (that's cmd/api's job); uploadToPresignedURL does, via a
+  // raw fetch bypassing request() entirely — different host, no JSON body,
+  // no auth header, same reasoning as batchDownloadAssets' own raw fetch
+  // below. See web/src/lib/upload.ts for the orchestration (presign → PUT →
+  // read local dimensions → complete) that ties these two together.
+  getUploadURL: (filename: string, mime: string) =>
+    request<{ biz_id: string; upload_url: string; storage_key: string }>('POST', '/assets/upload-url', {
+      filename,
+      mime,
+    }),
+  uploadToPresignedURL: async (url: string, file: File): Promise<void> => {
+    const resp = await fetch(url, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
+    if (!resp.ok) throw new ApiError('upload_failed', `上传失败（${resp.status}）`)
+  },
+  completeAsset: (bizId: string, body: { storage_key: string; width?: number; height?: number; duration_ms?: number }) =>
+    request<AssetResponse>('POST', `/assets/${bizId}/complete`, body),
   // Binary zip response, not JSON — bypasses the generic request() helper.
   batchDownloadAssets: async (assetIds: string[]): Promise<Blob> => {
     const token = useAuthStore.getState().accessToken
@@ -244,7 +312,28 @@ export const api = {
       ref_asset_ids: refAssetIds,
       seed,
     }),
+  // updateCharacter is a partial PATCH — only the fields present in body are
+  // touched server-side (handleUpdateCharacter's own doc), so callers only
+  // need to pass what actually changed.
+  updateCharacter: (
+    bizId: string,
+    body: { name?: string; description?: string; ref_asset_ids?: string[]; seed?: number },
+  ) => request<Character>('PATCH', `/characters/${bizId}`, body),
+  deleteCharacter: (bizId: string) => request<void>('DELETE', `/characters/${bizId}`),
 
   listPresets: (category?: string) =>
     request<{ presets: Preset[] }>('GET', category ? `/presets?category=${category}` : '/presets'),
+
+  // F1.3: balance/held plus the ledger rows that produced them.
+  creditsBalance: () => request<{ balance: number; held: number }>('GET', '/credits/balance'),
+  creditsLedger: (opts: { cursor?: string; limit?: number } = {}) => {
+    const params = new URLSearchParams()
+    if (opts.cursor) params.set('cursor', opts.cursor)
+    if (opts.limit) params.set('limit', String(opts.limit))
+    const qs = params.toString()
+    return request<{ entries: CreditLedgerEntry[]; next_cursor?: string }>(
+      'GET',
+      qs ? `/credits/ledger?${qs}` : '/credits/ledger',
+    )
+  },
 }

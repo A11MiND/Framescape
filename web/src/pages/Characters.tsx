@@ -4,11 +4,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Character } from '../lib/api'
 import AppShell from '../components/AppShell'
 import { AssetPicker } from '../components/AssetPicker'
+import { useToast } from '../components/Toast'
 
-// F3.1: name + description + 1-3 reference images + a fixed seed. There's no
-// raw upload endpoint (PRD §11 — assets only exist as generation
-// side-effects), so the ref-image picker draws from the user's own already-
-// generated image assets rather than a file input.
+// F3.1: name + description + 1-3 reference images + a fixed seed. Ref
+// images come from AssetPicker, which now (F2.1, batch 2) lets the user
+// upload their own straight from this form instead of only ever picking
+// from assets a generation already produced.
 export default function Characters() {
   const location = useLocation()
   const prefillAssetId = (location.state as { prefillAssetId?: string } | null)?.prefillAssetId
@@ -36,7 +37,7 @@ export default function Characters() {
         </div>
 
         {creating && (
-          <CreateCharacterForm
+          <CharacterForm
             initialSelected={prefillAssetId ? [prefillAssetId] : []}
             onDone={() => {
               setCreating(false)
@@ -58,12 +59,45 @@ export default function Characters() {
 }
 
 function CharacterCard({ character }: { character: Character }) {
+  const [editing, setEditing] = useState(false)
+  const qc = useQueryClient()
+  const pushToast = useToast()
+
+  const del = useMutation({
+    mutationFn: () => api.deleteCharacter(character.biz_id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['characters'] }),
+    onError: () => pushToast('删除失败，请重试', () => del.mutate()),
+  })
+
+  if (editing) {
+    return <CharacterForm character={character} onDone={() => setEditing(false)} onCancel={() => setEditing(false)} />
+  }
+
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-      <div className="mb-3 flex gap-2">
-        {character.ref_asset_ids.map((id) => (
-          <RefThumb key={id} assetId={id} />
-        ))}
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
+          {character.ref_asset_ids.map((id) => (
+            <RefThumb key={id} assetId={id} />
+          ))}
+        </div>
+        <div className="flex shrink-0 gap-1">
+          <button
+            onClick={() => setEditing(true)}
+            title="编辑"
+            className="rounded-lg px-2 py-1 text-xs text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-200"
+          >
+            ✎
+          </button>
+          <button
+            onClick={() => del.mutate()}
+            disabled={del.isPending}
+            title="删除"
+            className="rounded-lg px-2 py-1 text-xs text-zinc-500 transition hover:bg-zinc-800 hover:text-red-400 disabled:opacity-50"
+          >
+            ✕
+          </button>
+        </div>
       </div>
       <p className="font-medium">{character.name}</p>
       {character.description && (
@@ -80,21 +114,32 @@ function RefThumb({ assetId }: { assetId: string }) {
   return <img src={data.public_url} alt="" className="h-16 w-16 rounded-lg object-cover" />
 }
 
-function CreateCharacterForm({
+// Shared by both create (no `character` prop) and edit (CharacterCard's
+// "✎" button) — the two flows differ only in which mutation they call and
+// what the fields start out as, everything else (validation, layout,
+// AssetPicker) is identical.
+function CharacterForm({
+  character,
   initialSelected,
   onDone,
+  onCancel,
 }: {
-  initialSelected: string[]
+  character?: Character
+  initialSelected?: string[]
   onDone: () => void
+  onCancel?: () => void
 }) {
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1_000_000))
-  const [selected, setSelected] = useState<string[]>(initialSelected)
+  const [name, setName] = useState(character?.name ?? '')
+  const [description, setDescription] = useState(character?.description ?? '')
+  const [seed, setSeed] = useState(() => character?.seed ?? Math.floor(Math.random() * 1_000_000))
+  const [selected, setSelected] = useState<string[]>(character?.ref_asset_ids ?? initialSelected ?? [])
   const qc = useQueryClient()
 
-  const create = useMutation({
-    mutationFn: () => api.createCharacter(name, description, selected, seed),
+  const save = useMutation({
+    mutationFn: () =>
+      character
+        ? api.updateCharacter(character.biz_id, { name, description, ref_asset_ids: selected, seed })
+        : api.createCharacter(name, description, selected, seed),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['characters'] })
       onDone()
@@ -144,19 +189,29 @@ function CreateCharacterForm({
           selected={selected}
           onToggle={toggle}
           max={3}
-          emptyHint="还没有生成过图片，先去创作台生成一些"
+          emptyHint="还没有生成过图片，点右侧「上传」添加，或先去创作台生成一些"
         />
       </div>
 
-      {create.isError && <p className="text-sm text-red-400">{(create.error as Error).message}</p>}
+      {save.isError && <p className="text-sm text-red-400">{(save.error as Error).message}</p>}
 
-      <button
-        onClick={() => create.mutate()}
-        disabled={!canSubmit || create.isPending}
-        className="rounded-lg bg-violet-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-violet-400 disabled:opacity-50"
-      >
-        {create.isPending ? '创建中…' : '创建角色'}
-      </button>
+      <div className="flex gap-2">
+        <button
+          onClick={() => save.mutate()}
+          disabled={!canSubmit || save.isPending}
+          className="rounded-lg bg-violet-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-violet-400 disabled:opacity-50"
+        >
+          {save.isPending ? '保存中…' : character ? '保存' : '创建角色'}
+        </button>
+        {onCancel && (
+          <button
+            onClick={onCancel}
+            className="rounded-lg px-4 py-2 text-sm text-zinc-400 transition hover:bg-zinc-800"
+          >
+            取消
+          </button>
+        )}
+      </div>
     </div>
   )
 }

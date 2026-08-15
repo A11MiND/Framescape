@@ -48,3 +48,21 @@ export function resultAssetIds(job: JobResponse | undefined, tab: Tab): string[]
   if (typeof v === 'string') return [v]
   return []
 }
+
+// jobs.status (GET /jobs, GET /jobs/{bizID}) is lowercase business-layer
+// vocabulary ("running"/"succeeded"/"failed"/"cancelled" — jobsvc.go's
+// normalizeStatus); PhaseBadge's table is keyed on Aether's own
+// capitalized phase enum. This is the one mapping between the two, shared
+// so JobDetail and the jobs list can't drift on what each status renders as.
+export function statusToPhase(status: string): string {
+  switch (status) {
+    case 'succeeded':
+      return 'Succeeded'
+    case 'failed':
+      return 'Failed'
+    case 'cancelled':
+      return 'Cancelled'
+    default:
+      return 'Running'
+  }
+}
