@@ -10,6 +10,14 @@ export interface GraphNode {
   creditCost?: number
   startedAt?: string | null
   finishedAt?: string | null
+  // name/loopIndex are the raw job_nodes identity (job.nodes[].name /
+  // .loop_index), separate from `id` (which for loop iterations is a
+  // synthetic "name[index]" string) — WorkflowGraph's retry button needs
+  // these two values apart to call POST /jobs/{id}/nodes/{name}/retry.
+  // undefined for the aggregate-placeholder/non-loop-iteration nodes that
+  // never came from a real JobNode row (see toGraphNode's `n?` param).
+  name?: string
+  loopIndex?: number
 }
 
 export interface JobGraph {
@@ -57,6 +65,8 @@ function toGraphNode(n: JobNode | undefined, id: string, label: string, sublabel
     creditCost: n?.credit_cost,
     startedAt: n?.started_at,
     finishedAt: n?.finished_at,
+    name: n?.name,
+    loopIndex: n?.loop_index,
   }
 }
 

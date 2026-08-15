@@ -83,15 +83,22 @@ func (Asset) TableName() string { return "assets" }
 
 // Job mirrors the `jobs` table.
 type Job struct {
-	ID            uint64 `gorm:"primaryKey"`
-	BizID         string `gorm:"column:biz_id"`
-	UserID        uint64 `gorm:"column:user_id"`
-	ProjectID     *uint64
-	WorkflowName  string `gorm:"column:workflow_name"`
-	WorkflowRunID string `gorm:"column:workflow_run_id"`
-	Title         string
-	Status        string
-	Spec          []byte `gorm:"column:spec;type:json"`
+	ID        uint64 `gorm:"primaryKey"`
+	BizID     string `gorm:"column:biz_id"`
+	UserID    uint64 `gorm:"column:user_id"`
+	ProjectID *uint64
+	// RetryOfJobID/RetryOfNodeName/RetryOfLoopIndex are set only on
+	// satellite retry jobs (jobsvc.RetryNode) — see migrations/00006's doc
+	// for why this is the only new state a satellite run needs; every other
+	// field on this row behaves exactly like an ordinary Job.
+	RetryOfJobID     *uint64 `gorm:"column:retry_of_job_id"`
+	RetryOfNodeName  *string `gorm:"column:retry_of_node_name"`
+	RetryOfLoopIndex *int    `gorm:"column:retry_of_loop_index"`
+	WorkflowName     string  `gorm:"column:workflow_name"`
+	WorkflowRunID    string  `gorm:"column:workflow_run_id"`
+	Title            string
+	Status           string
+	Spec             []byte `gorm:"column:spec;type:json"`
 
 	NodeTotal  int `gorm:"column:node_total"`
 	NodeDone   int `gorm:"column:node_done"`

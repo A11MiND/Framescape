@@ -1,10 +1,25 @@
 import { useMemo, useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { ReactFlow, Background, Controls, Handle, Position, type NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import type { JobResponse } from '../lib/api'
+import { api, ApiError, type JobResponse } from '../lib/api'
 import { buildJobGraph, type GraphNode } from '../lib/jobGraph'
 import PhaseBadge, { phaseStyle } from './PhaseBadge'
 import { displayNodeError } from '../lib/errors'
+import { useToast } from './Toast'
+
+// Mirrors jobsvc.retryableNodes exactly — both are single leaf `task`
+// templates with string-only inputs, so a satellite retry (jobsvc.
+// RetryNode's own doc) can safely rebuild their inputs. Kept as a small
+// frontend allowlist rather than trusting the backend's error message
+// alone, so the retry button simply doesn't render for anything else
+// instead of rendering-then-failing.
+const RETRYABLE_NODE: Record<string, string> = {
+  'image.comic4': 'gen-one-panel',
+  'image.sequence': 'gen-one-shot',
+}
+const FAILED_PHASES = new Set(['Failed', 'Error', 'Timeout'])
 
 const X_SPACING = 200
 
@@ -43,6 +58,21 @@ function formatDuration(startedAt?: string | null, finishedAt?: string | null): 
 export default function WorkflowGraph({ job }: { job: JobResponse }) {
   const graph = useMemo(() => buildJobGraph(job), [job])
   const [selected, setSelected] = useState<GraphNode | null>(null)
+  const [override, setOverride] = useState('')
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const pushToast = useToast()
+
+  const retryNode = useMutation({
+    mutationFn: (node: GraphNode) =>
+      api.retryNode(job.biz_id, node.name!, node.loopIndex!, override.trim() || undefined),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['jobs'] })
+      navigate(`/jobs/${data.biz_id}`)
+    },
+    onError: (err) =>
+      pushToast(err instanceof ApiError ? err.message : '重做失败，请重试', () => selected && retryNode.mutate(selected)),
+  })
 
   const flowNodes = graph.nodes.map((n, i) => ({
     id: n.id,
@@ -104,6 +134,27 @@ export default function WorkflowGraph({ job }: { job: JobResponse }) {
           {selected.error && (
             <p className="mt-3 text-sm text-red-400">{displayNodeError(selected.error)}</p>
           )}
+          {selected.name &&
+            selected.loopIndex !== undefined &&
+            selected.loopIndex >= 0 &&
+            FAILED_PHASES.has(selected.phase) &&
+            RETRYABLE_NODE[job.workflow_name] === selected.name && (
+              <div className="mt-3 space-y-2 border-t border-zinc-800 pt-3">
+                <input
+                  value={override}
+                  onChange={(e) => setOverride(e.target.value)}
+                  placeholder="重做提示词（留空则用原提示词）"
+                  className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600"
+                />
+                <button
+                  onClick={() => retryNode.mutate(selected)}
+                  disabled={retryNode.isPending}
+                  className="w-full rounded-md bg-violet-600 py-1.5 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-50"
+                >
+                  {retryNode.isPending ? '重做中…' : '重做这一格'}
+                </button>
+              </div>
+            )}
           {selected.outputs && (
             <pre className="mt-3 overflow-x-auto rounded-lg bg-zinc-950 p-2 text-xs text-zinc-400">
               {JSON.stringify(selected.outputs, null, 2)}

@@ -67,6 +67,7 @@ func (s *Server) Router() *gin.Engine {
 		authed.GET("/jobs/:bizID/events", s.handleJobEvents)
 		authed.POST("/jobs/:bizID/resume", s.handleResumeJob)
 		authed.POST("/jobs/:bizID/cancel", s.handleCancelJob)
+		authed.POST("/jobs/:bizID/nodes/:nodeName/retry", s.handleRetryNode)
 		authed.POST("/assets/upload-url", s.handleAssetUploadURL)
 		authed.POST("/assets/:bizID/complete", s.handleCompleteAsset)
 		authed.GET("/assets", s.handleListAssets)

@@ -256,6 +256,16 @@ export const api = {
   resumeJob: (bizId: string, body: ResumeVideoSequenceRequest) =>
     request<void>('POST', `/jobs/${bizId}/resume`, body),
   cancelJob: (bizId: string) => request<void>('POST', `/jobs/${bizId}/cancel`),
+  // Node-retry: only supported for image.comic4's gen-one-panel and
+  // image.sequence's gen-one-shot (jobsvc.RetryNode's own doc covers why —
+  // both are single leaf tasks with string-only inputs, unlike video's
+  // array-typed reference fields or video.sequence's per-shot nested DAGs).
+  // Returns a brand new satellite job, not a patch to bizId's own run.
+  retryNode: (bizId: string, nodeName: string, loopIndex: number, promptOverride?: string) =>
+    request<CreateJobResponse>('POST', `/jobs/${bizId}/nodes/${nodeName}/retry`, {
+      loop_index: loopIndex,
+      prompt_override: promptOverride || undefined,
+    }),
 
   // F7.1: newest-first, optional status filter, cursor pagination (see
   // jobsvc.Service.List's doc for the cursor shape — a decreasing numeric id).

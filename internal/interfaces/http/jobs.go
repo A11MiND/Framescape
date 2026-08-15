@@ -126,6 +126,35 @@ func (s *Server) handleCancelJob(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
+type retryNodeRequest struct {
+	LoopIndex      int    `json:"loop_index"`
+	PromptOverride string `json:"prompt_override,omitempty"`
+}
+
+// handleRetryNode is POST /api/v1/jobs/{bizID}/nodes/{nodeName}/retry — the
+// exact path PRD §13.2/DEV_PLAN's node-retry gap always referenced:
+// resubmits one Failed/Error/Timeout leaf task as a standalone satellite
+// Job — jobsvc.Service.RetryNode's own doc covers why this doesn't try to
+// patch the original run in place. Returns the new satellite job the same
+// shape handleCreateJob does, so the frontend can navigate straight to it.
+func (s *Server) handleRetryNode(c *gin.Context) {
+	var req retryNodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil && err.Error() != "EOF" {
+		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
+		return
+	}
+	job, err := s.jobs.RetryNode(c.Request.Context(), userID(c), c.Param("bizID"), c.Param("nodeName"), req.LoopIndex, req.PromptOverride)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, errBody("retry_failed", err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"biz_id":          job.BizID,
+		"status":          job.Status,
+		"workflow_run_id": job.WorkflowRunID,
+	})
+}
+
 func (s *Server) handleGetJob(c *gin.Context) {
 	job, run, err := s.jobs.Get(c.Request.Context(), userID(c), c.Param("bizID"))
 	if err != nil {

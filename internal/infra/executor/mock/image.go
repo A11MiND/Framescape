@@ -22,9 +22,20 @@ import (
 
 // ImageConfig is mock.image's declared input contract. Field names are
 // kebab-case (DNS-1123) per docs/aether-validation-report.md §three.1.
+//
+// N is string, not int — every real workflow file declares "n" as a
+// type:"string" parameter (matching minimax.image's own ImageConfig.N,
+// see its doc for why: workflow.parameters always arrive as JSON strings).
+// Loop-body invocations (image.comic4/image.sequence's normal path) never
+// actually exercise this: their per-iteration item never supplies "n", and
+// this plugin's own n<=0 fallback below masks a mismatched type silently.
+// A plain DAG-task invocation that relies on the template's own declared
+// literal `value` as its default (Aether's bindOne priority 3 — see
+// third_party/aether/internal/binding/bind.go) does exercise it, e.g.
+// jobsvc.RetryNode's satellite workflows — that's how this got caught.
 type ImageConfig struct {
 	Prompt string `json:"prompt" desc:"structured prompt text"`
-	N      int    `json:"n" desc:"how many images to generate, 1..9"`
+	N      string `json:"n" desc:"how many images to generate, 1..9, as a string"`
 	UserID string `json:"user-id" desc:"owning user's numeric id, as a string"`
 }
 
@@ -52,8 +63,9 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 	if err := executor.BindInputs(req.Inputs, &cfg); err != nil {
 		return nil, fmt.Errorf("bind mock.image inputs: %w", err)
 	}
-	if cfg.N <= 0 {
-		cfg.N = 1
+	n, _ := strconv.Atoi(cfg.N)
+	if n <= 0 {
+		n = 1
 	}
 
 	select {
@@ -67,8 +79,8 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 		return nil, fmt.Errorf("mock.image: invalid user-id %q: %w", cfg.UserID, err)
 	}
 
-	assetIDs := make([]string, 0, cfg.N)
-	for i := 0; i < cfg.N; i++ {
+	assetIDs := make([]string, 0, n)
+	for i := 0; i < n; i++ {
 		hue := rand.Intn(360)
 		bizID, err := p.sink.Materialize(ctx, assetstore.NewAsset{
 			UserID:        userID,
@@ -99,8 +111,8 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 	}{
 		AssetIDs:     assetIDs,
 		SuccessCount: len(assetIDs),
-		FailedCount:  cfg.N - len(assetIDs),
-		RequestedN:   cfg.N,
+		FailedCount:  n - len(assetIDs),
+		RequestedN:   n,
 	})
 }
 
