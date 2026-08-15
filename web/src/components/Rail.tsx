@@ -8,6 +8,7 @@ const LINKS = [
   { to: '/', label: '生成', icon: '✦', end: true },
   { to: '/jobs', label: '作业', icon: '◷' },
   { to: '/assets', label: '资产', icon: '▤' },
+  { to: '/projects', label: '项目', icon: '▧' },
   { to: '/characters', label: '角色', icon: '☺' },
   { to: '/presets', label: '预设', icon: '◈' },
 ]

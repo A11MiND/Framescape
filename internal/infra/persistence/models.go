@@ -188,3 +188,20 @@ type ProviderFile struct {
 }
 
 func (ProviderFile) TableName() string { return "provider_files" }
+
+// Project mirrors the `projects` table (migrations/00007_projects.sql).
+// assets.project_id references this by numeric id; jobs/characters keep
+// their own project_id columns unassigned for now — see the migration's
+// own doc for the scoping rationale.
+type Project struct {
+	ID          uint64 `gorm:"primaryKey"`
+	BizID       string `gorm:"column:biz_id"`
+	UserID      uint64 `gorm:"column:user_id"`
+	Name        string
+	Description string
+	DeletedAt   *time.Time `gorm:"column:deleted_at"`
+	CreatedAt   time.Time  `gorm:"column:created_at"`
+	UpdatedAt   time.Time  `gorm:"column:updated_at"`
+}
+
+func (Project) TableName() string { return "projects" }

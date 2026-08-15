@@ -1,11 +1,14 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import AppShell from '../components/AppShell'
 import { useToast } from '../components/Toast'
 
-// F2.4: browse every asset the user has ever generated, filterable by type.
+// F2.4: browse every asset the user has ever generated, filterable by type
+// and by project (Projects.tsx's own "查看资产" link lands here with
+// ?project_id= preset — the URL param is the shared state, not local
+// component state, so that link and this page's own dropdown stay in sync).
 // F2.5's "以此再生成"/generation-params view lives one level deeper, at
 // /assets/:id (AssetDetail.tsx) — this grid's job is just getting the user
 // there, plus the bulk-operation surface (select/delete/batch-download)
@@ -15,14 +18,23 @@ type Filter = 'all' | 'image' | 'video'
 export default function Assets() {
   const [filter, setFilter] = useState<Filter>('all')
   const [selected, setSelected] = useState<string[]>([])
+  const [searchParams, setSearchParams] = useSearchParams()
+  const projectId = searchParams.get('project_id') ?? ''
   const queryClient = useQueryClient()
   const pushToast = useToast()
   const navigate = useNavigate()
 
+  const projects = useQuery({ queryKey: ['projects'], queryFn: api.listProjects })
   const assets = useQuery({
-    queryKey: ['assets', filter === 'all' ? undefined : filter, 'library'],
-    queryFn: () => api.listAssets(filter === 'all' ? { limit: 120 } : { type: filter, limit: 120 }),
+    queryKey: ['assets', filter === 'all' ? undefined : filter, projectId || undefined, 'library'],
+    queryFn: () =>
+      api.listAssets({
+        ...(filter === 'all' ? {} : { type: filter }),
+        ...(projectId ? { projectId } : {}),
+        limit: 120,
+      }),
   })
+  const setProjectFilter = (id: string) => setSearchParams(id ? { project_id: id } : {}, { replace: true })
 
   const deleteAsset = useMutation({
     mutationFn: (bizId: string) => api.deleteAsset(bizId),
@@ -52,6 +64,13 @@ export default function Assets() {
   const toggleSelected = (bizId: string) =>
     setSelected((cur) => (cur.includes(bizId) ? cur.filter((id) => id !== bizId) : [...cur, bizId]))
 
+  const setAssetProject = useMutation({
+    mutationFn: ({ bizId, projectId }: { bizId: string; projectId?: string }) =>
+      api.setAssetProject(bizId, projectId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['assets'] }),
+    onError: () => pushToast('归类失败，请重试'),
+  })
+
   return (
     <AppShell>
       <div className="mx-auto max-w-5xl px-6 py-8">
@@ -76,6 +95,18 @@ export default function Assets() {
                 </button>
               </>
             )}
+            <select
+              value={projectId}
+              onChange={(e) => setProjectFilter(e.target.value)}
+              className="rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-300 outline-none focus:border-violet-500"
+            >
+              <option value="">全部项目</option>
+              {projects.data?.projects.map((p) => (
+                <option key={p.biz_id} value={p.biz_id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
             <div className="flex gap-1">
               {(['all', 'image', 'video'] as Filter[]).map((f) => (
                 <button
@@ -152,6 +183,22 @@ export default function Assets() {
                   </span>
                 )}
               </div>
+              <select
+                value={a.project_id}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                  setAssetProject.mutate({ bizId: a.biz_id, projectId: e.target.value || undefined })
+                }}
+                title="归入项目"
+                className="absolute bottom-1.5 right-1.5 z-10 max-w-[92px] truncate rounded bg-black/60 px-1 py-0.5 text-[10px] text-zinc-300 opacity-0 outline-none transition group-hover:opacity-100"
+              >
+                <option value="">未分组</option>
+                {projects.data?.projects.map((p) => (
+                  <option key={p.biz_id} value={p.biz_id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
             </div>
           ))}
         </div>

@@ -72,6 +72,7 @@ func (s *Server) Router() *gin.Engine {
 		authed.POST("/assets/:bizID/complete", s.handleCompleteAsset)
 		authed.GET("/assets", s.handleListAssets)
 		authed.GET("/assets/:bizID", s.handleGetAsset)
+		authed.PATCH("/assets/:bizID", s.handleUpdateAsset)
 		authed.DELETE("/assets/:bizID", s.handleDeleteAsset)
 		authed.POST("/assets/batch-download", s.handleBatchDownloadAssets)
 		authed.POST("/characters", s.handleCreateCharacter)
@@ -81,6 +82,10 @@ func (s *Server) Router() *gin.Engine {
 		authed.GET("/presets", s.handleListPresets)
 		authed.GET("/credits/balance", s.handleCreditsBalance)
 		authed.GET("/credits/ledger", s.handleCreditsLedger)
+		authed.POST("/projects", s.handleCreateProject)
+		authed.GET("/projects", s.handleListProjects)
+		authed.PATCH("/projects/:bizID", s.handleUpdateProject)
+		authed.DELETE("/projects/:bizID", s.handleDeleteProject)
 	}
 	return r
 }

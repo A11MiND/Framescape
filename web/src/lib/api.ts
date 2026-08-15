@@ -129,11 +129,21 @@ export interface AssetResponse {
   height: number
   resolution_tag: string
   created_at: string
+  // "" when unassigned — never null/undefined, matches assetToJSON's own
+  // always-present-string convention (Go's projectBizID resolves to "").
+  project_id: string
   // Only present on the single-asset GET (assetDetailJSON), never on
   // listAssets' lean per-row projection — see that handler's own doc.
   source?: string
   meta?: Record<string, unknown>
   job_biz_id?: string
+}
+
+export interface Project {
+  biz_id: string
+  name: string
+  description: string
+  created_at: string
 }
 
 // CharacterSlot/Spec mirror internal/application/jobsvc.CharacterSlot/Spec's
@@ -287,14 +297,27 @@ export const api = {
     request<{ credits_total: number }>('POST', '/jobs/estimate', { workflow_name: workflowName, spec }),
 
   getAsset: (bizId: string) => request<AssetResponse>('GET', `/assets/${bizId}`),
-  listAssets: (opts: { type?: 'image' | 'video'; limit?: number } = {}) => {
+  listAssets: (opts: { type?: 'image' | 'video'; projectId?: string; limit?: number } = {}) => {
     const params = new URLSearchParams()
     if (opts.type) params.set('type', opts.type)
+    if (opts.projectId) params.set('project_id', opts.projectId)
     if (opts.limit) params.set('limit', String(opts.limit))
     const qs = params.toString()
     return request<{ assets: AssetResponse[] }>('GET', qs ? `/assets?${qs}` : '/assets')
   },
   deleteAsset: (bizId: string) => request<void>('DELETE', `/assets/${bizId}`),
+  // projectId omitted (undefined) clears the assignment (clear_project:true) —
+  // there's no "leave unchanged" case here since this call always means
+  // "the user picked something in the project selector".
+  setAssetProject: (bizId: string, projectId?: string) =>
+    request<void>('PATCH', `/assets/${bizId}`, projectId ? { project_id: projectId } : { clear_project: true }),
+
+  listProjects: () => request<{ projects: Project[] }>('GET', '/projects'),
+  createProject: (name: string, description: string) =>
+    request<Project>('POST', '/projects', { name, description }),
+  updateProject: (bizId: string, body: Partial<Pick<Project, 'name' | 'description'>>) =>
+    request<Project>('PATCH', `/projects/${bizId}`, body),
+  deleteProject: (bizId: string) => request<void>('DELETE', `/projects/${bizId}`),
 
   // F2.1's presigned direct-upload pair. getUploadURL never touches object
   // storage itself (that's cmd/api's job); uploadToPresignedURL does, via a

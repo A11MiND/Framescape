@@ -106,6 +106,13 @@ func (s *Server) handleUpdateCharacter(c *gin.Context) {
 		return
 	}
 
+	// Existence is checked by the reload below, not by RowsAffected here:
+	// MySQL's default (non-clientFoundRows) driver reports RowsAffected as
+	// rows actually *changed*, not rows *matched* — a PATCH that resends
+	// the same values a character already has (a no-op resave, or a retried
+	// idempotent request) legitimately affects 0 rows despite matching one,
+	// which would otherwise produce a false "not found". The reload's own
+	// gorm.ErrRecordNotFound is the real existence signal.
 	res := s.db.WithContext(c.Request.Context()).Model(&persistence.Character{}).
 		Where("biz_id = ? AND user_id = ? AND deleted_at IS NULL", c.Param("bizID"), userID(c)).
 		Updates(updates)
@@ -113,15 +120,11 @@ func (s *Server) handleUpdateCharacter(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, errBody("internal", "update character"))
 		return
 	}
-	if res.RowsAffected == 0 {
-		c.JSON(http.StatusNotFound, errBody("not_found", "character not found"))
-		return
-	}
 
 	var row persistence.Character
 	if err := s.db.WithContext(c.Request.Context()).
-		Where("biz_id = ? AND user_id = ?", c.Param("bizID"), userID(c)).First(&row).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, errBody("internal", "reload character"))
+		Where("biz_id = ? AND user_id = ? AND deleted_at IS NULL", c.Param("bizID"), userID(c)).First(&row).Error; err != nil {
+		c.JSON(http.StatusNotFound, errBody("not_found", "character not found"))
 		return
 	}
 	c.JSON(http.StatusOK, characterToJSON(row))

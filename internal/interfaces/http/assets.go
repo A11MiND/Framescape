@@ -32,9 +32,12 @@ func (s *Server) handleGetAsset(c *gin.Context) {
 
 // handleListAssets is F2.4's list surface, minus the moderation/soft-delete
 // filters that don't matter yet at POC scale: paged newest-first, optional
-// ?type=image|video. Backs both the character-creation ref-image picker
-// (F3.1 requires ref_asset_ids to already exist — there's no raw upload
-// endpoint by design, see PRD §11) and the asset library page.
+// ?type=image|video and ?project_id=<biz_id> (§the composer-blueprint
+// artifact's "資產庫的專案篩選" gap — assets.idx_project has existed since
+// 00001, unused until projects.go's CRUD gave it something to reference).
+// Backs both the character-creation ref-image picker (F3.1 requires
+// ref_asset_ids to already exist — there's no raw upload endpoint by
+// design, see PRD §11) and the asset library page.
 func (s *Server) handleListAssets(c *gin.Context) {
 	limit, err := strconv.Atoi(c.DefaultQuery("limit", "60"))
 	if err != nil || limit <= 0 || limit > 200 {
@@ -45,16 +48,114 @@ func (s *Server) handleListAssets(c *gin.Context) {
 	if t := c.Query("type"); t != "" {
 		q = q.Where("type = ?", t)
 	}
+	if pid := c.Query("project_id"); pid != "" {
+		projectID, ok := s.resolveProjectID(c.Request.Context(), userID(c), pid)
+		if !ok {
+			c.JSON(http.StatusNotFound, errBody("not_found", "project not found"))
+			return
+		}
+		q = q.Where("project_id = ?", projectID)
+	}
 	var rows []persistence.Asset
 	if err := q.Order("id DESC").Limit(limit).Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, errBody("internal", "list assets"))
 		return
 	}
+
+	// Batch-resolve project_id -> biz_id once for the whole page rather
+	// than a query per row — same reasoning as handleGetJob's projByKey.
+	projectIDs := make([]uint64, 0)
+	seen := map[uint64]bool{}
+	for _, a := range rows {
+		if a.ProjectID != nil && !seen[*a.ProjectID] {
+			seen[*a.ProjectID] = true
+			projectIDs = append(projectIDs, *a.ProjectID)
+		}
+	}
+	projectBizByID := make(map[uint64]string, len(projectIDs))
+	if len(projectIDs) > 0 {
+		var projects []persistence.Project
+		_ = s.db.WithContext(c.Request.Context()).Where("id IN ?", projectIDs).Find(&projects).Error
+		for _, p := range projects {
+			projectBizByID[p.ID] = p.BizID
+		}
+	}
+
 	out := make([]gin.H, 0, len(rows))
 	for _, a := range rows {
-		out = append(out, assetToJSON(a))
+		projectBizID := ""
+		if a.ProjectID != nil {
+			projectBizID = projectBizByID[*a.ProjectID]
+		}
+		out = append(out, assetToJSON(a, projectBizID))
 	}
 	c.JSON(http.StatusOK, gin.H{"assets": out})
+}
+
+// resolveProjectID turns a project biz_id into its numeric id, scoped to
+// userID so one user can't file an asset under another's project — same
+// ownership-check shape as resolveCharacters in jobsvc.
+func (s *Server) resolveProjectID(ctx context.Context, userID uint64, bizID string) (uint64, bool) {
+	var row persistence.Project
+	err := s.db.WithContext(ctx).
+		Where("biz_id = ? AND user_id = ? AND deleted_at IS NULL", bizID, userID).
+		First(&row).Error
+	return row.ID, err == nil
+}
+
+// updateAssetRequest is currently just project assignment (§the "資產庫的
+// 專案篩選" gap's other half — filtering needs somewhere to assign an asset
+// TO first). ProjectID is a pointer-to-pointer-shaped choice via a
+// separate Clear flag: "" JSON body has no way to distinguish "omitted"
+// from "explicitly unassign", so Clear does that explicitly.
+type updateAssetRequest struct {
+	ProjectID *string `json:"project_id"`
+	Clear     bool    `json:"clear_project"`
+}
+
+func (s *Server) handleUpdateAsset(c *gin.Context) {
+	var req updateAssetRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
+		return
+	}
+	var projectID *uint64
+	if req.Clear {
+		projectID = nil
+	} else if req.ProjectID != nil {
+		resolved, ok := s.resolveProjectID(c.Request.Context(), userID(c), *req.ProjectID)
+		if !ok {
+			c.JSON(http.StatusNotFound, errBody("not_found", "project not found"))
+			return
+		}
+		projectID = &resolved
+	} else {
+		c.JSON(http.StatusBadRequest, errBody("bad_request", "no fields to update"))
+		return
+	}
+
+	// Existence is checked by the reload below, not by RowsAffected here —
+	// see handleUpdateCharacter's identical comment for why (MySQL's
+	// default driver reports RowsAffected as rows changed, not matched, so
+	// re-assigning an asset to the project it's already in would otherwise
+	// false-404 — the exact case that surfaced this while UI-testing this
+	// handler live).
+	res := s.db.WithContext(c.Request.Context()).Model(&persistence.Asset{}).
+		Where("biz_id = ? AND user_id = ? AND deleted_at IS NULL", c.Param("bizID"), userID(c)).
+		Update("project_id", projectID)
+	if res.Error != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "update asset"))
+		return
+	}
+
+	var exists int64
+	if err := s.db.WithContext(c.Request.Context()).Model(&persistence.Asset{}).
+		Where("biz_id = ? AND user_id = ? AND deleted_at IS NULL", c.Param("bizID"), userID(c)).
+		Count(&exists).Error; err != nil || exists == 0 {
+		c.JSON(http.StatusNotFound, errBody("not_found", "asset not found"))
+		return
+	}
+	c.Status(http.StatusOK)
 }
 
 // handleDeleteAsset is F2.7's soft-delete: sets deleted_at rather than
@@ -232,7 +333,7 @@ func (s *Server) handleCompleteAsset(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, errBody("internal", "insert asset"))
 		return
 	}
-	c.JSON(http.StatusOK, assetToJSON(row))
+	c.JSON(http.StatusOK, assetToJSON(row, "")) // newly uploaded assets are never pre-assigned to a project
 }
 
 func assetTypeFromMime(mime string) string {
@@ -285,7 +386,10 @@ func sanitizeExt(filename string) string {
 // the row, no extra query. resolution_tag has existed on the assets table
 // since the very first migration but had no HTTP field until now — see
 // §19.4.7's "视频资产卡片右上角常驻显示 768P/2K 标签".
-func assetToJSON(a persistence.Asset) gin.H {
+// projectBizID is the caller-resolved biz_id for a.ProjectID (empty if
+// unassigned) — resolved by the caller, not here, so handleListAssets can
+// batch it once per page instead of once per row.
+func assetToJSON(a persistence.Asset, projectBizID string) gin.H {
 	return gin.H{
 		"biz_id":         a.BizID,
 		"type":           a.Type,
@@ -295,6 +399,7 @@ func assetToJSON(a persistence.Asset) gin.H {
 		"height":         a.Height,
 		"resolution_tag": a.ResolutionTag,
 		"created_at":     a.CreatedAt,
+		"project_id":     projectBizID,
 	}
 }
 
@@ -308,7 +413,12 @@ func assetToJSON(a persistence.Asset) gin.H {
 // job_id) — worth it here since this is a single-row fetch, not something
 // handleListAssets should ever pay N times over.
 func (s *Server) assetDetailJSON(ctx context.Context, a persistence.Asset) gin.H {
-	out := assetToJSON(a)
+	projectBizID := ""
+	if a.ProjectID != nil {
+		_ = s.db.WithContext(ctx).Model(&persistence.Project{}).
+			Select("biz_id").Where("id = ?", *a.ProjectID).Scan(&projectBizID).Error
+	}
+	out := assetToJSON(a, projectBizID)
 	out["source"] = a.Source
 
 	var meta map[string]any
