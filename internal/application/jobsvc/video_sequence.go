@@ -122,6 +122,9 @@ func (s *Service) createVideoSequence(ctx context.Context, userID uint64, spec S
 	if duration <= 0 {
 		duration = 5
 	}
+	if duration > 15 {
+		duration = 15 // mirrors video.go's normalizeDuration clamp, so the hold matches what actually runs
+	}
 	ratio := spec.Ratio
 	if ratio == "" {
 		ratio = "16:9" // only consumed by t2va-fallback shots (buildVideoSequenceWorkflow)

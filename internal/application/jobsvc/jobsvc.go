@@ -176,6 +176,9 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 		if n <= 0 {
 			n = 4
 		}
+		if n > 9 {
+			n = 9 // mirrors image.go's own MiniMax-hard-limit clamp, so the hold matches what actually runs
+		}
 		args["n"] = strconv.Itoa(n)
 		estimatedCredits = creditsvc.EstimateImageCredits(n)
 	case "image.comic4":
@@ -236,9 +239,15 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 		// pattern as image.go's 1500 check.
 		compiled := prompt.Compile(prompt.Input{Text: spec.Text, Characters: characters, Presets: presets, Seed: spec.Seed, MaxChars: 7000})
 		args["prompt"] = compiled.Prompt
+		if spec.Resolution != "" && spec.Resolution != "768P" && spec.Resolution != "2K" {
+			return nil, fmt.Errorf("resolution must be 768P or 2K, got %q", spec.Resolution)
+		}
 		duration := spec.DurationSeconds
 		if duration <= 0 {
 			duration = 5
+		}
+		if duration > 15 {
+			duration = 15 // mirrors video.go's normalizeDuration clamp, so the hold matches what actually runs
 		}
 		args["duration"] = strconv.Itoa(duration)
 		resolution := spec.Resolution
@@ -338,6 +347,9 @@ func EstimateCredits(workflowName string, spec Spec) (int, error) {
 		if n <= 0 {
 			n = 4
 		}
+		if n > 9 {
+			n = 9
+		}
 		return creditsvc.EstimateImageCredits(n), nil
 	case "image.comic4":
 		switch {
@@ -354,9 +366,15 @@ func EstimateCredits(workflowName string, spec Spec) (int, error) {
 		}
 		return creditsvc.EstimatePerNodeImageCredits(len(spec.Shots)), nil
 	case "video.single":
+		if spec.Resolution != "" && spec.Resolution != "768P" && spec.Resolution != "2K" {
+			return 0, fmt.Errorf("resolution must be 768P or 2K, got %q", spec.Resolution)
+		}
 		duration := spec.DurationSeconds
 		if duration <= 0 {
 			duration = 5
+		}
+		if duration > 15 {
+			duration = 15
 		}
 		resolution := spec.Resolution
 		if resolution == "" {
@@ -374,6 +392,9 @@ func EstimateCredits(workflowName string, spec Spec) (int, error) {
 		duration := spec.DurationSeconds
 		if duration <= 0 {
 			duration = 5
+		}
+		if duration > 15 {
+			duration = 15
 		}
 		// §12.3's "预览门只预扣 768P 部分积分" — matches createVideoSequence's
 		// own estimatedCredits line exactly (the 2K upgrade delta is only ever

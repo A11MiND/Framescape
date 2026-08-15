@@ -103,9 +103,7 @@ func (p *VideoPlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 	}
 
 	duration := normalizeDuration(cfg.Duration)
-	if cfg.Resolution == "" {
-		cfg.Resolution = "768P"
-	}
+	cfg.Resolution = normalizeResolution(cfg.Resolution)
 
 	content, mode, ratio, errOut := p.base.buildContent(ctx, videoRefs{
 		Prompt:                 cfg.Prompt,
@@ -445,6 +443,20 @@ func normalizeDuration(s string) int {
 		duration = 15 // MiniMax hard limit, §3.2
 	}
 	return duration
+}
+
+// normalizeResolution defends costPerSecondYuan's lookup: jobsvc.Create
+// already rejects any resolution outside {"", "768P", "2K"} at the API
+// boundary (its own backstop, mirroring this file's mode mutual-exclusion
+// check), but this is the last line of defense inside the executor itself —
+// without it, an unrecognized string would miss the costPerSecondYuan map
+// and silently price the video at ¥0/s (a real free-generation bug, not
+// hypothetical: CostYuan below is computed straight from this lookup).
+func normalizeResolution(r string) string {
+	if r == "2K" {
+		return "2K"
+	}
+	return "768P"
 }
 
 func isTerminalVideoStatus(status string) bool {
