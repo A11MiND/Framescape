@@ -1,6 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, keepPreviousData } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { api, ApiError, type Spec, type WorkflowName, type JobResponse } from '../lib/api'
 import {
   estimateImageCredits,
@@ -12,7 +15,7 @@ import { videoSingleSchema, RATIO_VALUES } from '../lib/videoSpec'
 import { resultAssetIds, WORKFLOW_LABEL, type Tab } from '../lib/jobResult'
 import { displayNodeError, firstSpecificError } from '../lib/errors'
 import { suggestActions, type SuggestedAction } from '../lib/suggestions'
-import { shotMode, SHOT_MODE_LABEL, SHOT_MODE_CLASS } from '../lib/shotPlan'
+import { shotMode, SHOT_MODE_LABEL, SHOT_MODE_CLASS, type ShotMode } from '../lib/shotPlan'
 import { useToast } from '../components/Toast'
 import AppShell from '../components/AppShell'
 import { AssetPicker } from '../components/AssetPicker'
@@ -51,6 +54,17 @@ const TAB_META: Record<Tab, { icon: string; blurb: string }> = {
   'video.sequence': { icon: '🎞', blurb: '768P 预览后再定稿 2K' },
 }
 const TABS = Object.keys(TAB_META) as Tab[]
+
+// video.sequence's shots need a stable identity per row for dnd-kit's
+// drag-reorder (array index isn't stable across a reorder) — this is the
+// one shape difference from every other tab's plain string[] shot list.
+interface ShotItem {
+  id: string
+  text: string
+}
+function toShotItems(texts: string[]): ShotItem[] {
+  return (texts.length ? texts : ['']).map((text) => ({ id: crypto.randomUUID(), text }))
+}
 
 // F6.5's "双保险": videoSpec.ts's zod schema is still the structural second
 // guard checked right before submit — this is the first guard, and it's now
@@ -105,7 +119,7 @@ export default function Studio() {
   const [story, setStory] = useState('')
 
   // video.sequence-only state (F6.7/F6.8).
-  const [vsShots, setVsShots] = useState([''])
+  const [vsShots, setVsShots] = useState<ShotItem[]>(() => toShotItems(['']))
   const [vsDuration, setVsDuration] = useState(5)
   const [vsRatio, setVsRatio] = useState<(typeof RATIO_VALUES)[number]>('16:9')
   const [vsRecalibrateEvery, setVsRecalibrateEvery] = useState(3)
@@ -158,7 +172,7 @@ export default function Studio() {
       }
       setPromptEnhance(!!spec.prompt_enhance)
     } else if (workflowName === 'video.sequence') {
-      setVsShots(spec.shots?.length ? spec.shots : [''])
+      setVsShots(toShotItems(spec.shots ?? []))
       if (spec.duration_seconds) setVsDuration(spec.duration_seconds)
       if (spec.ratio) setVsRatio(spec.ratio as (typeof RATIO_VALUES)[number])
       if (spec.recalibrate_every) setVsRecalibrateEvery(spec.recalibrate_every)
@@ -174,6 +188,10 @@ export default function Studio() {
   const characters = useCharacters(!isGuest)
   const presets = usePresets(!isGuest)
   const pushToast = useToast()
+  // §19.4.4's shot drag-reorder. A small activation distance keeps a plain
+  // click on the drag handle from being misread as a drag when the pointer
+  // moves a pixel or two before release.
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   // F1.2's anonymous trial — relocated here from the login page (§19.0's
   // "先给价值再要注册" only works if the value is visible before the wall,
@@ -256,7 +274,7 @@ export default function Studio() {
       if (refVideoIds.length) spec.reference_video_asset_ids = refVideoIds
       if (promptEnhance) spec.prompt_enhance = true
     } else {
-      spec.shots = vsShots.filter((s) => s.trim())
+      spec.shots = vsShots.map((s) => s.text).filter((t) => t.trim())
       spec.duration_seconds = vsDuration
       spec.ratio = vsRatio
       spec.recalibrate_every = vsRecalibrateEvery
@@ -283,7 +301,7 @@ export default function Studio() {
             : tab === 'video.single'
               ? estimateVideoCredits(duration, resolution) +
                 (promptEnhance ? estimatePromptEnhanceCredits() : 0)
-              : estimateVideoCredits(vsDuration, '768P') * (vsShots.filter((s) => s.trim()).length || 1)
+              : estimateVideoCredits(vsDuration, '768P') * (vsShots.filter((s) => s.text.trim()).length || 1)
 
   const debouncedSpecKey = useDebouncedValue(JSON.stringify({ tab, spec: buildSpec() }), 300)
   const estimateQuery = useQuery({
@@ -308,7 +326,7 @@ export default function Studio() {
       if (tab === 'video.single' && !videoValidation.success) {
         throw new Error(videoValidation.error.issues[0]?.message ?? '参数不合法')
       }
-      if (tab === 'video.sequence' && vsShots.filter((s) => s.trim()).length === 0) {
+      if (tab === 'video.sequence' && vsShots.filter((s) => s.text.trim()).length === 0) {
         throw new Error('至少需要一段镜头描述')
       }
       const idemKey = crypto.randomUUID()
@@ -362,7 +380,7 @@ export default function Studio() {
       case 'to-sequence':
         setBizId(null)
         setTab('video.sequence')
-        setVsShots(action.shots.length ? action.shots : [''])
+        setVsShots(toShotItems(action.shots))
         break
       case 'upgrade-2k':
         setBizId(null)
@@ -565,35 +583,35 @@ export default function Studio() {
 
           {tab === 'video.sequence' && (
             <div className="space-y-2">
-              {vsShots.map((s, i) => {
-                const mode = shotMode(i + 1, vsRecalibrateEvery, !!slotA)
-                return (
-                  <div key={i} className="flex items-center gap-2">
-                    <span
-                      title={SHOT_MODE_LABEL[mode]}
-                      className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-mono ${SHOT_MODE_CLASS[mode]}`}
-                    >
-                      {mode}
-                    </span>
-                    <input
-                      value={s}
-                      onChange={(e) => setVsShots((cur) => cur.map((c, ci) => (ci === i ? e.target.value : c)))}
-                      className="flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-violet-500"
-                      placeholder={`第 ${i + 1} 段镜头描述`}
+              <DndContext
+                sensors={dndSensors}
+                collisionDetection={closestCenter}
+                onDragEnd={(e: DragEndEvent) => {
+                  const { active, over } = e
+                  if (!over || active.id === over.id) return
+                  setVsShots((cur) => {
+                    const oldIndex = cur.findIndex((s) => s.id === active.id)
+                    const newIndex = cur.findIndex((s) => s.id === over.id)
+                    return oldIndex === -1 || newIndex === -1 ? cur : arrayMove(cur, oldIndex, newIndex)
+                  })
+                }}
+              >
+                <SortableContext items={vsShots.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+                  {vsShots.map((shot, i) => (
+                    <SortableShotRow
+                      key={shot.id}
+                      shot={shot}
+                      index={i}
+                      mode={shotMode(i + 1, vsRecalibrateEvery, !!slotA)}
+                      onChange={(text) => setVsShots((cur) => cur.map((s) => (s.id === shot.id ? { ...s, text } : s)))}
+                      onRemove={() => setVsShots((cur) => cur.filter((s) => s.id !== shot.id))}
+                      removable={vsShots.length > 1}
                     />
-                    {vsShots.length > 1 && (
-                      <button
-                        onClick={() => setVsShots((cur) => cur.filter((_, ci) => ci !== i))}
-                        className="shrink-0 rounded-lg border border-zinc-800 px-2 text-zinc-500 hover:text-red-400"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                )
-              })}
+                  ))}
+                </SortableContext>
+              </DndContext>
               <button
-                onClick={() => setVsShots((cur) => [...cur, ''])}
+                onClick={() => setVsShots((cur) => [...cur, { id: crypto.randomUUID(), text: '' }])}
                 className="text-sm text-violet-400 hover:text-violet-300"
               >
                 + 添加一段
@@ -877,6 +895,63 @@ function Capsule({ children, disabled, title }: { children: ReactNode; disabled?
       className={`flex items-center gap-1.5 rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-300 ${disabled ? 'opacity-40' : ''}`}
     >
       {children}
+    </div>
+  )
+}
+
+// §19.4.4's drag-reorder shot card. useSortable needs its own component
+// (a hook, so it can't be called inline inside vsShots.map's callback) —
+// mode is passed in already-computed since it depends on this row's
+// position, which SortableShotRow itself has no reason to know about.
+function SortableShotRow({
+  shot,
+  index,
+  mode,
+  onChange,
+  onRemove,
+  removable,
+}: {
+  shot: ShotItem
+  index: number
+  mode: ShotMode
+  onChange: (text: string) => void
+  onRemove: () => void
+  removable: boolean
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: shot.id })
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center gap-2">
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        title="拖拽排序"
+        className="shrink-0 cursor-grab touch-none px-1 text-zinc-600 transition hover:text-zinc-400 active:cursor-grabbing"
+      >
+        ⋮⋮
+      </button>
+      <span
+        title={SHOT_MODE_LABEL[mode]}
+        className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-mono ${SHOT_MODE_CLASS[mode]}`}
+      >
+        {mode}
+      </span>
+      <input
+        value={shot.text}
+        onChange={(e) => onChange(e.target.value)}
+        className="flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-violet-500"
+        placeholder={`第 ${index + 1} 段镜头描述`}
+      />
+      {removable && (
+        <button
+          onClick={onRemove}
+          className="shrink-0 rounded-lg border border-zinc-800 px-2 text-zinc-500 hover:text-red-400"
+        >
+          ×
+        </button>
+      )}
     </div>
   )
 }
