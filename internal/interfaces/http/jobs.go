@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -53,6 +54,71 @@ func (s *Server) handleResumeJob(c *gin.Context) {
 	}
 	if err := s.jobs.Resume(c.Request.Context(), userID(c), c.Param("bizID"), req); err != nil {
 		c.JSON(http.StatusUnprocessableEntity, errBody("resume_failed", err.Error()))
+		return
+	}
+	c.Status(http.StatusOK)
+}
+
+// handleListJobs is GET /api/v1/jobs?status=&cursor=&limit= (F7.1): the job
+// list PRD §13.2 always specced but the frontend never had a backend for —
+// jobsvc.Service.List's own doc covers the cursor shape.
+func (s *Server) handleListJobs(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	cursor, _ := strconv.ParseUint(c.DefaultQuery("cursor", "0"), 10, 64)
+
+	rows, next, err := s.jobs.List(c.Request.Context(), userID(c), c.Query("status"), cursor, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "list jobs"))
+		return
+	}
+	out := make([]gin.H, 0, len(rows))
+	for _, j := range rows {
+		out = append(out, gin.H{
+			"biz_id":           j.BizID,
+			"workflow_name":    j.WorkflowName,
+			"title":            j.Title,
+			"status":           j.Status,
+			"node_total":       j.NodeTotal,
+			"node_done":        j.NodeDone,
+			"node_failed":      j.NodeFailed,
+			"credit_estimated": j.CreditEstimated,
+			"credit_held":      j.CreditHeld,
+			"credit_settled":   j.CreditSettled,
+			"created_at":       j.CreatedAt,
+			"finished_at":      j.FinishedAt,
+		})
+	}
+	resp := gin.H{"jobs": out}
+	if next > 0 {
+		resp["next_cursor"] = strconv.FormatUint(next, 10)
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleEstimateJob is POST /api/v1/jobs/estimate (§13.3): quotes the same
+// credit figure Create would hold, without holding it or submitting
+// anything — jobsvc.EstimateCredits's own doc covers why this is a separate
+// function from Create rather than a shared call site.
+func (s *Server) handleEstimateJob(c *gin.Context) {
+	var req createJobRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
+		return
+	}
+	credits, err := jobsvc.EstimateCredits(req.WorkflowName, req.Spec)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, errBody("estimate_failed", err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"credits_total": credits})
+}
+
+// handleCancelJob is POST /api/v1/jobs/{bizID}/cancel (F7.4).
+// jobsvc.Service.Cancel's own doc covers why this doesn't touch credits
+// directly.
+func (s *Server) handleCancelJob(c *gin.Context) {
+	if err := s.jobs.Cancel(c.Request.Context(), userID(c), c.Param("bizID")); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, errBody("cancel_failed", err.Error()))
 		return
 	}
 	c.Status(http.StatusOK)

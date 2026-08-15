@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -60,6 +61,56 @@ func (s *Store) Put(ctx context.Context, key string, r io.Reader, size int64, co
 		return "", fmt.Errorf("put object %q: %w", key, err)
 	}
 	return fmt.Sprintf("%s/%s", s.cfg.PublicBaseURL, key), nil
+}
+
+// PublicURLFor returns what an object's public_url will be once uploaded
+// under key, without touching the network — the presigned-upload flow
+// (F2.1) needs this predictable up front, since the browser uploads
+// directly and only reports success back. Kept in exact lockstep with
+// Put()'s own formula so the two can never drift.
+func (s *Store) PublicURLFor(key string) string {
+	return fmt.Sprintf("%s/%s", s.cfg.PublicBaseURL, key)
+}
+
+// ObjectInfo is Stat's result: what the object store itself recorded for an
+// uploaded object, trusted over anything a client claims about the same
+// file (see handleCompleteAsset's doc for why mime/size specifically are
+// taken from here, not the request body).
+type ObjectInfo struct {
+	Mime      string
+	SizeBytes int64
+}
+
+// Stat confirms an object exists under key — the presigned-upload
+// completion step (F2.1) uses this to verify the browser's PUT actually
+// landed before a citable assets row is created for it, rather than trusting
+// a "complete" call that never checks anything really happened.
+func (s *Store) Stat(ctx context.Context, key string) (ObjectInfo, error) {
+	info, err := s.client.StatObject(ctx, s.cfg.Bucket, key, minio.StatObjectOptions{})
+	if err != nil {
+		return ObjectInfo{}, fmt.Errorf("stat object %q: %w", key, err)
+	}
+	return ObjectInfo{Mime: info.ContentType, SizeBytes: info.Size}, nil
+}
+
+// PresignPut returns a time-limited URL the browser can PUT bytes to
+// directly (F2.1: "预签名直传，不经过 Go 服务"). Built from the same client
+// (and therefore the same cfg.Endpoint) Put() uses — the SigV4 signature
+// binds to the Host it was signed for, so unlike PublicBaseURL used to
+// build public_url strings, this can't be rewritten to a different host
+// after the fact without invalidating the signature. cfg.Endpoint must
+// therefore be reachable by the browser for direct upload to work (true of
+// this project's default local-dev config, where it's the same
+// 127.0.0.1:9000 the browser already talks to for public_url downloads;
+// not true of docker-compose's api service, which points Endpoint at the
+// container-internal "minio:9000" — direct upload needs that overridden to
+// a browser-reachable host before it's used outside local dev).
+func (s *Store) PresignPut(ctx context.Context, key string, expiry time.Duration) (string, error) {
+	u, err := s.client.PresignedPutObject(ctx, s.cfg.Bucket, key, expiry)
+	if err != nil {
+		return "", fmt.Errorf("presign put %q: %w", key, err)
+	}
+	return u.String(), nil
 }
 
 func publicReadPolicy(bucket string) string {

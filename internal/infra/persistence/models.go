@@ -30,6 +30,25 @@ type CreditAccount struct {
 
 func (CreditAccount) TableName() string { return "credit_accounts" }
 
+// CreditLedger mirrors the `credit_ledger` table (migrations/00004_credits.sql).
+// Read-only from the HTTP layer — every write goes through creditsvc's own
+// transactional Hold/Commit/Refund/Recharge, never a raw GORM Create here.
+type CreditLedger struct {
+	ID           uint64 `gorm:"primaryKey"`
+	UserID       uint64 `gorm:"column:user_id"`
+	Direction    string
+	Amount       int
+	BalanceAfter int    `gorm:"column:balance_after"`
+	HeldAfter    int    `gorm:"column:held_after"`
+	RefType      string `gorm:"column:ref_type"`
+	RefID        string `gorm:"column:ref_id"`
+	IdemKey      string `gorm:"column:idem_key"`
+	Remark       string
+	CreatedAt    time.Time `gorm:"column:created_at"`
+}
+
+func (CreditLedger) TableName() string { return "credit_ledger" }
+
 // Asset mirrors the `assets` table.
 type Asset struct {
 	ID            uint64 `gorm:"primaryKey"`

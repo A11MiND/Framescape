@@ -18,6 +18,7 @@ import (
 	"aigc-platform/internal/infra/cache"
 	"aigc-platform/internal/infra/executor/minimax"
 	"aigc-platform/internal/infra/persistence"
+	"aigc-platform/internal/infra/storage"
 	"aigc-platform/internal/infra/workflow/rpc"
 	httpapi "aigc-platform/internal/interfaces/http"
 	"aigc-platform/internal/pkg/config"
@@ -49,7 +50,25 @@ func main() {
 	// "never talks to MiniMax directly" rule.
 	minimaxClient := minimax.NewClient(config.MiniMaxBaseURL(), config.MiniMaxAPIKey())
 
-	srv := httpapi.NewServer(db, jobs, redisClient, config.JWTSecret(), minimaxClient)
+	// F2.1's presigned direct-upload endpoints only — see server.go's
+	// `objects` field doc. A MinIO outage here must not take the whole API
+	// down (every other endpoint doesn't need it), so this degrades to a
+	// nil store (upload-url/complete then return 503) instead of
+	// log.Fatal'ing the process the way the DB connection above does.
+	objectStore, err := storage.New(ctx, storage.Config{
+		Endpoint:        config.MinIOEndpoint(),
+		AccessKeyID:     config.MinIOAccessKey(),
+		SecretAccessKey: config.MinIOSecretKey(),
+		UseSSL:          config.MinIOUseSSL(),
+		Bucket:          config.MinIOBucket(),
+		PublicBaseURL:   config.MinIOPublicBaseURL(),
+	})
+	if err != nil {
+		log.Error("connect object storage — direct asset upload will be unavailable", zap.Error(err))
+		objectStore = nil
+	}
+
+	srv := httpapi.NewServer(db, jobs, redisClient, config.JWTSecret(), minimaxClient, objectStore)
 
 	httpSrv := &http.Server{Addr: config.APIAddr(), Handler: srv.Router()}
 	go func() {

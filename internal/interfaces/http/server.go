@@ -16,6 +16,7 @@ import (
 
 	"aigc-platform/internal/application/jobsvc"
 	"aigc-platform/internal/infra/executor/minimax"
+	"aigc-platform/internal/infra/storage"
 	"aigc-platform/internal/pkg/metrics"
 )
 
@@ -28,10 +29,15 @@ type Server struct {
 	// this is a deliberate, narrow exception to "cmd/api never talks to
 	// MiniMax directly".
 	minimax *minimax.Client
+	// objects backs F2.1's presigned direct-upload endpoints only (assets.go's
+	// handleAssetUploadURL/handleCompleteAsset) — nil is fine everywhere else,
+	// every other asset write still goes through an executor's
+	// assetstore.Sink, never through cmd/api.
+	objects *storage.Store
 }
 
-func NewServer(db *gorm.DB, jobs *jobsvc.Service, redisClient *redis.Client, jwtSecret string, minimaxClient *minimax.Client) *Server {
-	return &Server{db: db, jobs: jobs, redis: redisClient, jwtSecret: jwtSecret, minimax: minimaxClient}
+func NewServer(db *gorm.DB, jobs *jobsvc.Service, redisClient *redis.Client, jwtSecret string, minimaxClient *minimax.Client, objectStore *storage.Store) *Server {
+	return &Server{db: db, jobs: jobs, redis: redisClient, jwtSecret: jwtSecret, minimax: minimaxClient, objects: objectStore}
 }
 
 func (s *Server) Router() *gin.Engine {
@@ -55,16 +61,25 @@ func (s *Server) Router() *gin.Engine {
 		authed.Use(s.requireAuth())
 		authed.GET("/me", s.handleMe)
 		authed.POST("/jobs", s.handleCreateJob)
+		authed.GET("/jobs", s.handleListJobs)
+		authed.POST("/jobs/estimate", s.handleEstimateJob)
 		authed.GET("/jobs/:bizID", s.handleGetJob)
 		authed.GET("/jobs/:bizID/events", s.handleJobEvents)
 		authed.POST("/jobs/:bizID/resume", s.handleResumeJob)
+		authed.POST("/jobs/:bizID/cancel", s.handleCancelJob)
+		authed.POST("/assets/upload-url", s.handleAssetUploadURL)
+		authed.POST("/assets/:bizID/complete", s.handleCompleteAsset)
 		authed.GET("/assets", s.handleListAssets)
 		authed.GET("/assets/:bizID", s.handleGetAsset)
 		authed.DELETE("/assets/:bizID", s.handleDeleteAsset)
 		authed.POST("/assets/batch-download", s.handleBatchDownloadAssets)
 		authed.POST("/characters", s.handleCreateCharacter)
 		authed.GET("/characters", s.handleListCharacters)
+		authed.PATCH("/characters/:bizID", s.handleUpdateCharacter)
+		authed.DELETE("/characters/:bizID", s.handleDeleteCharacter)
 		authed.GET("/presets", s.handleListPresets)
+		authed.GET("/credits/balance", s.handleCreditsBalance)
+		authed.GET("/credits/ledger", s.handleCreditsLedger)
 	}
 	return r
 }

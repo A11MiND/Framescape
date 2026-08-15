@@ -319,6 +319,129 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 	return job, nil
 }
 
+// EstimateCredits is §13.3's POST /jobs/estimate: the same Hold-time
+// arithmetic Create (and createVideoSequence) run, factored out as a pure
+// function with no DB access so it can be quoted to the user before they
+// submit anything. Deliberately duplicates Create's per-branch numbers
+// rather than having Create call this — Create's switch interleaves credit
+// math with prompt compilation and defFile selection in ways that don't
+// separate cleanly, and this is the one money-adjacent path in the whole
+// codebase where "don't touch the tested original" outweighs "don't repeat
+// yourself." Keep in sync with Create's switch and createVideoSequence's
+// own estimatedCredits line by hand.
+func EstimateCredits(workflowName string, spec Spec) (int, error) {
+	switch workflowName {
+	case "image.single":
+		return creditsvc.EstimateImageCredits(1), nil
+	case "image.batch":
+		n := spec.N
+		if n <= 0 {
+			n = 4
+		}
+		return creditsvc.EstimateImageCredits(n), nil
+	case "image.comic4":
+		switch {
+		case len(spec.Panels) == 4:
+			return creditsvc.EstimatePerNodeImageCredits(4), nil
+		case spec.Story != "":
+			return creditsvc.EstimatePerNodeImageCredits(4) + creditsvc.EstimateStorySplitCredits(), nil
+		default:
+			return 0, fmt.Errorf("image.comic4 requires exactly 4 panels, or a story to auto-split")
+		}
+	case "image.sequence":
+		if len(spec.Shots) == 0 {
+			return 0, fmt.Errorf("image.sequence requires at least 1 shot")
+		}
+		return creditsvc.EstimatePerNodeImageCredits(len(spec.Shots)), nil
+	case "video.single":
+		duration := spec.DurationSeconds
+		if duration <= 0 {
+			duration = 5
+		}
+		resolution := spec.Resolution
+		if resolution == "" {
+			resolution = "768P"
+		}
+		credits := creditsvc.EstimateVideoCredits(duration, resolution)
+		if spec.PromptEnhance {
+			credits += creditsvc.EstimatePromptEnhanceCredits()
+		}
+		return credits, nil
+	case "video.sequence":
+		if len(spec.Shots) == 0 {
+			return 0, fmt.Errorf("video.sequence requires at least 1 shot")
+		}
+		duration := spec.DurationSeconds
+		if duration <= 0 {
+			duration = 5
+		}
+		// §12.3's "预览门只预扣 768P 部分积分" — matches createVideoSequence's
+		// own estimatedCredits line exactly (the 2K upgrade delta is only ever
+		// held later, at Resume).
+		return creditsvc.EstimateVideoCredits(duration, "768P") * len(spec.Shots), nil
+	default:
+		return 0, fmt.Errorf("unknown workflow_name %q", workflowName)
+	}
+}
+
+// List is F7.1's job list: newest-first, optionally filtered by status,
+// paged by a strictly-decreasing numeric id cursor (jobs.id is an
+// AUTO_INCREMENT primary key, so "id < cursor" is a stable, index-backed
+// page boundary — idx_user_created/idx_status already cover the
+// user_id/status lookups this filters on). Returns the page plus the
+// cursor a caller should pass to fetch the next one; an empty nextCursor
+// means this was the last page.
+func (s *Service) List(ctx context.Context, userID uint64, status string, cursor uint64, limit int) ([]persistence.Job, uint64, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	q := s.db.WithContext(ctx).Where("user_id = ?", userID)
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	if cursor > 0 {
+		q = q.Where("id < ?", cursor)
+	}
+	var rows []persistence.Job
+	if err := q.Order("id DESC").Limit(limit).Find(&rows).Error; err != nil {
+		return nil, 0, fmt.Errorf("list jobs: %w", err)
+	}
+	var next uint64
+	if len(rows) == limit {
+		next = rows[len(rows)-1].ID
+	}
+	return rows, next, nil
+}
+
+// Cancel is F7.4: stops a still-running job and lets the existing
+// terminal-phase machinery handle the rest. It deliberately does NOT touch
+// credits itself — internal/application/projection.onWorkflowRun already
+// calls maybeRefundCredits on every terminal phase transition it observes,
+// "Cancelled" included (idempotent via the "job:{bizID}:refund" key), and
+// duplicating that here under a different idemKey would double-refund
+// exactly the class of bug DEV_PLAN.md's credit reconciliation fix was
+// about. eng.Cancel's own contract (internal/domain/workflow.Engine) is to
+// signal already-dispatched tasks to stop and cancel their in-flight
+// provider calls where possible; jobs.status itself updates lazily the same
+// way it always has, the next time anything calls Get (see Get's own
+// terminal-phase sync, a few lines up).
+func (s *Service) Cancel(ctx context.Context, userID uint64, bizID string) error {
+	job, _, err := s.Get(ctx, bizID)
+	if err != nil {
+		return err
+	}
+	if job.UserID != userID {
+		return fmt.Errorf("job %q not found", bizID)
+	}
+	if job.Status == "succeeded" || job.Status == "failed" || job.Status == "cancelled" {
+		return nil // already stopped — same "no-op past terminal" shape as Resume
+	}
+	if err := s.eng.Cancel(ctx, workflow.RunID(job.WorkflowRunID)); err != nil {
+		return fmt.Errorf("cancel workflow run: %w", err)
+	}
+	return nil
+}
+
 // resolveCharacters loads the characters bound to spec.Characters, in slot
 // order, scoped to userID so one user can't reference another's characters.
 func (s *Service) resolveCharacters(ctx context.Context, userID uint64, slots []CharacterSlot) ([]prompt.Character, error) {

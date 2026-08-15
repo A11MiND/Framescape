@@ -1,0 +1,64 @@
+// F1.3's balance/ledger read surface (§13.2 GET /credits/balance,
+// GET /credits/ledger). Pure reads straight off s.db, same as assets.go/
+// characters.go's list handlers — every credit_ledger row is written by
+// creditsvc's own transactional Hold/Commit/Refund/Recharge (see
+// internal/application/creditsvc's doc on why balance+held==SUM(ledger.amount)
+// is an invariant), this file never writes to either table.
+package httpapi
+
+import (
+	"net/http"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+
+	"aigc-platform/internal/infra/persistence"
+)
+
+func (s *Server) handleCreditsBalance(c *gin.Context) {
+	var acct persistence.CreditAccount
+	if err := s.db.WithContext(c.Request.Context()).First(&acct, "user_id = ?", userID(c)).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"balance": 0, "held": 0})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"balance": acct.Balance, "held": acct.Held})
+}
+
+// handleCreditsLedger pages newest-first by a strictly-decreasing numeric id
+// cursor, same shape as handleListJobs.
+func (s *Server) handleCreditsLedger(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	cursor, _ := strconv.ParseUint(c.DefaultQuery("cursor", "0"), 10, 64)
+
+	q := s.db.WithContext(c.Request.Context()).Where("user_id = ?", userID(c))
+	if cursor > 0 {
+		q = q.Where("id < ?", cursor)
+	}
+	var rows []persistence.CreditLedger
+	if err := q.Order("id DESC").Limit(limit).Find(&rows).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "list ledger"))
+		return
+	}
+
+	out := make([]gin.H, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, gin.H{
+			"direction":     r.Direction,
+			"amount":        r.Amount,
+			"balance_after": r.BalanceAfter,
+			"held_after":    r.HeldAfter,
+			"ref_type":      r.RefType,
+			"ref_id":        r.RefID,
+			"remark":        r.Remark,
+			"created_at":    r.CreatedAt,
+		})
+	}
+	resp := gin.H{"entries": out}
+	if len(rows) == limit {
+		resp["next_cursor"] = strconv.FormatUint(rows[len(rows)-1].ID, 10)
+	}
+	c.JSON(http.StatusOK, resp)
+}
