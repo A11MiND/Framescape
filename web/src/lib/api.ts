@@ -98,6 +98,10 @@ export interface JobNode {
   phase: string
   outputs: Record<string, unknown> | null
   error: string
+  // -1 outside a Loop iteration — see jobGraph.ts's loopIterationNodes for
+  // why this exists: it's what lets image.comic4/image.sequence show each
+  // panel/shot's own status instead of one aggregated "k/n done" box.
+  loop_index: number
 }
 
 export interface JobResponse {

@@ -20,11 +20,16 @@ export interface JobGraph {
 // workaround), so a simple left-to-right layout covers every real topology
 // without needing a real graph-layout algorithm.
 //
-// job.nodes flattens Loop iterations without unique per-iteration names
-// (every image.comic4 panel shows up as a same-named "gen-one-panel" node,
-// confirmed against a real run) — there's no way to address them
-// individually from this API shape, so a Loop container is rendered as one
-// node annotated with a "k/n done" count instead of expanding iterations.
+// loopSummary is the fallback for the brief window before a Loop's
+// iterations exist yet as rows at all (submitted but not dispatched) —
+// once they do, loopIterationNodes below renders each one individually
+// instead. Earlier versions of this file believed Loop iterations could
+// never be addressed individually at all ("every image.comic4 panel shows
+// up as a same-named node, no way to tell them apart") — that turned out
+// to be an API gap, not an engine one: the engine already resolves each
+// iteration's own loop_index correctly (workflow.NodeState.LoopIndex, real
+// scope-tree data), GET /jobs/{bizID} just wasn't returning it. Fixed
+// server-side; this file's per-iteration rendering is what that unlocks.
 function loopSummary(nodes: JobNode[], bodyName: string): { done: number; total: number; phase: string } {
   const body = nodes.filter((n) => n.name === bodyName)
   const done = body.filter((n) => n.phase === 'Succeeded').length
@@ -49,6 +54,15 @@ function toGraphNode(n: JobNode | undefined, id: string, label: string, sublabel
   }
 }
 
+// One GraphNode per real loop_index — §19.4.3's "4 个格子并行生成，每格独立
+// 显示自己的状态" applied directly, instead of one aggregate "k/n done" box.
+function loopIterationNodes(nodes: JobNode[], bodyName: string, labelFor: (i: number) => string): GraphNode[] {
+  return nodes
+    .filter((n) => n.name === bodyName && n.loop_index >= 0)
+    .sort((a, b) => a.loop_index - b.loop_index)
+    .map((n) => toGraphNode(n, `${bodyName}[${n.loop_index}]`, labelFor(n.loop_index)))
+}
+
 export function buildJobGraph(job: JobResponse): JobGraph {
   const nodes = job.nodes.filter((n) => n.name !== 'main')
 
@@ -59,20 +73,43 @@ export function buildJobGraph(job: JobResponse): JobGraph {
       return { nodes: [gen], edges: [] }
     }
     case 'image.comic4': {
-      const summary = loopSummary(nodes, 'gen-one-panel')
-      const panels = toGraphNode(
-        { name: 'panels', phase: summary.phase, outputs: null, error: '' },
-        'panels',
-        '四格生成',
-        `${summary.done}/${summary.total || 4} 完成`,
-      )
       const compose = toGraphNode(find(nodes, 'compose'), 'compose', '拼接')
-      return { nodes: [panels, compose], edges: [{ source: 'panels', target: 'compose' }] }
+      const panelNodes = loopIterationNodes(nodes, 'gen-one-panel', (i) => `格 ${i + 1}`)
+      if (panelNodes.length === 0) {
+        // Submitted but the Loop hasn't created its iteration rows yet —
+        // show the aggregate placeholder rather than an empty graph.
+        const summary = loopSummary(nodes, 'gen-one-panel')
+        const panels = toGraphNode(
+          { name: 'panels', phase: summary.phase, outputs: null, error: '', loop_index: -1 },
+          'panels',
+          '四格生成',
+          `${summary.done}/${summary.total || 4} 完成`,
+        )
+        return { nodes: [panels, compose], edges: [{ source: 'panels', target: 'compose' }] }
+      }
+      return {
+        nodes: [...panelNodes, compose],
+        edges: panelNodes.map((p) => ({ source: p.id, target: 'compose' })),
+      }
     }
     case 'image.sequence': {
-      const summary = loopSummary(nodes, 'gen-one-shot')
-      const shots = toGraphNode(find(nodes, 'shots'), 'shots', '连续生成', `${summary.done}/${summary.total} 完成`)
-      return { nodes: [shots], edges: [] }
+      const shotNodes = loopIterationNodes(nodes, 'gen-one-shot', (i) => `第 ${i + 1} 张`)
+      if (shotNodes.length === 0) {
+        const summary = loopSummary(nodes, 'gen-one-shot')
+        const shots = toGraphNode(
+          { name: 'shots', phase: summary.phase, outputs: null, error: '', loop_index: -1 },
+          'shots',
+          '连续生成',
+          `${summary.done}/${summary.total} 完成`,
+        )
+        return { nodes: [shots], edges: [] }
+      }
+      // No edges between them — unlike video.sequence's shots (which
+      // genuinely chain via i2va/tail-frame continuity), image.sequence's
+      // shots are independent Loop iterations with no dependency on each
+      // other, so parallel sibling boxes is the accurate topology, not a
+      // simplification.
+      return { nodes: shotNodes, edges: [] }
     }
     case 'video.single': {
       const gen = toGraphNode(find(nodes, 'gen'), 'gen', '视频生成')

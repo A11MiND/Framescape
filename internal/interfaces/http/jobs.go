@@ -139,6 +139,16 @@ func (s *Server) handleGetJob(c *gin.Context) {
 				"phase":   n.Phase,
 				"outputs": n.Outputs,
 				"error":   n.ErrorMsg,
+				// loop_index (-1 outside a loop) was already resolved
+				// correctly by the engine (workflow.NodeState.LoopIndex,
+				// itself real scope-tree data — see LoopIndexFromScope's
+				// doc, not a stub) but never made it into this response.
+				// Without it every image.comic4/image.sequence iteration
+				// shares one name ("gen-one-panel" ×4), so the frontend's
+				// DAG view could only ever show one aggregated "3/4 done"
+				// blob instead of each panel's own status — see
+				// jobGraph.ts's buildJobGraph for the consumer this unlocks.
+				"loop_index": n.LoopIndex,
 			})
 		}
 	}
