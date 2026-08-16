@@ -249,6 +249,15 @@ export default function Studio() {
     },
     onError: () => pushToast(t('studio.presetSaveFailed'), () => savePreset.mutate()),
   })
+
+  const deletePreset = useMutation({
+    mutationFn: (bizId: string) => api.deletePreset(bizId),
+    onSuccess: (_data, bizId) => {
+      setPresetIds((cur) => cur.filter((id) => id !== bizId))
+      presets.refetch()
+    },
+    onError: () => pushToast(t('studio.presetDeleteFailed')),
+  })
   // §19.4.4's shot drag-reorder. A small activation distance keeps a plain
   // click on the drag handle from being misread as a drag when the pointer
   // moves a pixel or two before release.
@@ -960,6 +969,7 @@ export default function Studio() {
                 presets={styleFilter ? presets.data.presets.filter((p) => p.style_type === styleFilter) : presets.data.presets}
                 selected={presetIds}
                 onToggle={(id) => setPresetIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))}
+                onDelete={(id) => deletePreset.mutate(id)}
               />
             </div>
           )}

@@ -391,7 +391,8 @@
     "savePreset": {
       "namePlaceholder": "预设名称",
       "button": "另存为我的预设"
-    }
+    },
+    "presetDeleteFailed": "预设删除失败"
   },
   "api": {
     "uploadFailed": "上传失败（{{status}}）"

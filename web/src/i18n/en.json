@@ -391,7 +391,8 @@
     "savePreset": {
       "namePlaceholder": "Preset name",
       "button": "Save as my preset"
-    }
+    },
+    "presetDeleteFailed": "Failed to delete preset"
   },
   "api": {
     "uploadFailed": "Upload failed ({{status}})"
