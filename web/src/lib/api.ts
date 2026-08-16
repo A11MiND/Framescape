@@ -131,6 +131,10 @@ export interface JobResponse {
   nodes: JobNode[]
   spec: Spec
   retry_of_job_id: string
+  project_id: string
+  credit_estimated: number
+  credit_held: number
+  credit_settled: number
 }
 
 export interface AssetResponse {
@@ -150,6 +154,10 @@ export interface AssetResponse {
   source?: string
   meta?: Record<string, unknown>
   job_biz_id?: string
+  // provider_cache: whether this asset currently has a cached MiniMax
+  // file_id (provider_files) — only present on the single-asset GET, same
+  // as source/meta/job_biz_id above.
+  provider_cache?: { cached: boolean; expire_at?: string | null; expired?: boolean }
 }
 
 export interface Project {
@@ -204,6 +212,7 @@ export interface Character {
   description: string
   ref_asset_ids: string[]
   seed: number
+  project_id?: string
 }
 
 export interface Preset {
@@ -214,6 +223,20 @@ export interface Preset {
   prompt_fragment: string
   priority: number
   style_type: string
+  // mine: whether owner_user_id is the caller's (F4.5's "另存為我的預設") —
+  // false for every seeded system preset. Only presets with mine:true are
+  // ever eligible for DELETE (handleDeletePreset's own doc).
+  mine: boolean
+}
+
+// kind is a machine-readable constant (jobsvc.ItemKind* on the Go side),
+// not a human-readable label — see EstimateItem's own Go doc for why: the
+// backend never renders locale-specific text, the frontend maps kind to a
+// translated string via studio.breakdown.item.<kind>.
+export interface EstimateItem {
+  kind: string
+  count: number
+  credits: number
 }
 
 export interface ResumeVideoSequenceRequest {
@@ -278,11 +301,11 @@ export const api = {
       { auth: false },
     ),
 
-  createJob: (workflowName: WorkflowName, spec: Spec, idempotencyKey?: string) =>
+  createJob: (workflowName: WorkflowName, spec: Spec, idempotencyKey?: string, projectId?: string) =>
     request<CreateJobResponse>(
       'POST',
       '/jobs',
-      { workflow_name: workflowName, spec },
+      { workflow_name: workflowName, spec, project_id: projectId || undefined },
       { idempotencyKey },
     ),
   getJob: (bizId: string) => request<JobResponse>('GET', `/jobs/${bizId}`),
@@ -303,11 +326,12 @@ export const api = {
 
   // F7.1: newest-first, optional status filter, cursor pagination (see
   // jobsvc.Service.List's doc for the cursor shape — a decreasing numeric id).
-  listJobs: (opts: { status?: string; cursor?: string; limit?: number } = {}) => {
+  listJobs: (opts: { status?: string; cursor?: string; limit?: number; projectId?: string } = {}) => {
     const params = new URLSearchParams()
     if (opts.status) params.set('status', opts.status)
     if (opts.cursor) params.set('cursor', opts.cursor)
     if (opts.limit) params.set('limit', String(opts.limit))
+    if (opts.projectId) params.set('project_id', opts.projectId)
     const qs = params.toString()
     return request<{ jobs: JobSummary[]; next_cursor?: string }>('GET', qs ? `/jobs?${qs}` : '/jobs')
   },
@@ -318,14 +342,18 @@ export const api = {
   // logic has exactly one home (jobsvc.EstimateCredits) instead of two that
   // can drift.
   estimateJob: (workflowName: WorkflowName, spec: Spec) =>
-    request<{ credits_total: number }>('POST', '/jobs/estimate', { workflow_name: workflowName, spec }),
+    request<{ credits_total: number; items: EstimateItem[] }>('POST', '/jobs/estimate', {
+      workflow_name: workflowName,
+      spec,
+    }),
 
   getAsset: (bizId: string) => request<AssetResponse>('GET', `/assets/${bizId}`),
-  listAssets: (opts: { type?: 'image' | 'video'; projectId?: string; limit?: number } = {}) => {
+  listAssets: (opts: { type?: 'image' | 'video'; projectId?: string; limit?: number; q?: string } = {}) => {
     const params = new URLSearchParams()
     if (opts.type) params.set('type', opts.type)
     if (opts.projectId) params.set('project_id', opts.projectId)
     if (opts.limit) params.set('limit', String(opts.limit))
+    if (opts.q) params.set('q', opts.q)
     const qs = params.toString()
     return request<{ assets: AssetResponse[] }>('GET', qs ? `/assets?${qs}` : '/assets')
   },
@@ -378,28 +406,47 @@ export const api = {
     return resp.blob()
   },
 
-  listCharacters: () => request<{ characters: Character[] }>('GET', '/characters'),
-  createCharacter: (name: string, description: string, refAssetIds: string[], seed: number) =>
+  listCharacters: (opts: { projectId?: string } = {}) => {
+    const qs = opts.projectId ? `?project_id=${opts.projectId}` : ''
+    return request<{ characters: Character[] }>('GET', `/characters${qs}`)
+  },
+  createCharacter: (name: string, description: string, refAssetIds: string[], seed: number, projectId?: string) =>
     request<Character>('POST', '/characters', {
       name,
       description,
       ref_asset_ids: refAssetIds,
       seed,
+      project_id: projectId || undefined,
     }),
   // updateCharacter is a partial PATCH — only the fields present in body are
   // touched server-side (handleUpdateCharacter's own doc), so callers only
   // need to pass what actually changed.
   updateCharacter: (
     bizId: string,
-    body: { name?: string; description?: string; ref_asset_ids?: string[]; seed?: number },
+    body: {
+      name?: string
+      description?: string
+      ref_asset_ids?: string[]
+      seed?: number
+      project_id?: string
+      clear_project?: boolean
+    },
   ) => request<Character>('PATCH', `/characters/${bizId}`, body),
   deleteCharacter: (bizId: string) => request<void>('DELETE', `/characters/${bizId}`),
 
   listPresets: (category?: string) =>
     request<{ presets: Preset[] }>('GET', category ? `/presets?category=${category}` : '/presets'),
+  // F4.5's "另存為我的預設" — always lands with owner_user_id = caller, see
+  // handleCreatePreset's own doc.
+  createPreset: (body: { name: string; prompt_fragment: string; category?: string; style_type?: string }) =>
+    request<Preset>('POST', '/presets', body),
+  deletePreset: (bizId: string) => request<void>('DELETE', `/presets/${bizId}`),
 
   // F1.3: balance/held plus the ledger rows that produced them.
   creditsBalance: () => request<{ balance: number; held: number }>('GET', '/credits/balance'),
+  // POC-only demo top-up — see handleCreditsTopup's own doc for why this
+  // isn't a real payment flow.
+  creditsTopup: () => request<{ balance: number; held: number; credited: number }>('POST', '/credits/topup'),
   creditsLedger: (opts: { cursor?: string; limit?: number } = {}) => {
     const params = new URLSearchParams()
     if (opts.cursor) params.set('cursor', opts.cursor)

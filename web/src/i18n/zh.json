@@ -49,7 +49,11 @@
       "hold": "持有",
       "commit": "结算",
       "refund": "退回"
-    }
+    },
+    "topupFailed": "充值失败",
+    "topupTooltip": "POC 示范充值，非真实支付，直接为帐号增加积分",
+    "topupPending": "充值中…",
+    "topupButton": "+200 示范充值"
   },
   "projects": {
     "title": "项目",
@@ -69,7 +73,9 @@
     "descriptionPlaceholder": "外观描述（可选）",
     "pickRefs": "选择 1-3 张参考图（已选 {{count}}）",
     "pickerEmptyHint": "还没有生成过图片，点右侧「上传」添加，或先去工坊生成一些",
-    "create": "创建角色"
+    "create": "创建角色",
+    "createWithThis": "用这个角色创作",
+    "noProject": "不归类项目"
   },
   "presets": {
     "title": "预设库",
@@ -106,14 +112,18 @@
       "succeeded": "已完成",
       "failed": "失败",
       "cancelled": "已取消"
-    }
+    },
+    "allProjects": "全部项目"
   },
   "jobDetail": {
     "connectionUnstable": "网络连接不稳定，无法获取作业状态",
     "cancelFailed": "取消失败，请重试",
     "cancelling": "取消中…",
     "cancelJob": "取消作业",
-    "reconnecting": "实时连接不稳定，重新连接中…"
+    "reconnecting": "实时连接不稳定，重新连接中…",
+    "creditSettled": "已结算",
+    "creditHeld": "已持有",
+    "creditEstimated": "预估"
   },
   "phase": {
     "created": "待创建",
@@ -215,7 +225,8 @@
       "all": "全部",
       "image": "图片",
       "video": "视频"
-    }
+    },
+    "searchPlaceholder": "搜索提示词…"
   },
   "assetDetail": {
     "backToLibrary": "← 返回素材库",
@@ -232,7 +243,12 @@
       "mode": "模式",
       "layout": "拼版",
       "providerTaskId": "MiniMax 任务"
-    }
+    },
+    "saveFrameAsCharacter": "抽帧存为角色",
+    "providerCacheTooltip": "是否已缓存到 MiniMax（避免同一素材重复上传）",
+    "cached": "已缓存",
+    "cacheExpired": "缓存已过期",
+    "notCached": "未缓存"
   },
   "assetPicker": {
     "collapse": "收起",
@@ -302,7 +318,9 @@
       "anchorIntervalTooltip": "每 N 段重新锚定一次角色参考图（r2va），其余段落用前一段尾帧续接（i2va）",
       "everyNSegments": "每 {{n}} 段",
       "characterA": "角色 A",
-      "characterB": "角色 B"
+      "characterB": "角色 B",
+      "project": "项目",
+      "projectTooltip": "把这次生成归类到某个项目下，之后可在资产库/作业列表按项目筛选"
     },
     "refMode": {
       "none": "不使用",
@@ -346,9 +364,57 @@
       "textRequired": "请输入视频描述",
       "modeConflict": "首尾帧模式和参考素材模式不能同时使用",
       "ratioRequired": "纯文字生成视频必须选择画面比例"
+    },
+    "mention": {
+      "video": "视频{{n}}",
+      "image": "图片{{n}}",
+      "pickHint": "选择要引用的素材",
+      "empty": "还没有素材"
+    },
+    "presetSaveFailed": "预设保存失败",
+    "breakdown": {
+      "toggle": "点击查看费用明细",
+      "title": "费用明细",
+      "upgradeHint": "若这段升级到 2K 需要 ✦{{price}}",
+      "item": {
+        "image_single": "单图生成",
+        "image_batch": "批量生成",
+        "comic4_panels": "四格漫画",
+        "story_split": "剧情自动拆格",
+        "sequence_shots": "连续图",
+        "video_generation": "视频生成",
+        "prompt_enhance": "提示词增强",
+        "video_sequence_preview": "连续影片预览（768P）"
+      }
+    },
+    "estimatedWait": "预计还需 {{minutes}} 分钟",
+    "savePreset": {
+      "namePlaceholder": "预设名称",
+      "button": "另存为我的预设"
     }
   },
   "api": {
     "uploadFailed": "上传失败（{{status}}）"
+  },
+  "settings": {
+    "title": "设置",
+    "account": "帐号",
+    "appearance": "外观",
+    "themeDark": "深色",
+    "themeLight": "浅色",
+    "language": "语言"
+  },
+  "notifications": {
+    "title": "通知",
+    "awaitingDecision": "等待你决策",
+    "recentlyDone": "最近完成",
+    "none": "暂无"
+  },
+  "homeFeed": {
+    "recent": "最近作品",
+    "inspiration": "灵感范例",
+    "styles": "预设风格",
+    "searchPlaceholder": "搜索素材…",
+    "noRecent": "还没有作品，先生成一个试试"
   }
 }

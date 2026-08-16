@@ -49,7 +49,11 @@
       "hold": "Hold",
       "commit": "Settle",
       "refund": "Refund"
-    }
+    },
+    "topupFailed": "Top-up failed",
+    "topupTooltip": "POC demo top-up — not a real payment, credits your account directly",
+    "topupPending": "Crediting…",
+    "topupButton": "+200 demo top-up"
   },
   "projects": {
     "title": "Projects",
@@ -69,7 +73,9 @@
     "descriptionPlaceholder": "Appearance description (optional)",
     "pickRefs": "Choose 1-3 reference images ({{count}} selected)",
     "pickerEmptyHint": "No images generated yet — click \"Upload\" on the right, or generate some in the workshop first",
-    "create": "Create character"
+    "create": "Create character",
+    "createWithThis": "Create with this character",
+    "noProject": "No project"
   },
   "presets": {
     "title": "Presets",
@@ -106,14 +112,18 @@
       "succeeded": "Succeeded",
       "failed": "Failed",
       "cancelled": "Cancelled"
-    }
+    },
+    "allProjects": "All projects"
   },
   "jobDetail": {
     "connectionUnstable": "Unstable connection — couldn't fetch job status",
     "cancelFailed": "Cancel failed, please retry",
     "cancelling": "Cancelling…",
     "cancelJob": "Cancel job",
-    "reconnecting": "Live connection unstable, reconnecting…"
+    "reconnecting": "Live connection unstable, reconnecting…",
+    "creditSettled": "Settled",
+    "creditHeld": "Held",
+    "creditEstimated": "Estimated"
   },
   "phase": {
     "created": "Created",
@@ -215,7 +225,8 @@
       "all": "All",
       "image": "Images",
       "video": "Videos"
-    }
+    },
+    "searchPlaceholder": "Search prompts…"
   },
   "assetDetail": {
     "backToLibrary": "← Back to library",
@@ -232,7 +243,12 @@
       "mode": "Mode",
       "layout": "Layout",
       "providerTaskId": "MiniMax task"
-    }
+    },
+    "saveFrameAsCharacter": "Extract frame & save as character",
+    "providerCacheTooltip": "Whether this is currently cached with MiniMax (avoids re-uploading the same asset)",
+    "cached": "Cached",
+    "cacheExpired": "Cache expired",
+    "notCached": "Not cached"
   },
   "assetPicker": {
     "collapse": "Collapse",
@@ -302,7 +318,9 @@
       "anchorIntervalTooltip": "Every N segments, re-anchor to the character reference image (r2va); other segments continue from the previous segment's last frame (i2va)",
       "everyNSegments": "Every {{n}} segments",
       "characterA": "Character A",
-      "characterB": "Character B"
+      "characterB": "Character B",
+      "project": "Project",
+      "projectTooltip": "File this generation under a project — filterable later in Assets/Jobs"
     },
     "refMode": {
       "none": "None",
@@ -346,9 +364,57 @@
       "textRequired": "Please enter a video description",
       "modeConflict": "First/last-frame mode and reference-media mode can't be used together",
       "ratioRequired": "A pure text-to-video generation must choose an aspect ratio"
+    },
+    "mention": {
+      "video": "video{{n}}",
+      "image": "image{{n}}",
+      "pickHint": "Pick an asset to reference",
+      "empty": "No assets yet"
+    },
+    "presetSaveFailed": "Failed to save preset",
+    "breakdown": {
+      "toggle": "Click for a cost breakdown",
+      "title": "Cost breakdown",
+      "upgradeHint": "Upgrading this to 2K would cost ✦{{price}}",
+      "item": {
+        "image_single": "Single image",
+        "image_batch": "Batch generation",
+        "comic4_panels": "4-panel comic",
+        "story_split": "Story auto-split",
+        "sequence_shots": "Sequence shots",
+        "video_generation": "Video generation",
+        "prompt_enhance": "Prompt enhancement",
+        "video_sequence_preview": "Sequence preview (768P)"
+      }
+    },
+    "estimatedWait": "About {{minutes}} min remaining",
+    "savePreset": {
+      "namePlaceholder": "Preset name",
+      "button": "Save as my preset"
     }
   },
   "api": {
     "uploadFailed": "Upload failed ({{status}})"
+  },
+  "settings": {
+    "title": "Settings",
+    "account": "Account",
+    "appearance": "Appearance",
+    "themeDark": "Dark",
+    "themeLight": "Light",
+    "language": "Language"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "awaitingDecision": "Awaiting your decision",
+    "recentlyDone": "Recently finished",
+    "none": "Nothing here"
+  },
+  "homeFeed": {
+    "recent": "Recent works",
+    "inspiration": "Inspiration",
+    "styles": "Preset styles",
+    "searchPlaceholder": "Search assets…",
+    "noRecent": "No works yet — generate your first one"
   }
 }

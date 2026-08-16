@@ -24,10 +24,14 @@ import PreviewGate from '../components/PreviewGate'
 import GenerationProgress from '../components/GenerationProgress'
 import PresetCarousel from '../components/PresetCarousel'
 import AnimatedNumber from '../components/AnimatedNumber'
+import { MentionTextarea } from '../components/MentionTextarea'
+import { CharacterSlotPicker } from '../components/CharacterSlotPicker'
+import HomeFeed from '../components/HomeFeed'
 import { useAuthStore } from '../lib/authStore'
 import { getDeviceId } from '../lib/deviceId'
 import { useJobStream } from '../hooks/useJobStream'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { estimateWaitSeconds, formatWaitMinutes } from '../lib/durationEstimate'
 
 // PRD §19.4.1's full creation studio ("工坊"), now mounted at `/` per
 // §19.3 instead of behind a login wall — this is the single biggest
@@ -76,13 +80,16 @@ function toShotItems(texts: string[]): ShotItem[] {
 type RefMode = 'none' | 'firstLast' | 'reference'
 
 function useCharacters(enabled: boolean) {
-  return useQuery({ queryKey: ['characters'], queryFn: api.listCharacters, enabled })
+  return useQuery({ queryKey: ['characters'], queryFn: () => api.listCharacters(), enabled })
 }
 function usePresets(enabled: boolean) {
   return useQuery({ queryKey: ['presets'], queryFn: () => api.listPresets(), enabled })
 }
 function useMe(enabled: boolean) {
   return useQuery({ queryKey: ['me'], queryFn: api.me, enabled })
+}
+function useProjects(enabled: boolean) {
+  return useQuery({ queryKey: ['projects'], queryFn: api.listProjects, enabled })
 }
 
 // Static fallbacks, used only until GET /capabilities resolves (or if it
@@ -119,6 +126,11 @@ export default function Studio() {
   const [slotB, setSlotB] = useState('')
   const [presetIds, setPresetIds] = useState<string[]>([])
   const [bizId, setBizId] = useState<string | null>(null)
+  const [projectId, setProjectId] = useState('')
+  const [styleFilter, setStyleFilter] = useState('')
+  const [savingPreset, setSavingPreset] = useState(false)
+  const [newPresetName, setNewPresetName] = useState('')
+  const [showBreakdown, setShowBreakdown] = useState(false)
 
   // video.single-only state (F6.1-F6.5).
   const [vText, setVText] = useState(t('studio.examples.foxVideo'))
@@ -148,6 +160,17 @@ export default function Studio() {
   // mapping that Spec back onto every piece of local state it came from.
   // Guarded to run once per navigation (not on every render): it's meant
   // to seed the form, not keep clobbering whatever the user types next.
+  // Characters.tsx's "用這個角色創作" (§07's quick-create-shortcut gap, the
+  // reverse direction of it): a much lighter prefill than prefillJob below
+  // — just drop the character into slot A, no workflow/spec to restore.
+  useEffect(() => {
+    const prefillCharacterId = (location.state as { prefillCharacterId?: string } | null)?.prefillCharacterId
+    if (!prefillCharacterId) return
+    setSlotA(prefillCharacterId)
+    navigate('.', { replace: true, state: {} })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state])
+
   useEffect(() => {
     const prefill = (location.state as { prefillJob?: { workflowName: Tab; spec: Spec } } | null)?.prefillJob
     if (!prefill) return
@@ -206,7 +229,26 @@ export default function Studio() {
   const me = useMe(!isGuest)
   const characters = useCharacters(!isGuest)
   const presets = usePresets(!isGuest)
+  const projects = useProjects(!isGuest)
   const pushToast = useToast()
+
+  // F4.5's "另存為我的預設": saves whatever the active tab's own free-text
+  // field currently holds as prompt_fragment — there's no single "the
+  // prompt" field across all six tabs, so this picks the one the current
+  // tab actually uses (falls back to '' for tabs with no single text field,
+  // which the disabled save button below already prevents from being hit).
+  const savePreset = useMutation({
+    mutationFn: () => {
+      const fragment = tab === 'video.single' ? vText : tab === 'image.comic4' ? (comicMode === 'auto' ? story : panels[0]) : text
+      return api.createPreset({ name: newPresetName, prompt_fragment: fragment, style_type: styleFilter || undefined })
+    },
+    onSuccess: () => {
+      presets.refetch()
+      setSavingPreset(false)
+      setNewPresetName('')
+    },
+    onError: () => pushToast(t('studio.presetSaveFailed'), () => savePreset.mutate()),
+  })
   // §19.4.4's shot drag-reorder. A small activation distance keeps a plain
   // click on the drag handle from being misread as a drag when the pointer
   // moves a pixel or two before release.
@@ -333,6 +375,16 @@ export default function Studio() {
     placeholderData: keepPreviousData,
   })
   const estimate = estimateQuery.data?.credits_total ?? localEstimateGuess
+  const estimateItems = estimateQuery.data?.items ?? []
+  // §04's "提交鍵旁的劃線原價" — the one natural, non-fabricated
+  // original/discounted pair in this Spec is video.single's 768P vs. 2K
+  // cost: at 768P, showing what the same clip would cost at 2K is a real
+  // number (creditsvc.EstimateVideoCredits with the same duration, just a
+  // different resolution rate), not an invented "was" price. Every other
+  // tab has no equivalent natural comparison, so it's left alone rather
+  // than manufacturing one.
+  const upgradeReferencePrice =
+    tab === 'video.single' && resolution === '768P' ? estimateVideoCredits(duration, '2K') : null
 
   const balance = me.data?.balance ?? 0
   const insufficientBalance = !isGuest && me.isSuccess && balance < estimate
@@ -353,7 +405,7 @@ export default function Studio() {
         throw new Error(t('studio.errors.needOneShot'))
       }
       const idemKey = crypto.randomUUID()
-      return api.createJob(tab as WorkflowName, buildSpec(), idemKey)
+      return api.createJob(tab as WorkflowName, buildSpec(), idemKey, projectId || undefined)
     },
     onSuccess: (res) => {
       setBizId(res.biz_id)
@@ -437,13 +489,23 @@ export default function Studio() {
         {/* ── Composer ─────────────────────────────────────────── */}
         <div className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
           {(tab === 'image.single' || tab === 'image.batch') && (
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={3}
-              className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 p-4 outline-none focus:border-violet-500"
-              placeholder={t('studio.examples.rooftop')}
-            />
+            <div>
+              <MentionTextarea
+                value={text}
+                onChange={setText}
+                rows={3}
+                placeholder={t('studio.examples.rooftop')}
+                onMentionAsset={(asset) => {
+                  // The one tab with a real single-slot reference is
+                  // image.single's source_image_asset_id (F5.8) — @-mentioning
+                  // an image there sets it, matching the visible AssetPicker
+                  // right below. image.batch has no reference slot at all, so
+                  // the mention there stays purely textual.
+                  if (tab === 'image.single' && asset.type === 'image') setSourceImageId(asset.biz_id)
+                }}
+              />
+              <CharCount value={text} max={capabilities.data?.image.max_prompt_chars} />
+            </div>
           )}
 
           {tab === 'image.single' && (
@@ -490,13 +552,16 @@ export default function Studio() {
                   ))}
                 </div>
               ) : (
-                <textarea
-                  value={story}
-                  onChange={(e) => setStory(e.target.value)}
-                  rows={4}
-                  className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 p-4 outline-none focus:border-violet-500"
-                  placeholder={t('studio.comic.storyPlaceholder')}
-                />
+                <div>
+                  <textarea
+                    value={story}
+                    onChange={(e) => setStory(e.target.value)}
+                    rows={4}
+                    className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 p-4 outline-none focus:border-violet-500"
+                    placeholder={t('studio.comic.storyPlaceholder')}
+                  />
+                  <CharCount value={story} max={capabilities.data?.image.max_prompt_chars} />
+                </div>
               )}
             </div>
           )}
@@ -512,13 +577,30 @@ export default function Studio() {
 
           {tab === 'video.single' && (
             <div className="space-y-4">
-              <textarea
-                value={vText}
-                onChange={(e) => setVText(e.target.value)}
-                rows={3}
-                className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 p-4 outline-none focus:border-violet-500"
-                placeholder={t('studio.examples.foxVideo')}
-              />
+              <div>
+                <MentionTextarea
+                  value={vText}
+                  onChange={setVText}
+                  rows={3}
+                  placeholder={t('studio.examples.foxVideo')}
+                  onMentionAsset={(asset) => {
+                    // video.single is the one workflow with real multi-slot
+                    // reference arrays (F6.1-F6.4) — an @-mentioned asset
+                    // joins whichever list matches its type, deduped, and
+                    // switches refMode so the AssetPicker below reflects it
+                    // immediately instead of silently holding a reference
+                    // the visible UI doesn't show as selected.
+                    if (refMode === 'firstLast') return
+                    setRefMode('reference')
+                    if (asset.type === 'video') {
+                      setRefVideoIds((cur) => (cur.includes(asset.biz_id) ? cur : [...cur, asset.biz_id]))
+                    } else {
+                      setRefImageIds((cur) => (cur.includes(asset.biz_id) ? cur : [...cur, asset.biz_id]))
+                    }
+                  }}
+                />
+                <CharCount value={vText} max={capabilities.data?.video.max_prompt_chars} />
+              </div>
 
               <div>
                 <Capsule>
@@ -744,12 +826,27 @@ export default function Studio() {
               <>
                 <Capsule>
                   <span className="text-zinc-500">{t('studio.capsule.characterA')}</span>
-                  <CharacterSelectInline value={slotA} onChange={setSlotA} options={characters.data?.characters ?? []} />
+                  <CharacterSlotPicker value={slotA} onChange={setSlotA} options={characters.data?.characters ?? []} />
                 </Capsule>
                 <Capsule>
                   <span className="text-zinc-500">{t('studio.capsule.characterB')}</span>
-                  <CharacterSelectInline value={slotB} onChange={setSlotB} options={characters.data?.characters ?? []} />
+                  <CharacterSlotPicker value={slotB} onChange={setSlotB} options={characters.data?.characters ?? []} />
                 </Capsule>
+                {!!projects.data?.projects.length && (
+                  <Capsule title={t('studio.capsule.projectTooltip')}>
+                    <span className="text-zinc-500">{t('studio.capsule.project')}</span>
+                    <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="bg-transparent text-zinc-100 outline-none">
+                      <option value="" className="bg-zinc-900">
+                        {t('studio.unselected')}
+                      </option>
+                      {projects.data.projects.map((p) => (
+                        <option key={p.biz_id} value={p.biz_id} className="bg-zinc-900">
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Capsule>
+                )}
               </>
             )}
 
@@ -757,8 +854,39 @@ export default function Studio() {
 
             {!isGuest ? (
               <>
-                <div className="text-right font-mono text-sm text-zinc-300">
-                  <span className="text-violet-400">✦</span> <AnimatedNumber value={estimate} />
+                <div className="relative text-right font-mono text-sm text-zinc-300">
+                  <button
+                    type="button"
+                    onClick={() => setShowBreakdown((v) => !v)}
+                    className="hover:text-zinc-100"
+                    title={t('studio.breakdown.toggle')}
+                  >
+                    <span className="text-violet-400">✦</span> <AnimatedNumber value={estimate} />
+                    {upgradeReferencePrice !== null && upgradeReferencePrice > estimate && (
+                      <s className="ml-1.5 text-zinc-600">{upgradeReferencePrice}</s>
+                    )}
+                  </button>
+                  {showBreakdown && estimateItems.length > 0 && (
+                    <div className="absolute bottom-full right-0 z-10 mb-2 w-56 rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-left shadow-xl">
+                      <p className="mb-2 text-[11px] uppercase tracking-wide text-zinc-500">{t('studio.breakdown.title')}</p>
+                      <div className="space-y-1">
+                        {estimateItems.map((it, i) => (
+                          <div key={i} className="flex items-center justify-between text-xs text-zinc-300">
+                            <span>
+                              {t(`studio.breakdown.item.${it.kind}`)}
+                              {it.count > 1 ? ` ×${it.count}` : ''}
+                            </span>
+                            <span className="font-mono">✦{it.credits}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {upgradeReferencePrice !== null && upgradeReferencePrice > estimate && (
+                        <p className="mt-2 border-t border-zinc-800 pt-2 text-[11px] text-zinc-500">
+                          {t('studio.breakdown.upgradeHint', { price: upgradeReferencePrice })}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={() => createJob.mutate()}
@@ -789,11 +917,51 @@ export default function Studio() {
           )}
 
           {!isGuest && !!presets.data?.presets.length && (
-            <PresetCarousel
-              presets={presets.data.presets}
-              selected={presetIds}
-              onToggle={(id) => setPresetIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))}
-            />
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {uniqueStyleTypes(presets.data.presets).map((st) => (
+                  <button
+                    key={st}
+                    onClick={() => setStyleFilter((cur) => (cur === st ? '' : st))}
+                    className={`rounded-full border px-2.5 py-1 text-xs transition ${
+                      styleFilter === st ? 'border-violet-500 bg-violet-500/10 text-violet-300' : 'border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                    }`}
+                  >
+                    {st}
+                  </button>
+                ))}
+                <div className="flex-1" />
+                {savingPreset ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      value={newPresetName}
+                      onChange={(e) => setNewPresetName(e.target.value)}
+                      placeholder={t('studio.savePreset.namePlaceholder')}
+                      className="w-32 rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1 text-xs outline-none focus:border-violet-500"
+                    />
+                    <button
+                      onClick={() => savePreset.mutate()}
+                      disabled={!newPresetName.trim() || savePreset.isPending}
+                      className="rounded-lg bg-violet-500 px-2 py-1 text-xs text-white disabled:opacity-50"
+                    >
+                      {t('common.save')}
+                    </button>
+                    <button onClick={() => setSavingPreset(false)} className="text-xs text-zinc-500 hover:text-zinc-300">
+                      {t('common.cancel')}
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => setSavingPreset(true)} className="text-xs text-violet-400 hover:text-violet-300">
+                    + {t('studio.savePreset.button')}
+                  </button>
+                )}
+              </div>
+              <PresetCarousel
+                presets={styleFilter ? presets.data.presets.filter((p) => p.style_type === styleFilter) : presets.data.presets}
+                selected={presetIds}
+                onToggle={(id) => setPresetIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))}
+              />
+            </div>
           )}
         </div>
 
@@ -825,7 +993,12 @@ export default function Studio() {
         {/* ── Results ─────────────────────────────────────────── */}
         <div className="min-h-80 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
           {!bizId && !isGuest && (
-            <EmptyState presets={presets.data?.presets ?? []} onPick={(fragment) => (tab === 'video.single' ? setVText(fragment) : setText(fragment))} />
+            <HomeFeed
+              presets={presets.data?.presets ?? []}
+              onPickFragment={(fragment) => (tab === 'video.single' ? setVText(fragment) : setText(fragment))}
+              onTogglePreset={(id) => setPresetIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))}
+              selectedPresetIds={presetIds}
+            />
           )}
 
           {!bizId && isGuest && (
@@ -861,6 +1034,18 @@ export default function Studio() {
           {running && !gateSuspended && (
             <div className="flex min-h-64 flex-col items-center justify-center gap-3">
               <GenerationProgress kind={tab.startsWith('video') ? 'video' : 'image'} />
+              <p className="text-xs text-zinc-500">
+                {t('studio.estimatedWait', {
+                  minutes: formatWaitMinutes(
+                    estimateWaitSeconds(tab, {
+                      n,
+                      shots: tab === 'image.sequence' ? shots.filter((s) => s.trim()).length : vsShots.filter((s) => s.text.trim()).length,
+                      durationSeconds: tab === 'video.single' ? duration : vsDuration,
+                      resolution,
+                    }),
+                  ),
+                })}
+              </p>
               {jobStream.streamState === 'reconnecting' && (
                 <p className="text-xs text-amber-500">{t('jobDetail.reconnecting')}</p>
               )}
@@ -911,6 +1096,31 @@ export default function Studio() {
       </div>
     </AppShell>
   )
+}
+
+// §07's "字數計數" gap — max is undefined until GET /capabilities resolves,
+// in which case this just shows the raw count with no "/limit" suffix
+// rather than a misleading placeholder number.
+function CharCount({ value, max }: { value: string; max?: number }) {
+  const over = max !== undefined && value.length > max
+  return (
+    <p className={`mt-1 text-right text-[11px] ${over ? 'text-red-400' : 'text-zinc-600'}`}>
+      {value.length}
+      {max !== undefined ? `/${max}` : ''}
+    </p>
+  )
+}
+
+function uniqueStyleTypes(presets: { style_type: string }[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const p of presets) {
+    if (p.style_type && !seen.has(p.style_type)) {
+      seen.add(p.style_type)
+      out.push(p.style_type)
+    }
+  }
+  return out
 }
 
 function Capsule({ children, disabled, title }: { children: ReactNode; disabled?: boolean; title?: string }) {
@@ -1017,62 +1227,6 @@ function ShotList({
         {addLabel}
       </button>
     </div>
-  )
-}
-
-// F19.4.1's cold-start empty state: reuses preset cover images (already
-// fetched for the carousel above) instead of a bare placeholder — clicking
-// one drops its prompt fragment straight into the active input.
-function EmptyState({ presets, onPick }: { presets: { biz_id: string; name: string; cover_url: string; prompt_fragment: string }[]; onPick: (fragment: string) => void }) {
-  const { t } = useTranslation()
-  const sample = presets.slice(0, 4)
-  if (sample.length === 0) {
-    return <p className="text-center text-zinc-500">{t('studio.emptyResult')}</p>
-  }
-  return (
-    <div className="mx-auto max-w-md text-center">
-      <p className="mb-3 text-sm text-zinc-500">{t('studio.guessWhat')}</p>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {sample.map((p) => (
-          <button
-            key={p.biz_id}
-            onClick={() => onPick(p.prompt_fragment)}
-            className="group overflow-hidden rounded-xl border border-zinc-800 transition hover:border-violet-500"
-          >
-            {p.cover_url ? (
-              <img src={p.cover_url} alt="" className="aspect-square w-full object-cover" />
-            ) : (
-              <div className="aspect-square w-full bg-zinc-800" />
-            )}
-            <p className="truncate bg-zinc-950 px-2 py-1 text-xs text-zinc-400 group-hover:text-violet-300">{p.name}</p>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function CharacterSelectInline({
-  value,
-  onChange,
-  options,
-}: {
-  value: string
-  onChange: (v: string) => void
-  options: { biz_id: string; name: string }[]
-}) {
-  const { t } = useTranslation()
-  return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="bg-transparent text-zinc-100 outline-none">
-      <option value="" className="bg-zinc-900">
-        {t('studio.unselected')}
-      </option>
-      {options.map((c) => (
-        <option key={c.biz_id} value={c.biz_id} className="bg-zinc-900">
-          {c.name}
-        </option>
-      ))}
-    </select>
   )
 }
 
