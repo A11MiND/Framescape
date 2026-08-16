@@ -113,6 +113,19 @@ func (s *Store) PresignPut(ctx context.Context, key string, expiry time.Duration
 	return u.String(), nil
 }
 
+// Delete removes an object outright — the recycle-bin hard-purge duty
+// (upkeep.Runner's autoPurgeTrash) is this method's only caller: a
+// soft-deleted asset's row/storage both need to actually go away once its
+// 30-day grace period (§07's own ask) is up, not just sit as an orphaned
+// blob nobody's public_url points to anymore. MinIO returns success for a
+// key that's already gone, so this is safe to retry.
+func (s *Store) Delete(ctx context.Context, key string) error {
+	if err := s.client.RemoveObject(ctx, s.cfg.Bucket, key, minio.RemoveObjectOptions{}); err != nil {
+		return fmt.Errorf("delete object %q: %w", key, err)
+	}
+	return nil
+}
+
 func publicReadPolicy(bucket string) string {
 	return fmt.Sprintf(`{
 		"Version": "2012-10-17",

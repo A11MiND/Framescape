@@ -254,7 +254,13 @@
       "image": "Images",
       "video": "Videos"
     },
-    "searchPlaceholder": "Search prompts…"
+    "searchPlaceholder": "Search prompts…",
+    "trash": "Trash",
+    "library": "Library",
+    "trashEmpty": "Trash is empty",
+    "restore": "Restore",
+    "restoreFailed": "Restore failed, please retry",
+    "daysLeft": "{{count}} days left"
   },
   "assetDetail": {
     "backToLibrary": "← Back to library",

@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"aigc-platform/internal/application/upkeep"
 	"aigc-platform/internal/infra/persistence"
 	"aigc-platform/internal/pkg/id"
 )
@@ -246,6 +247,53 @@ func (s *Server) handleDeleteAsset(c *gin.Context) {
 	}
 	if res.RowsAffected == 0 {
 		c.JSON(http.StatusNotFound, errBody("not_found", "asset not found"))
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+// handleListTrash is the recycle bin's read side: every asset the caller
+// has soft-deleted (handleDeleteAsset) that autoPurgeTrash hasn't caught up
+// with yet, newest-deleted-first, each annotated with days left before
+// that happens.
+func (s *Server) handleListTrash(c *gin.Context) {
+	var rows []persistence.Asset
+	if err := s.db.WithContext(c.Request.Context()).
+		Where("user_id = ? AND deleted_at IS NOT NULL", userID(c)).
+		Order("deleted_at DESC").Limit(200).Find(&rows).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "list trash"))
+		return
+	}
+	out := make([]gin.H, 0, len(rows))
+	for _, a := range rows {
+		j := assetToJSON(a, "")
+		delete(j, "project_id")
+		j["deleted_at"] = a.DeletedAt
+		if a.DeletedAt != nil {
+			purgeAt := a.DeletedAt.AddDate(0, 0, upkeep.TrashRetentionDays)
+			daysLeft := int(time.Until(purgeAt).Hours() / 24)
+			if daysLeft < 0 {
+				daysLeft = 0
+			}
+			j["days_until_purge"] = daysLeft
+		}
+		out = append(out, j)
+	}
+	c.JSON(http.StatusOK, gin.H{"assets": out})
+}
+
+// handleRestoreAsset undoes a soft-delete — the only way trash rows leave
+// this state other than autoPurgeTrash actually catching up with them.
+func (s *Server) handleRestoreAsset(c *gin.Context) {
+	res := s.db.WithContext(c.Request.Context()).Model(&persistence.Asset{}).
+		Where("biz_id = ? AND user_id = ? AND deleted_at IS NOT NULL", c.Param("bizID"), userID(c)).
+		Update("deleted_at", nil)
+	if res.Error != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "restore asset"))
+		return
+	}
+	if res.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, errBody("not_found", "asset not found in trash"))
 		return
 	}
 	c.Status(http.StatusNoContent)

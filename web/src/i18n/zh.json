@@ -254,7 +254,13 @@
       "image": "图片",
       "video": "视频"
     },
-    "searchPlaceholder": "搜索提示词…"
+    "searchPlaceholder": "搜索提示词…",
+    "trash": "回收站",
+    "library": "素材库",
+    "trashEmpty": "回收站是空的",
+    "restore": "恢复",
+    "restoreFailed": "恢复失败，请重试",
+    "daysLeft": "{{count}} 天后清除"
   },
   "assetDetail": {
     "backToLibrary": "← 返回素材库",

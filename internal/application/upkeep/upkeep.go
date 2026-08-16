@@ -21,11 +21,18 @@ import (
 
 	"aigc-platform/internal/application/jobsvc"
 	"aigc-platform/internal/domain/workflow"
+	"aigc-platform/internal/infra/storage"
 	"aigc-platform/internal/pkg/logger"
 )
 
 // SuspendedTimeout is §11.4's "Suspended 超 7 天未 Resume → 自动取消并退积分".
 const SuspendedTimeout = 7 * 24 * time.Hour
+
+// TrashRetentionDays is §07's "刪除先掉到回收箱，30天後自動回收" ask —
+// handleListTrash (internal/interfaces/http) imports this rather than
+// keeping its own copy, so the "N days left" countdown it shows can never
+// drift from what autoPurgeTrash actually enforces below.
+const TrashRetentionDays = 30
 
 const (
 	suspendedCheckInterval      = 1 * time.Hour
@@ -35,21 +42,26 @@ const (
 	// automatic, not a decision sitting Suspended for up to an hour before
 	// anyone/anything looks at it.
 	skipPreviewCheckInterval = 15 * time.Second
+	trashPurgeCheckInterval  = 1 * time.Hour
 )
 
 type Runner struct {
-	db   *sql.DB
-	eng  workflow.Engine
-	jobs *jobsvc.Service
+	db      *sql.DB
+	eng     workflow.Engine
+	jobs    *jobsvc.Service
+	objects *storage.Store
 
 	// suspendedTimeout is a field (not the SuspendedTimeout constant
 	// directly) so tests/manual verification can inject a short threshold
 	// without waiting 7 real days for a Suspended row to qualify.
 	suspendedTimeout time.Duration
+	// trashRetentionDays mirrors suspendedTimeout's own reasoning — a field
+	// defaulting to TrashRetentionDays, overridable for verification.
+	trashRetentionDays int
 }
 
-func New(db *sql.DB, eng workflow.Engine, jobs *jobsvc.Service) *Runner {
-	return &Runner{db: db, eng: eng, jobs: jobs, suspendedTimeout: SuspendedTimeout}
+func New(db *sql.DB, eng workflow.Engine, jobs *jobsvc.Service, objects *storage.Store) *Runner {
+	return &Runner{db: db, eng: eng, jobs: jobs, objects: objects, suspendedTimeout: SuspendedTimeout, trashRetentionDays: TrashRetentionDays}
 }
 
 // WithSuspendedTimeout overrides the default 7-day threshold — used for
@@ -60,12 +72,20 @@ func (r *Runner) WithSuspendedTimeout(d time.Duration) *Runner {
 	return r
 }
 
-// Start launches both duties as background goroutines. Returns immediately;
-// both loops run until ctx is cancelled.
+// WithTrashRetentionDays overrides the default 30-day grace period — same
+// verification-without-waiting-a-month reasoning as WithSuspendedTimeout.
+func (r *Runner) WithTrashRetentionDays(days int) *Runner {
+	r.trashRetentionDays = days
+	return r
+}
+
+// Start launches every duty as its own background goroutine. Returns
+// immediately; all loops run until ctx is cancelled.
 func (r *Runner) Start(ctx context.Context) {
 	go r.loop(ctx, suspendedCheckInterval, r.cleanupSuspended)
 	go r.loop(ctx, reconciliationCheckInterval, r.checkReconciliation)
 	go r.loop(ctx, skipPreviewCheckInterval, r.autoResumeSkipPreview)
+	go r.loop(ctx, trashPurgeCheckInterval, r.autoPurgeTrash)
 }
 
 func (r *Runner) loop(ctx context.Context, interval time.Duration, fn func(context.Context)) {
@@ -170,6 +190,59 @@ func (r *Runner) autoResumeSkipPreview(ctx context.Context) {
 			continue
 		}
 		log.Info("upkeep: auto-resumed skip-preview gate", zap.String("biz_id", p.bizID))
+	}
+}
+
+// autoPurgeTrash implements TrashRetentionDays: any asset soft-deleted
+// (handleDeleteAsset) longer than trashRetentionDays ago gets actually
+// removed — both its storage object (thumb included, when it has one) and
+// its row. Deliberately a real DELETE, not another timestamp column: a
+// recycle bin that never actually empties isn't one, and this is the one
+// place in the codebase that ever hard-deletes an asset at all.
+func (r *Runner) autoPurgeTrash(ctx context.Context) {
+	log := logger.From(ctx)
+	cutoff := time.Now().AddDate(0, 0, -r.trashRetentionDays)
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, storage_key, thumb_key FROM assets
+		WHERE deleted_at IS NOT NULL AND deleted_at < ?`, cutoff)
+	if err != nil {
+		log.Error("upkeep: query trash-eligible assets failed", zap.Error(err))
+		return
+	}
+	type purgeable struct {
+		id                   uint64
+		storageKey, thumbKey string
+	}
+	var assets []purgeable
+	for rows.Next() {
+		var p purgeable
+		if err := rows.Scan(&p.id, &p.storageKey, &p.thumbKey); err != nil {
+			log.Error("upkeep: scan trash-eligible asset failed", zap.Error(err))
+			continue
+		}
+		assets = append(assets, p)
+	}
+	rows.Close()
+
+	for _, a := range assets {
+		if a.storageKey != "" {
+			if err := r.objects.Delete(ctx, a.storageKey); err != nil {
+				log.Error("upkeep: purge asset storage object failed", zap.Uint64("asset_id", a.id), zap.Error(err))
+				continue // leave the row for the next tick rather than orphan the object
+			}
+		}
+		if a.thumbKey != "" {
+			if err := r.objects.Delete(ctx, a.thumbKey); err != nil {
+				log.Error("upkeep: purge asset thumb object failed", zap.Uint64("asset_id", a.id), zap.Error(err))
+				continue
+			}
+		}
+		if _, err := r.db.ExecContext(ctx, `DELETE FROM assets WHERE id = ?`, a.id); err != nil {
+			log.Error("upkeep: delete purged asset row failed", zap.Uint64("asset_id", a.id), zap.Error(err))
+			continue
+		}
+		log.Info("upkeep: purged trashed asset past retention", zap.Uint64("asset_id", a.id), zap.Int("retention_days", r.trashRetentionDays))
 	}
 }
 

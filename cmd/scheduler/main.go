@@ -114,7 +114,7 @@ func main() {
 	// §11.4's Scheduler duties: suspended-timeout cleanup + credit
 	// reconciliation (see upkeep's package doc for which of the five listed
 	// duties are and aren't implemented yet).
-	upkeepRunner := upkeep.New(sqlDB, eng, jobs)
+	upkeepRunner := upkeep.New(sqlDB, eng, jobs, objectStore)
 	if d := config.SuspendedTimeout(); d > 0 {
 		upkeepRunner = upkeepRunner.WithSuspendedTimeout(d)
 	}

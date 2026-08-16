@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { api } from '../lib/api'
+import { api, type TrashAsset } from '../lib/api'
 import AppShell from '../components/AppShell'
 import { useToast } from '../components/Toast'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
@@ -40,6 +40,10 @@ export default function Assets() {
   const queryClient = useQueryClient()
   const pushToast = useToast()
   const navigate = useNavigate()
+  // 回收站: a toggle rather than a separate route — it reuses this same
+  // masonry layout and header chrome, just swapping the data source and the
+  // per-card actions (restore + days-left instead of delete/select/assign).
+  const [showTrash, setShowTrash] = useState(false)
 
   useEffect(() => setLimit(PAGE_SIZE), [filter, projectId, debouncedSearch])
 
@@ -66,13 +70,25 @@ export default function Assets() {
   })
   const setProjectFilter = (id: string) => setSearchParams(id ? { project_id: id } : {}, { replace: true })
 
+  const trash = useQuery({ queryKey: ['assets-trash'], queryFn: api.listTrash, enabled: showTrash })
+
   const deleteAsset = useMutation({
     mutationFn: (bizId: string) => api.deleteAsset(bizId),
     onSuccess: (_data, bizId) => {
       setSelected((cur) => cur.filter((id) => id !== bizId))
       queryClient.invalidateQueries({ queryKey: ['assets'] })
+      queryClient.invalidateQueries({ queryKey: ['assets-trash'] })
     },
     onError: () => pushToast(t('assets.deleteFailed')),
+  })
+
+  const restoreAsset = useMutation({
+    mutationFn: (bizId: string) => api.restoreAsset(bizId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['assets-trash'] })
+      queryClient.invalidateQueries({ queryKey: ['assets'] })
+    },
+    onError: () => pushToast(t('assets.restoreFailed')),
   })
 
   // F2.7's batch download: the response is a zip blob, not JSON — trigger a
@@ -107,13 +123,15 @@ export default function Assets() {
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-lg font-medium">{t('rail.assets')}</h1>
           <div className="flex flex-wrap items-center gap-3">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t('assets.searchPlaceholder')}
-              className="w-40 rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-violet-500"
-            />
-            {selected.length > 0 && (
+            {!showTrash && (
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={t('assets.searchPlaceholder')}
+                className="w-40 rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-violet-500"
+              />
+            )}
+            {!showTrash && selected.length > 0 && (
               <>
                 <span className="text-sm text-zinc-500">{t('assets.selectedCount', { count: selected.length })}</span>
                 <button
@@ -131,36 +149,88 @@ export default function Assets() {
                 </button>
               </>
             )}
-            <select
-              value={projectId}
-              onChange={(e) => setProjectFilter(e.target.value)}
-              className="rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-300 outline-none focus:border-violet-500"
+            {!showTrash && (
+              <select
+                value={projectId}
+                onChange={(e) => setProjectFilter(e.target.value)}
+                className="rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-300 outline-none focus:border-violet-500"
+              >
+                <option value="">{t('assets.allProjects')}</option>
+                {projects.data?.projects.map((p) => (
+                  <option key={p.biz_id} value={p.biz_id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            {!showTrash && (
+              <div className="flex gap-1">
+                {(['all', 'image', 'video'] as Filter[]).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setFilter(f)}
+                    className={`rounded-lg px-3 py-1.5 text-sm transition ${
+                      filter === f
+                        ? 'bg-violet-500/20 text-violet-300'
+                        : 'text-zinc-400 hover:bg-zinc-900'
+                    }`}
+                  >
+                    {t(`assets.filter.${f}`)}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={() => setShowTrash((cur) => !cur)}
+              className={`rounded-lg px-3 py-1.5 text-sm transition ${
+                showTrash ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-900'
+              }`}
             >
-              <option value="">{t('assets.allProjects')}</option>
-              {projects.data?.projects.map((p) => (
-                <option key={p.biz_id} value={p.biz_id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <div className="flex gap-1">
-              {(['all', 'image', 'video'] as Filter[]).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`rounded-lg px-3 py-1.5 text-sm transition ${
-                    filter === f
-                      ? 'bg-violet-500/20 text-violet-300'
-                      : 'text-zinc-400 hover:bg-zinc-900'
-                  }`}
-                >
-                  {t(`assets.filter.${f}`)}
-                </button>
-              ))}
-            </div>
+              {showTrash ? t('assets.library') : t('assets.trash')}
+            </button>
           </div>
         </div>
 
+        {showTrash ? (
+          <>
+            {trash.isSuccess && trash.data.assets.length === 0 && (
+              <p className="text-zinc-500">{t('assets.trashEmpty')}</p>
+            )}
+            <div className="columns-2 gap-3 sm:columns-3 lg:columns-4 [&>*]:mb-3">
+              {trash.data?.assets.map((a: TrashAsset) => (
+                <div
+                  key={a.biz_id}
+                  title={a.biz_id}
+                  className="group relative inline-block w-full break-inside-avoid overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900"
+                >
+                  <button
+                    onClick={() => restoreAsset.mutate(a.biz_id)}
+                    disabled={restoreAsset.isPending}
+                    className="absolute right-2 top-2 z-10 rounded-full bg-violet-500 px-2.5 py-1 text-xs font-medium text-white opacity-0 transition hover:bg-violet-400 disabled:opacity-50 group-hover:opacity-100"
+                  >
+                    {t('assets.restore')}
+                  </button>
+                  {a.type === 'video' ? (
+                    <video src={a.public_url} controls className="block max-h-96 w-full bg-black object-contain" />
+                  ) : (
+                    <img src={a.public_url} alt="" loading="lazy" className="block max-h-96 w-full object-cover opacity-70" />
+                  )}
+                  <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex gap-1">
+                    {a.resolution_tag && (
+                      <span className="rounded bg-violet-500/80 px-1.5 py-0.5 font-mono text-[10px] font-medium text-white">
+                        {a.resolution_tag}
+                      </span>
+                    )}
+                    <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-zinc-300">
+                      {t('assets.daysLeft', { count: a.days_until_purge })}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
         {assets.isSuccess && assets.data.assets.length === 0 && (
           <p className="text-zinc-500">{t('assets.empty')}</p>
         )}
@@ -242,6 +312,8 @@ export default function Assets() {
           <div ref={sentinelRef} className="py-6 text-center text-xs text-zinc-600">
             {assets.isFetching ? t('common.loading') : ''}
           </div>
+        )}
+          </>
         )}
       </div>
     </AppShell>

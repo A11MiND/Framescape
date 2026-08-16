@@ -161,6 +161,21 @@ export interface AssetResponse {
   provider_cache?: { cached: boolean; expire_at?: string | null; expired?: boolean }
 }
 
+// TrashAsset is handleListTrash's own projection (assetToJSON's fields
+// minus project_id, which means nothing once an asset is in the recycle
+// bin) plus when it was deleted and how many days until autoPurgeTrash
+// actually removes it (upkeep.TrashRetentionDays).
+export interface TrashAsset {
+  biz_id: string
+  type: string
+  public_url: string
+  width: number
+  height: number
+  resolution_tag: string
+  deleted_at: string
+  days_until_purge: number
+}
+
 // CommunityAsset is handleCommunityFeed's own minimal projection — not
 // AssetResponse, deliberately: a viewer here isn't the owner, so this never
 // carries project_id, full meta, or anything else owner-specific.
@@ -400,6 +415,8 @@ export const api = {
     return request<{ assets: AssetResponse[] }>('GET', qs ? `/assets?${qs}` : '/assets')
   },
   deleteAsset: (bizId: string) => request<void>('DELETE', `/assets/${bizId}`),
+  listTrash: () => request<{ assets: TrashAsset[] }>('GET', '/assets/trash'),
+  restoreAsset: (bizId: string) => request<void>('POST', `/assets/${bizId}/restore`),
   // projectId omitted (undefined) clears the assignment (clear_project:true) —
   // there's no "leave unchanged" case here since this call always means
   // "the user picked something in the project selector".
