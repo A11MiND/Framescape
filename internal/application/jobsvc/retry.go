@@ -15,23 +15,35 @@ import (
 	workflowdefs "aigc-platform/workflows"
 )
 
-// retryableNodes maps workflow_name to the one loop-body node name this
-// package knows how to rebuild inputs for and resubmit as a standalone
+// retryableNodes maps workflow_name to the one node (job_nodes.node_name)
+// this package knows how to rebuild inputs for and resubmit as a standalone
 // satellite Job (§the artifact's "現在還缺什麼" node-retry gap — Aether's
 // own Engine port only exposes Submit/Get/Resume/Cancel, no way to
 // re-trigger a single already-terminal task in place without reopening the
 // vendored engine's own one-way Phase invariant, see engine.go's doc).
 //
-// Deliberately scoped to these two only: both loop bodies are single leaf
-// `task` templates (not nested DAGs) with purely string-typed inputs
-// (prompt/seed/user-id/n) — video.single's "gen" has array-typed
-// reference-*-asset-ids inputs whose behavior as a literal template
-// default is unproven in this engine, and video.sequence's per-shot nodes
-// are each their own nested DAG (gen+extract), not a leaf task, so neither
-// fits the "re-run exactly one leaf task" model this package implements.
+// Scoped to leaf `task` templates only — video.sequence's per-shot nodes
+// are each their own nested DAG (gen+extract), not a leaf task, so no
+// single-task satellite can stand in for one; that one genuinely doesn't
+// fit this package's "re-run exactly one leaf task" model.
 var retryableNodes = map[string]string{
 	"image.comic4":   "gen-one-panel",
 	"image.sequence": "gen-one-shot",
+	"video.single":   "gen",
+}
+
+// retryTemplateName maps workflow_name to the *definition file's own*
+// template name for that node — usually identical to retryableNodes' entry,
+// except video.single: its DAG call-site is named "gen" (matching
+// job_nodes.node_name, jobGraph.ts's convention) but invokes a template
+// declared as "gen-video". buildRetryWorkflow needs the template name to
+// find the right `task` block in workflows/*.json; RetryNode needs the
+// job_nodes name to look up the failed row — two different identifiers for
+// the same node, so both maps exist rather than conflating them.
+var retryTemplateName = map[string]string{
+	"image.comic4":   "gen-one-panel",
+	"image.sequence": "gen-one-shot",
+	"video.single":   "gen-video",
 }
 
 // RetryNode resubmits exactly one Failed/Error/Timeout leaf task from an
@@ -87,9 +99,15 @@ func (s *Service) RetryNode(ctx context.Context, userID uint64, bizID, nodeName 
 	// workflow's single task template (buildRetryWorkflow), never a
 	// {{...}} interpolation — deliberately sidesteps the array/expression
 	// interpolation fragility docs/aether-validation-report.md §四 W4
-	// already documented for this exact engine.
-	values := map[string]string{"user-id": strconv.FormatUint(userID, 10), "n": "1"}
+	// already documented for this exact engine. Array-typed values (video.
+	// single's reference-*-asset-ids) work the same way: json.Marshal turns
+	// a Go []string into a literal JSON array on the template, no different
+	// in kind from a literal string default — Aether's binder (bindOne,
+	// third_party/aether/internal/binding/bind.go) doesn't care about type
+	// when reading decl.Value directly.
+	values := map[string]any{"user-id": strconv.FormatUint(userID, 10), "n": "1"}
 	var text string
+	var estimatedCredits int
 	switch job.WorkflowName {
 	case "image.comic4":
 		if loopIndex < 0 || loopIndex >= len(spec.Panels) {
@@ -101,6 +119,7 @@ func (s *Service) RetryNode(ctx context.Context, userID uint64, bizID, nodeName 
 		}
 		compiled := prompt.Compile(prompt.Input{Text: text, Characters: characters, Presets: presets, Seed: spec.Seed})
 		values["prompt"] = compiled.Prompt
+		estimatedCredits = creditsvc.EstimatePerNodeImageCredits(1)
 	case "image.sequence":
 		if loopIndex < 0 || loopIndex >= len(spec.Shots) {
 			return nil, fmt.Errorf("shot index %d out of range for %d shots", loopIndex, len(spec.Shots))
@@ -118,6 +137,58 @@ func (s *Service) RetryNode(ctx context.Context, userID uint64, bizID, nodeName 
 		if seed != nil {
 			values["seed"] = strconv.FormatInt(*seed, 10)
 		}
+		estimatedCredits = creditsvc.EstimatePerNodeImageCredits(1)
+	case "video.single":
+		if loopIndex != -1 {
+			return nil, fmt.Errorf("video.single's %q node is not a loop iteration, loop_index must be -1, got %d", nodeName, loopIndex)
+		}
+		// Mirrors Create's video.single branch exactly (resolution
+		// validation, duration clamp, F6.4 auto character-reference
+		// fallback) — see jobsvc.go's own doc for why each check is there.
+		// Deliberately NOT reproducing PromptEnhance even if the original
+		// job had it on: that's a separate upstream node (enhance-prompt)
+		// producing a rewritten prompt this package has no record of, and
+		// chaining it back in would need a second dynamic task feeding
+		// into "gen" — exactly the {{...}} interpolation complexity this
+		// whole literal-values-only design avoids. Retry always uses the
+		// original (or overridden) raw text, un-enhanced.
+		if spec.Resolution != "" && spec.Resolution != "768P" && spec.Resolution != "2K" {
+			return nil, fmt.Errorf("resolution must be 768P or 2K, got %q", spec.Resolution)
+		}
+		text = spec.Text
+		if promptOverride != "" {
+			text = promptOverride
+		}
+		compiled := prompt.Compile(prompt.Input{Text: text, Characters: characters, Presets: presets, Seed: spec.Seed, MaxChars: 7000})
+		values["prompt"] = compiled.Prompt
+		duration := spec.DurationSeconds
+		if duration <= 0 {
+			duration = 5
+		}
+		if duration > 15 {
+			duration = 15
+		}
+		values["duration"] = strconv.Itoa(duration)
+		resolution := spec.Resolution
+		if resolution == "" {
+			resolution = "768P"
+		}
+		values["resolution"] = resolution
+		values["ratio"] = spec.Ratio
+		values["first-frame-asset-id"] = spec.FirstFrameAssetID
+		values["last-frame-asset-id"] = spec.LastFrameAssetID
+		refImageIDs := spec.ReferenceImageAssetIDs
+		if len(refImageIDs) == 0 && spec.FirstFrameAssetID == "" && spec.LastFrameAssetID == "" && len(spec.Characters) > 0 {
+			autoRefs, err := s.resolveCharacterRefAssetIDs(ctx, userID, spec.Characters)
+			if err != nil {
+				return nil, err
+			}
+			refImageIDs = autoRefs
+		}
+		values["reference-image-asset-ids"] = nonNil(refImageIDs)
+		values["reference-video-asset-ids"] = nonNil(spec.ReferenceVideoAssetIDs)
+		values["reference-audio-asset-ids"] = nonNil(spec.ReferenceAudioAssetIDs)
+		estimatedCredits = creditsvc.EstimateVideoCredits(duration, resolution)
 	}
 
 	defFile, ok := definitions[job.WorkflowName]
@@ -128,12 +199,11 @@ func (s *Service) RetryNode(ctx context.Context, userID uint64, bizID, nodeName 
 	if err != nil {
 		return nil, fmt.Errorf("load workflow definition %q: %w", defFile, err)
 	}
-	satelliteJSON, err := buildRetryWorkflow(raw, nodeName, values)
+	satelliteJSON, err := buildRetryWorkflow(raw, retryTemplateName[job.WorkflowName], nodeName, values)
 	if err != nil {
 		return nil, err
 	}
 
-	estimatedCredits := creditsvc.EstimatePerNodeImageCredits(1)
 	bizID2 := id.New()
 	if err := s.credits.Hold(ctx, userID, "job:"+bizID2+":hold", "job", bizID2, estimatedCredits, job.WorkflowName+" retry"); err != nil {
 		return nil, fmt.Errorf("hold credits: %w", err)
@@ -174,18 +244,21 @@ func (s *Service) RetryNode(ctx context.Context, userID uint64, bizID, nodeName 
 	return retryJob, nil
 }
 
-// buildRetryWorkflow extracts nodeName's `task` template verbatim from an
-// existing aether/v1 workflow document — identical executor/retry/timeout/
-// phaseConditions to production, since it's the exact same JSON object,
-// not a hand-rewritten copy — and wraps it in a fresh single-task Workflow
-// document. Every parameter in values overwrites that parameter's literal
-// `value` on the template itself; the wrapping DAG's task invocation
-// passes no `arguments` at all, relying on Aether reading a template's own
-// declared `value` as the default when the caller supplies none for that
-// parameter — the exact mechanism image-comic4.json's own compose-grid
-// task already relies on for its literal "layout":"2x2" default. This
-// needs zero {{...}} interpolation anywhere.
-func buildRetryWorkflow(defJSON []byte, nodeName string, values map[string]string) ([]byte, error) {
+// buildRetryWorkflow extracts templateName's `task` template verbatim from
+// an existing aether/v1 workflow document — identical executor/retry/
+// timeout/phaseConditions to production, since it's the exact same JSON
+// object, not a hand-rewritten copy — and wraps it in a fresh single-task
+// Workflow document, with the wrapping DAG's own call-site named
+// callSiteName (job_nodes' name for this node; may differ from
+// templateName, see retryTemplateName's doc). Every parameter in values
+// overwrites that parameter's literal `value` on the template itself; the
+// wrapping DAG's task invocation passes no `arguments` at all, relying on
+// Aether reading a template's own declared `value` as the default when the
+// caller supplies none for that parameter — the exact mechanism
+// image-comic4.json's own compose-grid task already relies on for its
+// literal "layout":"2x2" default. This needs zero {{...}} interpolation
+// anywhere.
+func buildRetryWorkflow(defJSON []byte, templateName, callSiteName string, values map[string]any) ([]byte, error) {
 	var doc map[string]any
 	if err := json.Unmarshal(defJSON, &doc); err != nil {
 		return nil, fmt.Errorf("decode workflow definition: %w", err)
@@ -203,13 +276,13 @@ func buildRetryWorkflow(defJSON []byte, nodeName string, values map[string]strin
 		if !ok {
 			continue
 		}
-		if name, _ := tk["name"].(string); name == nodeName {
+		if name, _ := tk["name"].(string); name == templateName {
 			task = tk
 			break
 		}
 	}
 	if task == nil {
-		return nil, fmt.Errorf("node %q is not a leaf task in this workflow definition", nodeName)
+		return nil, fmt.Errorf("template %q is not a leaf task in this workflow definition", templateName)
 	}
 
 	if inputs, ok := task["inputs"].(map[string]any); ok {
@@ -230,14 +303,14 @@ func buildRetryWorkflow(defJSON []byte, nodeName string, values map[string]strin
 	satellite := map[string]any{
 		"apiVersion": "aether/v1",
 		"kind":       "Workflow",
-		"metadata":   map[string]any{"name": "retry-" + nodeName},
+		"metadata":   map[string]any{"name": "retry-" + callSiteName},
 		"spec": map[string]any{
 			"entrypoint": "main",
 			"templates": []any{
 				map[string]any{"dag": map[string]any{
 					"name": "main",
 					"tasks": []any{
-						map[string]any{"name": nodeName, "template": nodeName},
+						map[string]any{"name": callSiteName, "template": templateName},
 					},
 				}},
 				map[string]any{"task": task},

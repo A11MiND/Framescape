@@ -88,6 +88,17 @@ export interface MeResponse {
   balance: number
 }
 
+export interface Capabilities {
+  image: { max_n: number; max_prompt_chars: number }
+  video: {
+    duration_min: number
+    duration_max: number
+    max_prompt_chars: number
+    resolutions: string[]
+    ratios: string[]
+  }
+}
+
 export interface CreateJobResponse {
   biz_id: string
   status: string
@@ -252,6 +263,12 @@ export const api = {
     request<TokenPair>('POST', '/auth/login', { email, password }, { auth: false }),
   me: () => request<MeResponse>('GET', '/me'),
 
+  // PRD §10.5/§13.2's Capability Matrix — public (no auth), so it loads
+  // before login same as the trial below. Studio fetches this once and
+  // uses it to drive its duration/resolution/ratio <select> options
+  // instead of hardcoding them a second time client-side.
+  getCapabilities: () => request<Capabilities>('GET', '/capabilities', undefined, { auth: false }),
+
   // F1.2: anonymous single-image trial, gated server-side by device_id + IP.
   trialImage: (prompt: string, deviceId: string) =>
     request<{ image_url: string }>(
@@ -272,11 +289,12 @@ export const api = {
   resumeJob: (bizId: string, body: ResumeVideoSequenceRequest) =>
     request<void>('POST', `/jobs/${bizId}/resume`, body),
   cancelJob: (bizId: string) => request<void>('POST', `/jobs/${bizId}/cancel`),
-  // Node-retry: only supported for image.comic4's gen-one-panel and
-  // image.sequence's gen-one-shot (jobsvc.RetryNode's own doc covers why —
-  // both are single leaf tasks with string-only inputs, unlike video's
-  // array-typed reference fields or video.sequence's per-shot nested DAGs).
-  // Returns a brand new satellite job, not a patch to bizId's own run.
+  // Node-retry: supported for image.comic4's gen-one-panel, image.sequence's
+  // gen-one-shot, and video.single's gen (loopIndex -1 for that last one —
+  // it's not a loop iteration) — jobsvc.RetryNode's own doc covers why
+  // video.sequence's per-shot nodes don't fit (each is its own nested DAG,
+  // not a single leaf task). Returns a brand new satellite job, not a patch
+  // to bizId's own run.
   retryNode: (bizId: string, nodeName: string, loopIndex: number, promptOverride?: string) =>
     request<CreateJobResponse>('POST', `/jobs/${bizId}/nodes/${nodeName}/retry`, {
       loop_index: loopIndex,

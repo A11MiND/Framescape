@@ -10,15 +10,15 @@ import PhaseBadge, { phaseStyle } from './PhaseBadge'
 import { displayNodeError } from '../lib/errors'
 import { useToast } from './Toast'
 
-// Mirrors jobsvc.retryableNodes exactly — both are single leaf `task`
-// templates with string-only inputs, so a satellite retry (jobsvc.
-// RetryNode's own doc) can safely rebuild their inputs. Kept as a small
-// frontend allowlist rather than trusting the backend's error message
-// alone, so the retry button simply doesn't render for anything else
-// instead of rendering-then-failing.
+// Mirrors jobsvc.retryableNodes exactly — every one is a single leaf `task`
+// template, so a satellite retry (jobsvc.RetryNode's own doc) can safely
+// rebuild its inputs. Kept as a small frontend allowlist rather than
+// trusting the backend's error message alone, so the retry button simply
+// doesn't render for anything else instead of rendering-then-failing.
 const RETRYABLE_NODE: Record<string, string> = {
   'image.comic4': 'gen-one-panel',
   'image.sequence': 'gen-one-shot',
+  'video.single': 'gen',
 }
 const FAILED_PHASES = new Set(['Failed', 'Error', 'Timeout'])
 
@@ -140,7 +140,6 @@ export default function WorkflowGraph({ job }: { job: JobResponse }) {
           )}
           {selected.name &&
             selected.loopIndex !== undefined &&
-            selected.loopIndex >= 0 &&
             FAILED_PHASES.has(selected.phase) &&
             RETRYABLE_NODE[job.workflow_name] === selected.name && (
               <div className="mt-3 space-y-2 border-t border-zinc-800 pt-3">
