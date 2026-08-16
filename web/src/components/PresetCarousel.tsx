@@ -67,7 +67,7 @@ export default function PresetCarousel({
                     }
                   }}
                   title={p.prompt_fragment}
-                  className={`group relative h-20 w-20 shrink-0 cursor-pointer overflow-hidden rounded-xl border-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+                  className={`group relative h-28 w-28 shrink-0 cursor-pointer overflow-hidden rounded-xl border-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
                     active ? 'border-violet-500' : 'border-zinc-800 hover:border-zinc-700'
                   }`}
                 >
@@ -78,15 +78,23 @@ export default function PresetCarousel({
                       {t('presetCarousel.noCover')}
                     </div>
                   )}
-                  <div
-                    className={`absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/85 to-transparent px-1.5 pb-1 pt-3 text-left text-[11px] ${
-                      active ? 'text-violet-300' : 'text-zinc-200'
-                    }`}
-                  >
-                    {p.name}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-2 pb-1.5 pt-5 text-left">
+                    {/* Same badge treatment as /presets' library cards (F4.4's
+                        style_type pill) — the two pages read as different design
+                        systems otherwise, even though they show the same data.
+                        Suppressed when it's just the name again (every style
+                        preset today has style_type === name) — a category
+                        where that ever diverges is exactly when this earns
+                        its space back. */}
+                    {p.style_type && p.style_type !== p.name && (
+                      <span className="mb-1 inline-block rounded-full border border-white/30 px-1.5 py-0.5 text-[10px] text-zinc-200">
+                        {p.style_type}
+                      </span>
+                    )}
+                    <p className={`truncate text-xs font-medium ${active ? 'text-violet-300' : 'text-zinc-100'}`}>{p.name}</p>
                   </div>
                   {active && (
-                    <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-violet-500 text-[10px] text-white">
+                    <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-violet-500 text-xs text-white">
                       ✓
                     </span>
                   )}
@@ -104,7 +112,7 @@ export default function PresetCarousel({
                       // touch-only devices (no persistent :hover), also
                       // caught in code review. group-focus-within covers
                       // keyboard users tabbing onto the button itself.
-                      className="absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-black/70 text-[10px] text-zinc-300 opacity-60 transition hover:text-red-400 hover:opacity-100 focus:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400 group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-50"
+                      className="absolute left-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-xs text-zinc-300 opacity-60 transition hover:text-red-400 hover:opacity-100 focus:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400 group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-50"
                     >
                       ✕
                     </button>

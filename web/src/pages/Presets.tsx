@@ -32,14 +32,14 @@ export default function Presets() {
                   className="flex gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-4 transition hover:border-zinc-700"
                 >
                   {p.cover_url ? (
-                    <img src={p.cover_url} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
+                    <img src={p.cover_url} alt="" className="h-16 w-16 shrink-0 rounded-lg object-cover" />
                   ) : (
-                    <div className="h-14 w-14 shrink-0 rounded-lg bg-zinc-800" />
+                    <div className="h-16 w-16 shrink-0 rounded-lg bg-zinc-800" />
                   )}
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="truncate font-medium">{p.name}</p>
-                      {p.style_type && (
+                      {p.style_type && p.style_type !== p.name && (
                         <span className="shrink-0 rounded-full border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-500">
                           {p.style_type}
                         </span>
