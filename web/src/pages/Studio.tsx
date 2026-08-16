@@ -49,16 +49,72 @@ import { estimateWaitSeconds, formatWaitMinutes } from '../lib/durationEstimate'
 // six sidebar tabs. Every Spec field the old build could set, this one
 // still can — see the blueprint's capsule → Spec field table.
 
-const TAB_META_KEY: Record<Tab, { icon: string; blurbKey: string }> = {
-  'image.single': { icon: '🖼', blurbKey: 'studio.tabMeta.imageSingle' },
-  'image.batch': { icon: '▦', blurbKey: 'studio.tabMeta.imageBatch' },
-  'image.comic4': { icon: '🗯', blurbKey: 'studio.tabMeta.imageComic4' },
-  'image.sequence': { icon: '⛓', blurbKey: 'studio.tabMeta.imageSequence' },
-  'video.single': { icon: '🎬', blurbKey: 'studio.tabMeta.videoSingle' },
-  'video.sequence': { icon: '🎞', blurbKey: 'studio.tabMeta.videoSequence' },
+const TAB_META_KEY: Record<Tab, { blurbKey: string }> = {
+  'image.single': { blurbKey: 'studio.tabMeta.imageSingle' },
+  'image.batch': { blurbKey: 'studio.tabMeta.imageBatch' },
+  'image.comic4': { blurbKey: 'studio.tabMeta.imageComic4' },
+  'image.sequence': { blurbKey: 'studio.tabMeta.imageSequence' },
+  'video.single': { blurbKey: 'studio.tabMeta.videoSingle' },
+  'video.sequence': { blurbKey: 'studio.tabMeta.videoSequence' },
 }
 const TABS = Object.keys(TAB_META_KEY) as Tab[]
 const SLOT_LETTERS = 'ABCDEF'
+
+// Line-icon set for the format cards (§07's "不要用emoji" gap — same
+// reasoning as NotificationCenter's bell: emoji render inconsistently
+// across platforms and read as a placeholder, not a considered icon).
+// Plain stroke shapes, no fill, matching that bell icon's own style.
+function TabIcon({ tab, className }: { tab: Tab; className?: string }) {
+  const common = { viewBox: '0 0 20 20', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, className }
+  switch (tab) {
+    case 'image.single':
+      return (
+        <svg {...common}>
+          <rect x="2.5" y="3.5" width="15" height="13" rx="2" />
+          <circle cx="7" cy="8" r="1.3" />
+          <path d="M3.5 14.5l4-4 3 3 3.5-4.5 4.5 5.5" />
+        </svg>
+      )
+    case 'image.batch':
+      return (
+        <svg {...common}>
+          <rect x="6.5" y="2.5" width="11" height="11" rx="1.8" />
+          <rect x="2.5" y="6.5" width="11" height="11" rx="1.8" />
+        </svg>
+      )
+    case 'image.comic4':
+      return (
+        <svg {...common}>
+          <rect x="2.5" y="2.5" width="15" height="15" rx="1.5" />
+          <path d="M10 2.5v15M2.5 10h15" />
+        </svg>
+      )
+    case 'image.sequence':
+      return (
+        <svg {...common}>
+          <rect x="1.5" y="7" width="4.5" height="4.5" rx="1" />
+          <rect x="7.75" y="7" width="4.5" height="4.5" rx="1" />
+          <rect x="14" y="7" width="4.5" height="4.5" rx="1" />
+          <path d="M6 9.25h1.75M12.25 9.25h1.75" />
+        </svg>
+      )
+    case 'video.single':
+      return (
+        <svg {...common}>
+          <rect x="2.5" y="3.5" width="15" height="13" rx="2" />
+          <path d="M8 7.3l5 2.7-5 2.7z" />
+        </svg>
+      )
+    case 'video.sequence':
+      return (
+        <svg {...common}>
+          <rect x="2.5" y="3" width="15" height="14" rx="1.5" />
+          <path d="M2.5 6.7h15M2.5 13.3h15" />
+          <path d="M8 8.7l4 1.8-4 1.8z" />
+        </svg>
+      )
+  }
+}
 
 // video.sequence's shots need a stable identity per row for dnd-kit's
 // drag-reorder (array index isn't stable across a reorder) — this is the
@@ -514,18 +570,16 @@ export default function Studio() {
     <AppShell>
       <div className="mx-auto max-w-4xl space-y-8 px-6 py-10">
         <header className="text-center">
+          {/* A native <select> used to live here — its closed state could be
+              themed, but the open dropdown list is rendered by the OS/browser
+              and ignores nearly all CSS (the oversized, off-palette popup a
+              review caught). Since the format cards right below already are
+              a fully custom-styled way to switch tabs, this became a plain
+              label instead of rebuilding the same picker twice. */}
           <h1 className="text-3xl font-semibold tracking-tight">
-            <select
-              value={tab}
-              onChange={(e) => setTab(e.target.value as Tab)}
-              className="appearance-none border-b-2 border-dashed border-violet-500/60 bg-transparent px-1 text-violet-400 outline-none"
-            >
-              {TABS.map((tb) => (
-                <option key={tb} value={tb} className="bg-zinc-900 text-zinc-100">
-                  {t(WORKFLOW_LABEL_KEY[tb])}
-                </option>
-              ))}
-            </select>{' '}
+            <span className="border-b-2 border-dashed border-violet-500/60 px-1 text-violet-400">
+              {t(WORKFLOW_LABEL_KEY[tab])}
+            </span>{' '}
             {t('studio.headlineSuffix')}
           </h1>
           {isGuest && <p className="mt-2 text-sm text-zinc-500">{t('studio.guestHint')}</p>}
@@ -541,7 +595,7 @@ export default function Studio() {
                 tab === tb ? 'border-violet-500 bg-violet-500/10' : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700'
               }`}
             >
-              <p className="text-lg leading-none">{TAB_META_KEY[tb].icon}</p>
+              <TabIcon tab={tb} className={`h-5 w-5 ${tab === tb ? 'text-violet-400' : 'text-zinc-500'}`} />
               <p className={`mt-1.5 text-sm font-medium ${tab === tb ? 'text-violet-300' : 'text-zinc-200'}`}>
                 {t(WORKFLOW_LABEL_KEY[tb])}
               </p>
