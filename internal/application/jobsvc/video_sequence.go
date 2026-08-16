@@ -29,6 +29,7 @@ import (
 	"gorm.io/gorm"
 
 	"aigc-platform/internal/application/creditsvc"
+	"aigc-platform/internal/domain/capability"
 	"aigc-platform/internal/domain/prompt"
 	"aigc-platform/internal/domain/workflow"
 	"aigc-platform/internal/infra/persistence"
@@ -122,7 +123,7 @@ func (s *Service) createVideoSequence(ctx context.Context, userID uint64, spec S
 	if duration <= 0 {
 		duration = 5
 	}
-	if duration > 15 {
+	if duration > capability.VideoDurationMax {
 		duration = 15 // mirrors video.go's normalizeDuration clamp, so the hold matches what actually runs
 	}
 	ratio := spec.Ratio

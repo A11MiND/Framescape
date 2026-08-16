@@ -11,6 +11,7 @@ import (
 	"github.com/BabySid/aether/model"
 	"github.com/redis/go-redis/v9"
 
+	"aigc-platform/internal/domain/capability"
 	"aigc-platform/internal/infra/executor/assetstore"
 )
 
@@ -152,8 +153,8 @@ type videoRefs struct {
 // video_regen.go's VideoRegenConfig doc for why there's no other difference).
 func (b *videoBase) buildContent(ctx context.Context, r videoRefs) (content []VideoContentItem, mode string, ratio string, errOut *model.ExecOutputs) {
 	prompt := r.Prompt
-	if rn := []rune(prompt); len(rn) > 7000 {
-		prompt = string(rn[:7000]) // §3.2 hard cap
+	if rn := []rune(prompt); len(rn) > capability.VideoMaxPromptChars {
+		prompt = string(rn[:capability.VideoMaxPromptChars]) // §3.2 hard cap
 	}
 
 	hasFirstLast := r.FirstFrameAssetID != "" || r.LastFrameAssetID != ""
@@ -436,11 +437,11 @@ func normalizeDuration(s string) int {
 	if duration <= 0 {
 		duration = 5
 	}
-	if duration < 4 {
-		duration = 4
+	if duration < capability.VideoDurationMin {
+		duration = capability.VideoDurationMin
 	}
-	if duration > 15 {
-		duration = 15 // MiniMax hard limit, §3.2
+	if duration > capability.VideoDurationMax {
+		duration = capability.VideoDurationMax // MiniMax hard limit, §3.2
 	}
 	return duration
 }

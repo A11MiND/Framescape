@@ -10,6 +10,7 @@ import (
 	"github.com/BabySid/aether/executor"
 	"github.com/BabySid/aether/model"
 
+	"aigc-platform/internal/domain/capability"
 	"aigc-platform/internal/infra/executor/assetstore"
 )
 
@@ -74,8 +75,8 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 	if n <= 0 {
 		n = 1
 	}
-	if n > 9 {
-		n = 9 // MiniMax hard limit, PRD §3.1
+	if n > capability.ImageMaxN {
+		n = capability.ImageMaxN // MiniMax hard limit, PRD §3.1
 	}
 	if cfg.Model == "" {
 		cfg.Model = "image-01"
@@ -86,8 +87,8 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 	// §5.3 step 5 (full PromptCompiler length-budget/priority truncation)
 	// lands in W4; this is just a hard safety cap so we never send an
 	// over-limit request and get a guaranteed 2013.
-	if r := []rune(cfg.Prompt); len(r) > 1500 {
-		cfg.Prompt = string(r[:1500])
+	if r := []rune(cfg.Prompt); len(r) > capability.ImageMaxPromptChars {
+		cfg.Prompt = string(r[:capability.ImageMaxPromptChars])
 	}
 
 	var seed *int64

@@ -56,6 +56,7 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/auth/login", s.handleLogin)
 		v1.POST("/auth/refresh", s.handleRefresh)
 		v1.POST("/trial/image", s.handleTrialImage)
+		v1.GET("/capabilities", s.handleGetCapabilities)
 
 		authed := v1.Group("")
 		authed.Use(s.requireAuth())

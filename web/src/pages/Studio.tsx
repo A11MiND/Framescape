@@ -85,12 +85,30 @@ function useMe(enabled: boolean) {
   return useQuery({ queryKey: ['me'], queryFn: api.me, enabled })
 }
 
+// Static fallbacks, used only until GET /capabilities resolves (or if it
+// ever fails) — kept identical to the backend's own capability package so
+// there's no visible flash of different options, just a source-of-truth
+// swap once the fetch lands. See lib/api.ts's getCapabilities doc.
+const FALLBACK_BATCH_N = [2, 4, 6, 9]
+const FALLBACK_DURATIONS = [4, 5, 6, 8, 10, 12, 15]
+const FALLBACK_RESOLUTIONS = ['768P', '2K']
+
 export default function Studio() {
   const { t } = useTranslation()
   const accessToken = useAuthStore((s) => s.accessToken)
   const isGuest = !accessToken
   const navigate = useNavigate()
   const location = useLocation()
+
+  const capabilities = useQuery({ queryKey: ['capabilities'], queryFn: api.getCapabilities, staleTime: Infinity })
+  const batchNOptions = capabilities.data
+    ? FALLBACK_BATCH_N.filter((v) => v <= capabilities.data.image.max_n)
+    : FALLBACK_BATCH_N
+  const durationOptions = capabilities.data
+    ? FALLBACK_DURATIONS.filter((v) => v >= capabilities.data.video.duration_min && v <= capabilities.data.video.duration_max)
+    : FALLBACK_DURATIONS
+  const resolutionOptions = capabilities.data?.video.resolutions ?? FALLBACK_RESOLUTIONS
+  const ratioOptions = capabilities.data?.video.ratios ?? RATIO_VALUES
 
   const [tab, setTab] = useState<Tab>('image.single')
   const [text, setText] = useState(t('studio.examples.fox'))
@@ -459,7 +477,7 @@ export default function Studio() {
               </div>
 
               {comicMode === 'manual' ? (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {panels.map((p, i) => (
                     <textarea
                       key={i}
@@ -630,7 +648,7 @@ export default function Studio() {
               <Capsule>
                 <span className="text-zinc-500">{t('studio.capsule.count')}</span>
                 <select value={n} onChange={(e) => setN(Number(e.target.value))} className="bg-transparent text-zinc-100 outline-none">
-                  {[2, 4, 6, 9].map((v) => (
+                  {batchNOptions.map((v) => (
                     <option key={v} value={v} className="bg-zinc-900">
                       n={v}
                     </option>
@@ -649,7 +667,7 @@ export default function Studio() {
                   }
                   className="bg-transparent text-zinc-100 outline-none"
                 >
-                  {[4, 5, 6, 8, 10, 12, 15].map((v) => (
+                  {durationOptions.map((v) => (
                     <option key={v} value={v} className="bg-zinc-900">
                       {v}s
                     </option>
@@ -666,8 +684,11 @@ export default function Studio() {
                   onChange={(e) => setResolution(e.target.value as '768P' | '2K')}
                   className="bg-transparent text-zinc-100 outline-none"
                 >
-                  <option value="768P" className="bg-zinc-900">768P</option>
-                  <option value="2K" className="bg-zinc-900">2K</option>
+                  {resolutionOptions.map((r) => (
+                    <option key={r} value={r} className="bg-zinc-900">
+                      {r}
+                    </option>
+                  ))}
                 </select>
               </Capsule>
             )}
@@ -681,7 +702,7 @@ export default function Studio() {
                   disabled={refMode !== 'none'}
                   className="bg-transparent text-zinc-100 outline-none disabled:cursor-not-allowed"
                 >
-                  {RATIO_VALUES.map((r) => (
+                  {ratioOptions.map((r) => (
                     <option key={r} value={r} className="bg-zinc-900">
                       {r}
                     </option>
@@ -695,7 +716,7 @@ export default function Studio() {
                 <Capsule>
                   <span className="text-zinc-500">{t('studio.capsule.ratio')}</span>
                   <select value={vsRatio} onChange={(e) => setVsRatio(e.target.value as (typeof RATIO_VALUES)[number])} className="bg-transparent text-zinc-100 outline-none">
-                    {RATIO_VALUES.map((r) => (
+                    {ratioOptions.map((r) => (
                       <option key={r} value={r} className="bg-zinc-900">
                         {r}
                       </option>
