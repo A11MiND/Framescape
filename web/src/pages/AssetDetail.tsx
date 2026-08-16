@@ -1,5 +1,5 @@
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import AppShell from '../components/AppShell'
@@ -25,6 +25,7 @@ export default function AssetDetail() {
   const { assetId } = useParams<{ assetId: string }>()
   const navigate = useNavigate()
   const pushToast = useToast()
+  const qc = useQueryClient()
 
   const asset = useQuery({
     queryKey: ['asset-detail', assetId],
@@ -42,6 +43,12 @@ export default function AssetDetail() {
     mutationFn: () => api.deleteAsset(assetId!),
     onSuccess: () => navigate('/assets'),
     onError: () => pushToast(t('assets.deleteFailed'), () => del.mutate()),
+  })
+
+  const setPublic = useMutation({
+    mutationFn: (isPublic: boolean) => api.setAssetPublic(assetId!, isPublic),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['asset-detail', assetId] }),
+    onError: () => pushToast(t('community.publishFailed')),
   })
 
   function regenerate() {
@@ -176,6 +183,17 @@ export default function AssetDetail() {
               >
                 {t('assetDetail.download')}
               </a>
+              <button
+                onClick={() => setPublic.mutate(!a.is_public)}
+                disabled={setPublic.isPending}
+                className={`rounded-lg border px-4 py-2 text-sm transition disabled:opacity-50 ${
+                  a.is_public
+                    ? 'border-violet-700 text-violet-300 hover:border-violet-500'
+                    : 'border-zinc-700 text-zinc-200 hover:border-zinc-600 hover:bg-zinc-800'
+                }`}
+              >
+                {a.is_public ? t('community.unpublish') : t('community.publish')}
+              </button>
               <button
                 onClick={() => del.mutate()}
                 disabled={del.isPending}

@@ -34,6 +34,7 @@
     "projects": "项目",
     "characters": "角色",
     "presets": "预设",
+    "community": "社区",
     "switchLanguage": "切换语言",
     "logout": "退出登录"
   },
@@ -103,6 +104,14 @@
     "create": "创建预设",
     "createFailed": "创建失败，请重试",
     "deleteFailed": "删除失败，请重试"
+  },
+  "community": {
+    "title": "社区",
+    "subtitle": "浏览大家发布的作品",
+    "empty": "还没有人发布作品，来做第一个吧",
+    "publish": "发布到社区",
+    "unpublish": "从社区移除",
+    "publishFailed": "操作失败，请重试"
   },
   "workflow": {
     "imageSingle": "单图",

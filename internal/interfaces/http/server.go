@@ -81,6 +81,7 @@ func (s *Server) Router() *gin.Engine {
 		authed.POST("/assets/upload-url", s.handleAssetUploadURL)
 		authed.POST("/assets/:bizID/complete", s.handleCompleteAsset)
 		authed.GET("/assets", s.handleListAssets)
+		authed.GET("/community/feed", s.handleCommunityFeed)
 		authed.GET("/assets/:bizID", s.handleGetAsset)
 		authed.PATCH("/assets/:bizID", s.handleUpdateAsset)
 		authed.DELETE("/assets/:bizID", s.handleDeleteAsset)

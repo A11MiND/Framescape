@@ -105,6 +105,49 @@ func (s *Server) handleListAssets(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"assets": out})
 }
 
+// handleCommunityFeed is the community feed's read side (migration 00010):
+// every user's own published assets, newest-published-first, across every
+// account — deliberately the one asset list in this codebase NOT scoped to
+// "WHERE user_id = caller". Only ever returns rows the owner explicitly
+// flagged is_public via handleUpdateAsset, and only a minimal projection
+// (no project_id, no owner identity) — a viewer here isn't the owner, so
+// nothing owner-specific belongs in the response. See migration 00010's own
+// doc for the moderation gap this doesn't attempt to close.
+func (s *Server) handleCommunityFeed(c *gin.Context) {
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "60"))
+	if err != nil || limit <= 0 || limit > 200 {
+		limit = 60
+	}
+	var rows []persistence.Asset
+	if err := s.db.WithContext(c.Request.Context()).
+		Where("is_public = ? AND deleted_at IS NULL", true).
+		Order("published_at DESC").Limit(limit).Find(&rows).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "list community feed"))
+		return
+	}
+
+	out := make([]gin.H, 0, len(rows))
+	for _, a := range rows {
+		var meta map[string]any
+		if len(a.Meta) > 0 {
+			_ = json.Unmarshal(a.Meta, &meta)
+		}
+		out = append(out, gin.H{
+			"biz_id":         a.BizID,
+			"type":           a.Type,
+			"public_url":     a.PublicURL,
+			"width":          a.Width,
+			"height":         a.Height,
+			"resolution_tag": a.ResolutionTag,
+			"published_at":   a.PublishedAt,
+			// prompt only — meta can carry seed/model/minimax_task_id too,
+			// none of which mean anything to another viewer.
+			"prompt": meta["prompt"],
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"assets": out})
+}
+
 // resolveProjectID turns a project biz_id into its numeric id, scoped to
 // userID so one user can't file an asset under another's project — same
 // ownership-check shape as resolveCharacters in jobsvc.
@@ -124,6 +167,11 @@ func (s *Server) resolveProjectID(ctx context.Context, userID uint64, bizID stri
 type updateAssetRequest struct {
 	ProjectID *string `json:"project_id"`
 	Clear     bool    `json:"clear_project"`
+	// IsPublic backs the community feed (migration 00010) — publishing/
+	// unpublishing an asset the caller already owns, never a way to touch
+	// anyone else's (the WHERE clause below still filters on user_id, same
+	// as every other field this handler can change).
+	IsPublic *bool `json:"is_public"`
 }
 
 func (s *Server) handleUpdateAsset(c *gin.Context) {
@@ -132,17 +180,27 @@ func (s *Server) handleUpdateAsset(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
 		return
 	}
-	var projectID *uint64
+
+	updates := map[string]any{}
 	if req.Clear {
-		projectID = nil
+		updates["project_id"] = nil
 	} else if req.ProjectID != nil {
 		resolved, ok := s.resolveProjectID(c.Request.Context(), userID(c), *req.ProjectID)
 		if !ok {
 			c.JSON(http.StatusNotFound, errBody("not_found", "project not found"))
 			return
 		}
-		projectID = &resolved
-	} else {
+		updates["project_id"] = resolved
+	}
+	if req.IsPublic != nil {
+		updates["is_public"] = *req.IsPublic
+		if *req.IsPublic {
+			updates["published_at"] = time.Now()
+		} else {
+			updates["published_at"] = nil
+		}
+	}
+	if len(updates) == 0 {
 		c.JSON(http.StatusBadRequest, errBody("bad_request", "no fields to update"))
 		return
 	}
@@ -155,7 +213,7 @@ func (s *Server) handleUpdateAsset(c *gin.Context) {
 	// handler live).
 	res := s.db.WithContext(c.Request.Context()).Model(&persistence.Asset{}).
 		Where("biz_id = ? AND user_id = ? AND deleted_at IS NULL", c.Param("bizID"), userID(c)).
-		Update("project_id", projectID)
+		Updates(updates)
 	if res.Error != nil {
 		c.JSON(http.StatusInternalServerError, errBody("internal", "update asset"))
 		return
@@ -413,6 +471,7 @@ func assetToJSON(a persistence.Asset, projectBizID string) gin.H {
 		"resolution_tag": a.ResolutionTag,
 		"created_at":     a.CreatedAt,
 		"project_id":     projectBizID,
+		"is_public":      a.IsPublic,
 	}
 }
 

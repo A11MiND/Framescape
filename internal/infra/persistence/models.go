@@ -75,8 +75,13 @@ type Asset struct {
 
 	Meta             []byte     `gorm:"column:meta;type:json"`
 	ModerationStatus string     `gorm:"column:moderation_status"`
-	DeletedAt        *time.Time `gorm:"column:deleted_at"`
-	CreatedAt        time.Time  `gorm:"column:created_at"`
+	// IsPublic/PublishedAt back the community feed (migration 00010's own
+	// doc on why this is a separate opt-in flag, not a loosened ownership
+	// check on the existing asset endpoints).
+	IsPublic    bool       `gorm:"column:is_public"`
+	PublishedAt *time.Time `gorm:"column:published_at"`
+	DeletedAt   *time.Time `gorm:"column:deleted_at"`
+	CreatedAt   time.Time  `gorm:"column:created_at"`
 }
 
 func (Asset) TableName() string { return "assets" }

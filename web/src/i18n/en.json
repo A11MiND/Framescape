@@ -34,6 +34,7 @@
     "projects": "Projects",
     "characters": "Characters",
     "presets": "Presets",
+    "community": "Community",
     "switchLanguage": "Switch language",
     "logout": "Sign out"
   },
@@ -103,6 +104,14 @@
     "create": "Create preset",
     "createFailed": "Failed to create, please retry",
     "deleteFailed": "Failed to delete, please retry"
+  },
+  "community": {
+    "title": "Community",
+    "subtitle": "Browse what everyone else has published",
+    "empty": "No one has published anything yet — be the first",
+    "publish": "Publish to community",
+    "unpublish": "Remove from community",
+    "publishFailed": "Failed, please retry"
   },
   "workflow": {
     "imageSingle": "Single image",

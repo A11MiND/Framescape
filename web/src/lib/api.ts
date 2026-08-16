@@ -149,6 +149,7 @@ export interface AssetResponse {
   // "" when unassigned — never null/undefined, matches assetToJSON's own
   // always-present-string convention (Go's projectBizID resolves to "").
   project_id: string
+  is_public: boolean
   // Only present on the single-asset GET (assetDetailJSON), never on
   // listAssets' lean per-row projection — see that handler's own doc.
   source?: string
@@ -158,6 +159,20 @@ export interface AssetResponse {
   // file_id (provider_files) — only present on the single-asset GET, same
   // as source/meta/job_biz_id above.
   provider_cache?: { cached: boolean; expire_at?: string | null; expired?: boolean }
+}
+
+// CommunityAsset is handleCommunityFeed's own minimal projection — not
+// AssetResponse, deliberately: a viewer here isn't the owner, so this never
+// carries project_id, full meta, or anything else owner-specific.
+export interface CommunityAsset {
+  biz_id: string
+  type: string
+  public_url: string
+  width: number
+  height: number
+  resolution_tag: string
+  published_at: string
+  prompt?: string
 }
 
 export interface Project {
@@ -390,6 +405,10 @@ export const api = {
   // "the user picked something in the project selector".
   setAssetProject: (bizId: string, projectId?: string) =>
     request<void>('PATCH', `/assets/${bizId}`, projectId ? { project_id: projectId } : { clear_project: true }),
+  setAssetPublic: (bizId: string, isPublic: boolean) =>
+    request<void>('PATCH', `/assets/${bizId}`, { is_public: isPublic }),
+  listCommunityFeed: (limit?: number) =>
+    request<{ assets: CommunityAsset[] }>('GET', limit ? `/community/feed?limit=${limit}` : '/community/feed'),
 
   listProjects: () => request<{ projects: Project[] }>('GET', '/projects'),
   createProject: (name: string, description: string) =>

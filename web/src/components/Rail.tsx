@@ -14,6 +14,7 @@ const LINKS = [
   { to: '/projects', labelKey: 'rail.projects', icon: '▧' },
   { to: '/characters', labelKey: 'rail.characters', icon: '☺' },
   { to: '/presets', labelKey: 'rail.presets', icon: '◈' },
+  { to: '/community', labelKey: 'rail.community', icon: '⬡' },
 ]
 
 // Left icon rail replacing the old top bar on desktop — six tab labels plus
