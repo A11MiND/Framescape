@@ -383,6 +383,10 @@
       "pickHint": "选择要引用的素材",
       "empty": "还没有素材"
     },
+    "rewrite": {
+      "button": "AI 改写提示词",
+      "failed": "改写失败，请重试"
+    },
     "presetSaveFailed": "预设保存失败",
     "breakdown": {
       "toggle": "点击查看费用明细",

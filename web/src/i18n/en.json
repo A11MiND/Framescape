@@ -383,6 +383,10 @@
       "pickHint": "Pick an asset to reference",
       "empty": "No assets yet"
     },
+    "rewrite": {
+      "button": "AI rewrite prompt",
+      "failed": "Rewrite failed, please retry"
+    },
     "presetSaveFailed": "Failed to save preset",
     "breakdown": {
       "toggle": "Click for a cost breakdown",

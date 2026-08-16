@@ -1,8 +1,20 @@
 import { useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api, type AssetResponse } from '../lib/api'
 import { useClickOutside } from '../hooks/useClickOutside'
+
+// Plain 4-point sparkle, straight lines only (no hand-drawn curves) —
+// §07's "✨ AI 改寫按鈕，不要用emoji" ask, same reasoning as every other
+// icon replaced this session (NotificationCenter's bell, the format
+// cards): a real glyph instead of a platform-inconsistent emoji.
+function SparkleIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" className={className}>
+      <path d="M10 1l2.2 6.8L19 10l-6.8 2.2L10 19l-2.2-6.8L1 10l6.8-2.2z" />
+    </svg>
+  )
+}
 
 // §04's "@ 引用素材語法" gap — jimeng's composer lets typing "@" mid-prompt
 // open a picker and insert a token like "@圖片1" that also feeds that asset
@@ -20,6 +32,7 @@ export function MentionTextarea({
   rows = 3,
   placeholder,
   className = '',
+  enableRewrite = true,
 }: {
   value: string
   onChange: (v: string) => void
@@ -27,11 +40,19 @@ export function MentionTextarea({
   rows?: number
   placeholder?: string
   className?: string
+  // The ✨ AI-rewrite corner button — on by default since every current
+  // caller is a free-text prompt field it makes sense for; a caller can
+  // still opt out if a future use of this component isn't one.
+  enableRewrite?: boolean
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLTextAreaElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const rewrite = useMutation({
+    mutationFn: () => api.rewritePrompt(value),
+    onSuccess: (res) => onChange(res.text),
+  })
   // Covers the general "clicked elsewhere on the page" case; the
   // asset-picker buttons' own onMouseDown preventDefault (below) is a
   // separate, still-necessary mechanism — it stops the textarea from
@@ -84,6 +105,18 @@ export function MentionTextarea({
         placeholder={placeholder}
         className={`w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 p-4 outline-none focus:border-violet-500 ${className}`}
       />
+      {enableRewrite && (
+        <button
+          type="button"
+          onClick={() => rewrite.mutate()}
+          disabled={rewrite.isPending || !value.trim()}
+          title={t('studio.rewrite.button')}
+          className="absolute bottom-2.5 right-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900/90 text-violet-400 transition hover:bg-zinc-800 hover:text-violet-300 disabled:opacity-40"
+        >
+          <SparkleIcon className={`h-4 w-4 ${rewrite.isPending ? 'animate-pulse' : ''}`} />
+        </button>
+      )}
+      {rewrite.isError && <p className="mt-1 text-xs text-red-400">{t('studio.rewrite.failed')}</p>}
       {open && (
         <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-xl border border-zinc-800 bg-zinc-900 p-2 shadow-xl">
           <p className="mb-1.5 px-1 text-[11px] uppercase tracking-wide text-zinc-500">{t('studio.mention.pickHint')}</p>

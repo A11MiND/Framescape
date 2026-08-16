@@ -69,6 +69,7 @@ func (s *Server) Router() *gin.Engine {
 		authed.Use(s.requireAuth())
 		authed.GET("/me", s.handleMe)
 		authed.PATCH("/me/password", s.handleChangePassword)
+		authed.POST("/prompts/rewrite", s.handleRewritePrompt)
 		authed.POST("/jobs", s.handleCreateJob)
 		authed.GET("/jobs", s.handleListJobs)
 		authed.POST("/jobs/estimate", s.handleEstimateJob)

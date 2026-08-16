@@ -310,6 +310,7 @@ export const api = {
   me: () => request<MeResponse>('GET', '/me'),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<void>('PATCH', '/me/password', { current_password: currentPassword, new_password: newPassword }),
+  rewritePrompt: (text: string) => request<{ text: string }>('POST', '/prompts/rewrite', { text }),
 
   // PRD §10.5/§13.2's Capability Matrix — public (no auth), so it loads
   // before login same as the trial below. Studio fetches this once and
