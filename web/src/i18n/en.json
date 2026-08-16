@@ -95,7 +95,14 @@
       "composition": "Composition",
       "lighting": "Lighting",
       "camera": "Camera"
-    }
+    },
+    "new": "+ New preset",
+    "namePlaceholder": "Preset name",
+    "fragmentPlaceholder": "Prompt fragment (sent straight to the generation model, e.g. watercolor style, soft edges)",
+    "styleTypePlaceholder": "Style tag (optional, for style-category presets, e.g. watercolor)",
+    "create": "Create preset",
+    "createFailed": "Failed to create, please retry",
+    "deleteFailed": "Failed to delete, please retry"
   },
   "workflow": {
     "imageSingle": "Single image",

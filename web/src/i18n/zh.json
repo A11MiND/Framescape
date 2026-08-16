@@ -95,7 +95,14 @@
       "composition": "构图",
       "lighting": "光线",
       "camera": "镜头"
-    }
+    },
+    "new": "+ 新建预设",
+    "namePlaceholder": "预设名称",
+    "fragmentPlaceholder": "提示词片段（英文，直接传给生成模型，例如 watercolor style, soft edges）",
+    "styleTypePlaceholder": "风格标签（可选，用于风格类预设，如 水彩）",
+    "create": "创建预设",
+    "createFailed": "创建失败，请重试",
+    "deleteFailed": "删除失败，请重试"
   },
   "workflow": {
     "imageSingle": "单图",
