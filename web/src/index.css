@@ -7,9 +7,45 @@ html {
 
 body {
   margin: 0;
-  background-color: #09090b; /* zinc-950 */
-  color: #fafafa; /* zinc-50 */
+  background-color: var(--color-zinc-950);
+  color: var(--color-zinc-50);
   font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* §07/09's "淺色主題" gap — PRD §19.2 keeps dark as the default and marks
+   light P2, so this stays an opt-in via /settings rather than a system
+   `prefers-color-scheme` follow. Every component in this app was written
+   against the literal zinc/violet/red/amber/emerald Tailwind scale
+   (bg-zinc-950, text-violet-400, etc.), never against semantic tokens —
+   rewriting every className across ~30 files to a separate token system
+   would be a much larger, riskier change than this app's P0/P1 work
+   justified touching. Tailwind v4 already expresses every utility class as
+   `var(--color-zinc-950)` etc. (see the compiled CSS), so redefining those
+   same custom properties under [data-theme="light"] re-themes the whole
+   app through the cascade without editing a single component — the zinc
+   ramp is inverted end-to-end (950 <-> 50, 900 <-> 100, ...), and the
+   light-mode-only accent shades (violet/red/amber/emerald 300/400, used as
+   light-on-dark text colors) are darkened to their ~600 equivalents so
+   text stays legible on a light ground instead of washing out.
+   setStoredTheme (lib/theme.ts) is what actually sets this attribute. */
+[data-theme='light'] {
+  color-scheme: light;
+  --color-zinc-50: oklch(14.1% .005 285.823);
+  --color-zinc-100: oklch(21% .006 285.885);
+  --color-zinc-200: oklch(27.4% .006 286.033);
+  --color-zinc-300: oklch(37% .013 285.805);
+  --color-zinc-400: oklch(44.2% .017 285.786);
+  --color-zinc-500: oklch(55.2% .016 285.938);
+  --color-zinc-600: oklch(70.5% .015 286.067);
+  --color-zinc-700: oklch(87.1% .006 286.286);
+  --color-zinc-800: oklch(92% .004 286.32);
+  --color-zinc-900: oklch(96.7% .001 286.375);
+  --color-zinc-950: oklch(98.5% 0 none);
+  --color-violet-300: oklch(49% .22 293);
+  --color-violet-400: oklch(54.1% .281 293.009);
+  --color-red-400: oklch(57.7% .245 27.325);
+  --color-amber-400: oklch(66.6% .179 58.318);
+  --color-emerald-400: oklch(59.6% .145 163.225);
 }
 
 /* Bar-wave loader (GenerationProgress) — Tailwind has no built-in keyframes

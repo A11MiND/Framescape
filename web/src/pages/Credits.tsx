@@ -1,14 +1,17 @@
-import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api, type CreditLedgerEntry } from '../lib/api'
 import AppShell from '../components/AppShell'
 import AnimatedNumber from '../components/AnimatedNumber'
+import { useToast } from '../components/Toast'
 
 // F1.3's balance/ledger page — `held` never had an out beyond the raw
 // number that used to sit unused in credit_accounts (the blueprint's own
 // gap note); this is its first display.
 export default function Credits() {
   const { t } = useTranslation()
+  const qc = useQueryClient()
+  const pushToast = useToast()
   const balance = useQuery({ queryKey: ['credits', 'balance'], queryFn: api.creditsBalance })
   const ledger = useInfiniteQuery({
     queryKey: ['credits', 'ledger'],
@@ -17,12 +20,34 @@ export default function Credits() {
     getNextPageParam: (last) => last.next_cursor,
   })
 
+  // §07's "充值入口" gap — see handleCreditsTopup's own doc for why this is
+  // a self-serve demo top-up rather than a real payment flow: no payment
+  // fields are ever collected here, it just credits the account.
+  const topup = useMutation({
+    mutationFn: () => api.creditsTopup(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['credits'] })
+      qc.invalidateQueries({ queryKey: ['me'] })
+    },
+    onError: () => pushToast(t('credits.topupFailed'), () => topup.mutate()),
+  })
+
   const entries = ledger.data?.pages.flatMap((p) => p.entries) ?? []
 
   return (
     <AppShell>
       <div className="mx-auto max-w-3xl px-6 py-8">
-        <h1 className="mb-6 text-lg font-medium">{t('credits.title')}</h1>
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-lg font-medium">{t('credits.title')}</h1>
+          <button
+            onClick={() => topup.mutate()}
+            disabled={topup.isPending}
+            title={t('credits.topupTooltip')}
+            className="rounded-lg bg-violet-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-violet-400 disabled:opacity-50"
+          >
+            {topup.isPending ? t('credits.topupPending') : t('credits.topupButton')}
+          </button>
+        </div>
 
         <div className="mb-8 grid grid-cols-2 gap-3">
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">

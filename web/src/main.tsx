@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import './i18n'
+import './lib/theme'
 import App from './App.tsx'
 import { ToastProvider } from './components/Toast.tsx'
 

@@ -5,6 +5,7 @@ import { api } from '../lib/api'
 import { useAuthStore } from '../lib/authStore'
 import { setStoredLang, type Lang } from '../i18n'
 import AnimatedNumber from './AnimatedNumber'
+import NotificationCenter from './NotificationCenter'
 
 const LINKS = [
   { to: '/', labelKey: 'rail.generate', icon: '✦', end: true },
@@ -89,9 +90,21 @@ export default function Rail() {
         </button>
         {accessToken ? (
           <>
+            <NotificationCenter />
             <NavLink to="/credits" className="flex shrink-0 flex-col items-center text-[11px] text-violet-400 hover:text-violet-300">
               <span className="text-sm">✦</span>
               <AnimatedNumber value={me.data?.balance ?? 0} className="font-mono" />
+            </NavLink>
+            <NavLink
+              to="/settings"
+              title={t('settings.title')}
+              className={({ isActive }) =>
+                `flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs transition ${
+                  isActive ? 'border-violet-500 text-violet-300' : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                }`
+              }
+            >
+              ⚙
             </NavLink>
             <button
               onClick={logout}

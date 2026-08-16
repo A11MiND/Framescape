@@ -9,6 +9,7 @@ import Jobs from './pages/Jobs'
 import JobDetail from './pages/JobDetail'
 import Credits from './pages/Credits'
 import Projects from './pages/Projects'
+import Settings from './pages/Settings'
 import { useAuthStore } from './lib/authStore'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -90,6 +91,14 @@ export default function App() {
         element={
           <RequireAuth>
             <Projects />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <RequireAuth>
+            <Settings />
           </RequireAuth>
         }
       />
