@@ -175,7 +175,11 @@ export default function Studio() {
   const ratioOptions = capabilities.data?.video.ratios ?? RATIO_VALUES
 
   const [tab, setTab] = useState<Tab>('image.single')
-  const [text, setText] = useState(t('studio.examples.fox'))
+  // Starts empty, not pre-filled with the example — a filled composer
+  // meant deleting placeholder text before typing your own prompt, every
+  // time (§07 gap: found live during review). studio.examples.rooftop
+  // already covers the same job as a real placeholder below.
+  const [text, setText] = useState('')
   const [n, setN] = useState(4)
   const [panels, setPanels] = useState(['', '', '', ''])
   const [shots, setShots] = useState([''])
@@ -201,7 +205,7 @@ export default function Studio() {
   const [showBreakdown, setShowBreakdown] = useState(false)
 
   // video.single-only state (F6.1-F6.5).
-  const [vText, setVText] = useState(t('studio.examples.foxVideo'))
+  const [vText, setVText] = useState('')
   const [duration, setDuration] = useState(5)
   const [resolution, setResolution] = useState<'768P' | '2K'>('768P')
   const [ratio, setRatio] = useState<(typeof RATIO_VALUES)[number]>('16:9')

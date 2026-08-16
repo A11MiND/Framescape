@@ -106,9 +106,9 @@
     "videoSequence": "Video sequence"
   },
   "shotMode": {
-    "r2va": "r2va · character anchor",
-    "t2va": "t2va · text only",
-    "i2va": "i2va · tail-frame continuity"
+    "r2va": "Character anchor",
+    "t2va": "Text only",
+    "i2va": "Tail-frame continuity"
   },
   "jobs": {
     "empty": "No jobs yet — generate something in the workshop",

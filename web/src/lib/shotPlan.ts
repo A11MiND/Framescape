@@ -15,7 +15,12 @@ export function shotMode(idx: number, recalibrateEvery: number, hasCharacterAnch
 }
 
 // See jobResult.ts's WORKFLOW_LABEL_KEY doc for why this is a key map, not
-// resolved strings — callers do `t(SHOT_MODE_LABEL_KEY[mode])`.
+// resolved strings — callers do `t(SHOT_MODE_LABEL_KEY[mode])`. The
+// translated strings themselves no longer echo the raw r2va/t2va/i2va
+// codes (§07 gap: a user reading "t2va" on a shot card had no way to know
+// what it meant) — the mode name is an internal/backend concept
+// (video_sequence.go's own doc), what a user needs is just what continuity
+// strategy that shot uses.
 export const SHOT_MODE_LABEL_KEY: Record<ShotMode, string> = {
   r2va: 'shotMode.r2va',
   t2va: 'shotMode.t2va',
