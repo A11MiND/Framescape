@@ -25,18 +25,18 @@ export default function Presets() {
             <p className="mb-3 text-xs uppercase tracking-wide text-zinc-500">
               {t(`presets.category.${category}`, category)}
             </p>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {items.map((p) => (
                 <div
                   key={p.biz_id}
-                  className="flex gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-4 transition hover:border-zinc-700"
+                  className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 transition hover:border-zinc-700"
                 >
                   {p.cover_url ? (
-                    <img src={p.cover_url} alt="" className="h-16 w-16 shrink-0 rounded-lg object-cover" />
+                    <img src={p.cover_url} alt="" className="aspect-square w-full object-cover" />
                   ) : (
-                    <div className="h-16 w-16 shrink-0 rounded-lg bg-zinc-800" />
+                    <div className="aspect-square w-full bg-zinc-800" />
                   )}
-                  <div className="min-w-0">
+                  <div className="p-4">
                     <div className="flex items-center gap-2">
                       <p className="truncate font-medium">{p.name}</p>
                       {p.style_type && p.style_type !== p.name && (
