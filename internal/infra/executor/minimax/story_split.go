@@ -23,6 +23,12 @@ const (
 type StorySplitConfig struct {
 	Story  string `json:"story"`
 	UserID string `json:"user-id"`
+	// SourceImageAssetID rides along unchanged into every generated panel's
+	// item map (same "carries no meaning to this executor, just needs to
+	// reach minimax.image" reasoning as UserID above) — jobsvc.go's own doc
+	// on Spec.SourceImageAssetID covers why every image.* mode now accepts
+	// this the same way.
+	SourceImageAssetID string `json:"source-image-asset-id"`
 }
 
 // StorySplitPlugin is minimax.text.split_story: asks MiniMax-M3 to turn one
@@ -87,7 +93,7 @@ func (p *StorySplitPlugin) Execute(ctx context.Context, req *executor.ExecuteReq
 	panels := parsePanels(resp.Choices[0].Message.Content, story)
 	items := make([]map[string]string, len(panels))
 	for i, panelText := range panels {
-		items[i] = map[string]string{"prompt": panelText, "user-id": cfg.UserID}
+		items[i] = map[string]string{"prompt": panelText, "user-id": cfg.UserID, "source-image-asset-id": cfg.SourceImageAssetID}
 	}
 
 	costYuan := float64(resp.Usage.PromptTokens)/1_000_000*textInputYuanPerM +

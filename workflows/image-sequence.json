@@ -60,6 +60,7 @@
             "parameters": [
               { "name": "prompt", "type": "string" },
               { "name": "seed", "type": "string" },
+              { "name": "source-image-asset-id", "type": "string" },
               { "name": "user-id", "type": "string" },
               { "name": "n", "type": "string", "value": "1" }
             ]

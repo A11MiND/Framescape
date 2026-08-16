@@ -117,7 +117,15 @@ func (s *Service) createVideoSequence(ctx context.Context, userID uint64, spec S
 	if err != nil {
 		return nil, err
 	}
-	characterRefAssetID := s.characterRefAsset(ctx, userID, spec.Characters)
+	// Explicit reference wins over a bound character's own ref image, same
+	// "explicit override, else a bound character's own value wins"
+	// precedence as prompt.Compile's seed resolution (jobsvc.go's own
+	// doc). Recomputed identically here and in createVideoSequence — both
+	// must derive the same plan from the same persisted Spec.
+	characterRefAssetID := spec.SourceImageAssetID
+	if characterRefAssetID == "" {
+		characterRefAssetID = s.characterRefAsset(ctx, userID, spec.Characters)
+	}
 
 	duration := spec.DurationSeconds
 	if duration <= 0 {
@@ -456,7 +464,15 @@ func (s *Service) Resume(ctx context.Context, userID uint64, bizID string, req R
 	if err != nil {
 		return err
 	}
-	characterRefAssetID := s.characterRefAsset(ctx, userID, spec.Characters)
+	// Explicit reference wins over a bound character's own ref image, same
+	// "explicit override, else a bound character's own value wins"
+	// precedence as prompt.Compile's seed resolution (jobsvc.go's own
+	// doc). Recomputed identically here and in createVideoSequence — both
+	// must derive the same plan from the same persisted Spec.
+	characterRefAssetID := spec.SourceImageAssetID
+	if characterRefAssetID == "" {
+		characterRefAssetID = s.characterRefAsset(ctx, userID, spec.Characters)
+	}
 	plans := planShots(spec.Shots, characters, presets, characterRefAssetID, spec.RecalibrateEvery)
 
 	duration := spec.DurationSeconds

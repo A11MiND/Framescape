@@ -58,7 +58,14 @@ type Spec struct {
 	Characters []CharacterSlot `json:"characters,omitempty"` // F3.2
 	PresetIDs  []string        `json:"preset_ids,omitempty"` // F4.3
 	Seed       *int64          `json:"seed,omitempty"`       // explicit override; else a bound character's fixed seed wins
-	// SourceImageAssetID is F5.8's image-to-image input, image.single only.
+	// SourceImageAssetID is F5.8's image-to-image input — originally
+	// image.single only, extended to every image.* mode (§07 gap: a user
+	// asked why reference-image support wasn't universal) since
+	// minimax.image's subject_reference is already per-call, not tied to
+	// any one workflow shape; image.batch applies it to the whole n-batch,
+	// image.comic4/image.sequence apply it to every panel/shot the same
+	// way they already share one seed (F5.5's "同 seed" reasoning extends
+	// unchanged to "同 reference").
 	SourceImageAssetID string `json:"source_image_asset_id,omitempty"`
 
 	// video.single only (F6.1-F6.3; PRD §3.2). Exactly one of
@@ -176,6 +183,7 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 		compiled := prompt.Compile(prompt.Input{Text: spec.Text, Characters: characters, Presets: presets, Seed: spec.Seed})
 		args["prompt"] = compiled.Prompt
 		args["seed"] = formatSeed(compiled.Seed)
+		args["source-image-asset-id"] = spec.SourceImageAssetID
 		n := spec.N
 		if n <= 0 {
 			n = 4
@@ -198,7 +206,10 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 			panels := make([]map[string]any, 4)
 			for i, panelText := range spec.Panels {
 				compiled := prompt.Compile(prompt.Input{Text: panelText, Characters: characters, Presets: presets, Seed: spec.Seed})
-				panels[i] = map[string]any{"prompt": compiled.Prompt, "seed": formatSeed(compiled.Seed), "user-id": strconv.FormatUint(userID, 10)}
+				panels[i] = map[string]any{
+					"prompt": compiled.Prompt, "seed": formatSeed(compiled.Seed),
+					"source-image-asset-id": spec.SourceImageAssetID, "user-id": strconv.FormatUint(userID, 10),
+				}
 			}
 			args["panels"] = panels
 			// Per-node, not EstimateImageCredits(4): each panel is its own
@@ -212,6 +223,7 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 			// no character/preset compilation on the auto-split path, see
 			// story_split.go's doc.
 			args["story"] = spec.Story
+			args["source-image-asset-id"] = spec.SourceImageAssetID
 			estimatedCredits = creditsvc.EstimatePerNodeImageCredits(4) + creditsvc.EstimateStorySplitCredits()
 		default:
 			return nil, fmt.Errorf("image.comic4 requires exactly 4 panels, or a story to auto-split")
@@ -229,7 +241,10 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 		shots := make([]map[string]any, len(spec.Shots))
 		for i, shotText := range spec.Shots {
 			compiled := prompt.Compile(prompt.Input{Text: shotText, Characters: characters, Presets: presets, Seed: seed})
-			shots[i] = map[string]any{"prompt": compiled.Prompt, "seed": seedStr, "user-id": strconv.FormatUint(userID, 10)}
+			shots[i] = map[string]any{
+				"prompt": compiled.Prompt, "seed": seedStr,
+				"source-image-asset-id": spec.SourceImageAssetID, "user-id": strconv.FormatUint(userID, 10),
+			}
 		}
 		args["shots"] = shots
 		// Per-node, same reasoning as image.comic4's Loop above.

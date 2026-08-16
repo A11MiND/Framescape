@@ -420,15 +420,17 @@ export default function Studio() {
     if (tab === 'image.single' || tab === 'image.batch') {
       spec.text = text
       if (tab === 'image.batch') spec.n = n
-      if (tab === 'image.single' && sourceImageId) spec.source_image_asset_id = sourceImageId
+      if (sourceImageId) spec.source_image_asset_id = sourceImageId
     } else if (tab === 'image.comic4') {
       if (comicMode === 'auto') {
         spec.story = story
       } else {
         spec.panels = panels
       }
+      if (sourceImageId) spec.source_image_asset_id = sourceImageId
     } else if (tab === 'image.sequence') {
       spec.shots = shots.filter((s) => s.trim())
+      if (sourceImageId) spec.source_image_asset_id = sourceImageId
     } else if (tab === 'video.single') {
       spec.text = vText
       spec.duration_seconds = duration
@@ -444,6 +446,7 @@ export default function Studio() {
       spec.duration_seconds = vsDuration
       spec.ratio = vsRatio
       spec.recalibrate_every = vsRecalibrateEvery
+      if (sourceImageId) spec.source_image_asset_id = sourceImageId
     }
     return spec
   }
@@ -623,14 +626,21 @@ export default function Studio() {
                   // an image there sets it, matching the visible AssetPicker
                   // right below. image.batch has no reference slot at all, so
                   // the mention there stays purely textual.
-                  if (tab === 'image.single' && asset.type === 'image') setSourceImageId(asset.biz_id)
+                  if (asset.type === 'image') setSourceImageId(asset.biz_id)
                 }}
               />
               <CharCount value={text} max={capabilities.data?.image.max_prompt_chars} />
             </div>
           )}
 
-          {tab === 'image.single' && (
+          {/* §07 gap: this used to be image.single only (F5.8's original
+              scope) — a user asked why every other mode had no way to
+              anchor generation on a reference image at all. jobsvc.go's
+              Spec.SourceImageAssetID doc covers why extending it was
+              low-risk: minimax.image's subject_reference (and
+              video.sequence's r2va anchor) are already per-call, not tied
+              to any one workflow shape. */}
+          {tab !== 'video.single' && (
             <div>
               <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">{t('studio.image2imageRef')}</p>
               <AssetPicker

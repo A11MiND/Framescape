@@ -12,7 +12,8 @@
     "arguments": {
       "parameters": [
         { "name": "story", "type": "string" },
-        { "name": "user-id", "type": "string" }
+        { "name": "user-id", "type": "string" },
+        { "name": "source-image-asset-id", "type": "string" }
       ]
     },
     "templates": [
@@ -26,7 +27,8 @@
               "arguments": {
                 "parameters": [
                   { "name": "story", "valueFrom": { "parameter": "workflow.parameters.story" } },
-                  { "name": "user-id", "valueFrom": { "parameter": "workflow.parameters.user-id" } }
+                  { "name": "user-id", "valueFrom": { "parameter": "workflow.parameters.user-id" } },
+                  { "name": "source-image-asset-id", "valueFrom": { "parameter": "workflow.parameters.source-image-asset-id" } }
                 ]
               }
             },
@@ -61,7 +63,8 @@
           "inputs": {
             "parameters": [
               { "name": "story", "type": "string" },
-              { "name": "user-id", "type": "string" }
+              { "name": "user-id", "type": "string" },
+              { "name": "source-image-asset-id", "type": "string" }
             ]
           },
           "retry": { "limit": 1 },
@@ -97,6 +100,7 @@
             "parameters": [
               { "name": "prompt", "type": "string" },
               { "name": "user-id", "type": "string" },
+              { "name": "source-image-asset-id", "type": "string" },
               { "name": "n", "type": "string", "value": "1" }
             ]
           },
