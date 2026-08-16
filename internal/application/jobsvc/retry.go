@@ -149,11 +149,16 @@ func (s *Service) RetryNode(ctx context.Context, userID uint64, bizID, nodeName 
 		return nil, fmt.Errorf("marshal retry spec: %w", err)
 	}
 	retryJob := &persistence.Job{
-		BizID:            bizID2,
-		UserID:           userID,
-		WorkflowName:     job.WorkflowName,
-		WorkflowRunID:    string(runID),
-		Title:            truncate("重做: "+job.Title, 128),
+		BizID:         bizID2,
+		UserID:        userID,
+		WorkflowName:  job.WorkflowName,
+		WorkflowRunID: string(runID),
+		// No language-specific "重做:"/"Retry:" prefix baked into the stored
+		// title — RetryOfJobID below is the real provenance signal, and the
+		// frontend renders its own locale-aware retry indicator from that
+		// instead of parsing a hardcoded-Chinese string prefix (see
+		// handleListJobs/handleGetJob's retry_of_job_id field).
+		Title:            truncate(job.Title, 128),
 		Status:           "running",
 		Spec:             specJSON,
 		CreditEstimated:  estimatedCredits,

@@ -1,0 +1,354 @@
+{
+  "brand": {
+    "name": "Framescape",
+    "tagline": "One frame, one world — just say it"
+  },
+  "common": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving…",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "confirm": "Confirm",
+    "loading": "Loading…",
+    "retry": "Retry",
+    "close": "Close",
+    "optional": "optional",
+    "processing": "Processing…",
+    "somethingWentWrong": "Something went wrong"
+  },
+  "login": {
+    "signIn": "Sign in",
+    "signUp": "Sign up",
+    "email": "Email",
+    "passwordPlaceholder": "Password (8+ characters)",
+    "createAccount": "Create account",
+    "notSure": "Not ready yet? ",
+    "tryFree": "Try it free in the workshop"
+  },
+  "rail": {
+    "generate": "Workshop",
+    "jobs": "Jobs",
+    "assets": "Assets",
+    "projects": "Projects",
+    "characters": "Characters",
+    "presets": "Presets",
+    "switchLanguage": "Switch language",
+    "logout": "Sign out"
+  },
+  "credits": {
+    "title": "Credits",
+    "balance": "Available balance",
+    "held": "Held (reserved by running jobs)",
+    "ledger": "Ledger",
+    "empty": "No ledger entries yet",
+    "loadMore": "Load more",
+    "direction": {
+      "recharge": "Recharge",
+      "hold": "Hold",
+      "commit": "Settle",
+      "refund": "Refund"
+    }
+  },
+  "projects": {
+    "title": "Projects",
+    "new": "+ New project",
+    "empty": "No projects yet. Create one, then file assets into it from the asset library.",
+    "deleteFailed": "Delete failed, please retry",
+    "namePlaceholder": "Project name",
+    "descriptionPlaceholder": "Description (optional)",
+    "create": "Create project"
+  },
+  "characters": {
+    "title": "Characters",
+    "new": "+ New character",
+    "empty": "No characters yet. Generate a few images in the workshop first, then come back and set them as reference images.",
+    "deleteFailed": "Delete failed, please retry",
+    "namePlaceholder": "Character name",
+    "descriptionPlaceholder": "Appearance description (optional)",
+    "pickRefs": "Choose 1-3 reference images ({{count}} selected)",
+    "pickerEmptyHint": "No images generated yet — click \"Upload\" on the right, or generate some in the workshop first",
+    "create": "Create character"
+  },
+  "presets": {
+    "title": "Presets",
+    "category": {
+      "style": "Style",
+      "pose": "Pose",
+      "composition": "Composition",
+      "lighting": "Lighting",
+      "camera": "Camera"
+    }
+  },
+  "workflow": {
+    "imageSingle": "Single image",
+    "imageBatch": "Batch images",
+    "imageComic4": "4-panel comic",
+    "imageSequence": "Image sequence",
+    "videoSingle": "Single clip",
+    "videoSequence": "Video sequence"
+  },
+  "shotMode": {
+    "r2va": "r2va · character anchor",
+    "t2va": "t2va · text only",
+    "i2va": "i2va · tail-frame continuity"
+  },
+  "jobs": {
+    "empty": "No jobs yet — generate something in the workshop",
+    "nodesDone": "{{done}}/{{total}} done",
+    "held": "{{count}} held",
+    "retryIndicator": "This is a node retry",
+    "retryIndicatorLinkTitle": "View original job",
+    "filter": {
+      "all": "All",
+      "running": "Running",
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    }
+  },
+  "jobDetail": {
+    "connectionUnstable": "Unstable connection — couldn't fetch job status",
+    "cancelFailed": "Cancel failed, please retry",
+    "cancelling": "Cancelling…",
+    "cancelJob": "Cancel job",
+    "reconnecting": "Live connection unstable, reconnecting…"
+  },
+  "phase": {
+    "created": "Created",
+    "ready": "Ready",
+    "pending": "Pending",
+    "running": "Running",
+    "suspended": "Paused",
+    "succeeded": "Succeeded",
+    "failed": "Failed",
+    "error": "Error",
+    "timeout": "Timed out",
+    "skipped": "Skipped",
+    "cancelled": "Cancelled",
+    "unknown": "Unknown"
+  },
+  "jobGraph": {
+    "generate": "Generate",
+    "compose": "Compose",
+    "panel": "Panel {{n}}",
+    "fourPanel": "4-panel generation",
+    "doneOf": "{{done}}/{{total}} done",
+    "shotN": "Image {{n}}",
+    "sequence": "Sequence generation",
+    "videoGenerate": "Video generation",
+    "extractFrames": "Extract first/last frame",
+    "shotSegment": "Segment {{n}}",
+    "shotSegmentExtract": "Segment {{n}} frame extract",
+    "previewGate": "Preview gate",
+    "redo": "Redo",
+    "upgrade2k": "Upgrade to 2K",
+    "concat": "Concatenate"
+  },
+  "workflowGraph": {
+    "inProgress": "In progress…",
+    "duration": "Took {{duration}}",
+    "cost": "Cost",
+    "retryPromptPlaceholder": "Redo prompt (leave blank to reuse the original)",
+    "retrying": "Retrying…",
+    "retryThis": "Redo this panel",
+    "retryFailed": "Retry failed, please try again"
+  },
+  "generationProgress": {
+    "generating": "Generating, please keep this page open…",
+    "elapsed": "Elapsed {{time}}",
+    "minSec": "{{min}}m {{sec}}s",
+    "stage": {
+      "image": {
+        "sketch": "Sketching",
+        "outline": "Outlining",
+        "detail": "Adding detail",
+        "color": "Coloring",
+        "lighting": "Adding lighting",
+        "checkDetail": "Checking detail",
+        "checkOverall": "Checking overall look"
+      },
+      "video": {
+        "storyboard": "Storyboarding",
+        "render": "Rendering frames",
+        "motion": "Adding motion & transitions",
+        "colorGrade": "Color grading",
+        "audio": "Mixing audio",
+        "encode": "Encoding output",
+        "finalCheck": "Final quality check"
+      }
+    }
+  },
+  "previewGate": {
+    "intro": "{{count}} segments drafted at 768P — choose keep / redo / upgrade to 2K for each",
+    "segmentN": "Segment {{n}}",
+    "bucket": {
+      "keep": "Keep",
+      "redo": "Redo",
+      "upgrade": "Upgrade 2K"
+    },
+    "currentSelection": "Current selection: upgrading {{count}} segments",
+    "redoCount": "redoing {{count}} segments",
+    "willCost": "Will cost",
+    "compareOpen": " (",
+    "compareAllUpgrade": "vs. upgrading all segments directly:",
+    "savedPct": ", saving {{pct}}%",
+    "compareClose": ")",
+    "submitting": "Submitting…",
+    "confirm": "Confirm & compose",
+    "confirmWithUpgrade": "Confirm & compose (✦ +{{cost}} upgrade)"
+  },
+  "assets": {
+    "deleteFailed": "Delete failed, please retry",
+    "batchDownloadFailed": "Batch download failed, please retry",
+    "assignFailed": "Assign failed, please retry",
+    "selectedCount": "{{count}} selected",
+    "zipping": "Zipping…",
+    "batchDownload": "Batch download",
+    "deselect": "Deselect",
+    "allProjects": "All projects",
+    "empty": "No assets generated yet — go generate something in the workshop",
+    "assignToProject": "Assign to project",
+    "unassigned": "Unassigned",
+    "filter": {
+      "all": "All",
+      "image": "Images",
+      "video": "Videos"
+    }
+  },
+  "assetDetail": {
+    "backToLibrary": "← Back to library",
+    "uploadedNoParams": "This asset was uploaded directly — no generation parameters",
+    "fromJob": "From job #{{id}}… →",
+    "regenerateFromThis": "Regenerate from this",
+    "saveAsCharacter": "Save as character",
+    "download": "Download",
+    "deleting": "Deleting…",
+    "meta": {
+      "model": "Model",
+      "prompt": "Prompt",
+      "seed": "Seed",
+      "mode": "Mode",
+      "layout": "Layout",
+      "providerTaskId": "MiniMax task"
+    }
+  },
+  "assetPicker": {
+    "collapse": "Collapse",
+    "choose": "+ Choose",
+    "uploading": "Uploading",
+    "upload": "Upload",
+    "uploadFailed": "Upload failed, please retry",
+    "emptyDefault": {
+      "image": "No images yet — click \"Upload\" on the right",
+      "video": "No videos yet — click \"Upload\" on the right"
+    }
+  },
+  "presetCarousel": {
+    "noCover": "No cover"
+  },
+  "errors": {
+    "unknown": "Unknown error",
+    "moderationBlocked": "The description touches sensitive content — no credits were charged"
+  },
+  "suggestions": {
+    "toVideo": "Turn into video",
+    "moreBatch": "Generate another batch",
+    "saveCharacter": "Save as character",
+    "toSequence": "Turn into shot sequence",
+    "upgrade2k": "Upgrade to 2K",
+    "saveFrameCharacter": "Extract frame & save as character"
+  },
+  "studio": {
+    "tabMeta": {
+      "imageSingle": "One line, one image",
+      "imageBatch": "One line, many images at once",
+      "imageComic4": "A 4-panel comic sharing character & style",
+      "imageSequence": "A consistent-character image series",
+      "videoSingle": "Text-to-video or image-to-video",
+      "videoSequence": "Preview at 768P, finalize at 2K"
+    },
+    "examples": {
+      "fox": "A fox standing in the snow, watercolor style",
+      "foxVideo": "Camera slowly pushes in as a fox turns to look at the lens, snow falling",
+      "rooftop": "Two figures facing off on a rooftop, dusk backlight, strong wind"
+    },
+    "guestHint": "Try it free once — sign up to unlock every mode and the asset library",
+    "headlineSuffix": "· start now",
+    "image2imageRef": "Reference image (optional, image-to-image)",
+    "comic": {
+      "manual": "Write each panel",
+      "auto": "Auto-split a story into 4",
+      "autoTooltip": "Let AI split a story into 4 panel descriptions automatically",
+      "panelPlaceholder": "Panel {{n}}",
+      "storyPlaceholder": "A complete story — the system will auto-split it into 4 consecutive panels"
+    },
+    "imageSequence": {
+      "addLabel": "+ Add an image",
+      "shotPlaceholder": "Image {{n}}"
+    },
+    "videoSequence": {
+      "shotPlaceholder": "Segment {{n}} shot description"
+    },
+    "capsule": {
+      "refMode": "Reference mode",
+      "count": "Count",
+      "duration": "Duration",
+      "resolution": "Resolution",
+      "ratio": "Ratio",
+      "ratioDisabledTooltip": "Aspect ratio is determined by the reference asset in first/last-frame or reference mode",
+      "anchorInterval": "Anchor interval",
+      "anchorIntervalTooltip": "Every N segments, re-anchor to the character reference image (r2va); other segments continue from the previous segment's last frame (i2va)",
+      "everyNSegments": "Every {{n}} segments",
+      "characterA": "Character A",
+      "characterB": "Character B"
+    },
+    "refMode": {
+      "none": "None",
+      "firstLast": "First/last frame",
+      "reference": "Reference media"
+    },
+    "firstFrame": "First frame",
+    "lastFrame": "Last frame",
+    "refImages": "Reference images",
+    "refVideos": "Reference videos",
+    "promptEnhanceTooltip": "Use AI to deeply understand and polish your prompt before generating — billed separately by usage",
+    "promptEnhance": "AI prompt enhancement (+~{{cost}} credits)",
+    "addSegment": "+ Add a segment",
+    "driftWarning": "⚠ More than 4 shots — automatically re-anchoring the character every {{n}} segments to prevent drift",
+    "submitting": "Submitting…",
+    "generating": "Generating…",
+    "generate": "Generate →",
+    "loginToGenerate": "Sign in to generate →",
+    "insufficientBalance": "Insufficient credits (balance {{balance}})",
+    "noCharactersHint": "No characters yet — create one in \"Characters\"",
+    "viewGraph": "View pipeline →",
+    "trial": {
+      "intro": "No sign-up needed — try one free single-image generation",
+      "tryOnce": "✦ Try anonymously once",
+      "likeIt": "Like this one? Sign in to save it to your asset library"
+    },
+    "generationFailed": "Generation failed: {{error}}",
+    "suggestionsLabel": "What's next:",
+    "emptyResult": "Results will appear here",
+    "guessWhat": "You might want to generate:",
+    "unselected": "None selected",
+    "dragToReorder": "Drag to reorder",
+    "errors": {
+      "trialFailed": "Generation failed, please retry",
+      "storyRequired": "Please enter a story description",
+      "paramsInvalid": "Invalid parameters",
+      "needOneShot": "At least one shot description is required",
+      "submitFailed": "Submit failed, please retry"
+    },
+    "videoValidation": {
+      "textRequired": "Please enter a video description",
+      "modeConflict": "First/last-frame mode and reference-media mode can't be used together",
+      "ratioRequired": "A pure text-to-video generation must choose an aspect ratio"
+    }
+  },
+  "api": {
+    "uploadFailed": "Upload failed ({{status}})"
+  }
+}

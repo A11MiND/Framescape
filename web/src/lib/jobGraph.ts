@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next'
 import type { JobNode, JobResponse } from './api'
 
 export interface GraphNode {
@@ -6,7 +7,7 @@ export interface GraphNode {
   phase: string
   error: string
   outputs: Record<string, unknown> | null
-  sublabel?: string // e.g. "3/4 完成" for a Loop container
+  sublabel?: string // e.g. "3/4 done" for a Loop container
   creditCost?: number
   startedAt?: string | null
   finishedAt?: string | null
@@ -79,18 +80,22 @@ function loopIterationNodes(nodes: JobNode[], bodyName: string, labelFor: (i: nu
     .map((n) => toGraphNode(n, `${bodyName}[${n.loop_index}]`, labelFor(n.loop_index)))
 }
 
-export function buildJobGraph(job: JobResponse): JobGraph {
+// t is threaded through explicitly rather than imported directly — this
+// file is a pure function called from render, not a component/hook, and
+// react-i18next's `t` already carries the caller's current language, so
+// passing it in keeps this module free of any i18n-instance coupling.
+export function buildJobGraph(job: JobResponse, t: TFunction): JobGraph {
   const nodes = job.nodes.filter((n) => n.name !== 'main')
 
   switch (job.workflow_name) {
     case 'image.single':
     case 'image.batch': {
-      const gen = toGraphNode(find(nodes, 'gen'), 'gen', '生成')
+      const gen = toGraphNode(find(nodes, 'gen'), 'gen', t('jobGraph.generate'))
       return { nodes: [gen], edges: [] }
     }
     case 'image.comic4': {
-      const compose = toGraphNode(find(nodes, 'compose'), 'compose', '拼接')
-      const panelNodes = loopIterationNodes(nodes, 'gen-one-panel', (i) => `格 ${i + 1}`)
+      const compose = toGraphNode(find(nodes, 'compose'), 'compose', t('jobGraph.compose'))
+      const panelNodes = loopIterationNodes(nodes, 'gen-one-panel', (i) => t('jobGraph.panel', { n: i + 1 }))
       if (panelNodes.length === 0) {
         // Submitted but the Loop hasn't created its iteration rows yet —
         // show the aggregate placeholder rather than an empty graph.
@@ -98,8 +103,8 @@ export function buildJobGraph(job: JobResponse): JobGraph {
         const panels = toGraphNode(
           { name: 'panels', phase: summary.phase, outputs: null, error: '', loop_index: -1 },
           'panels',
-          '四格生成',
-          `${summary.done}/${summary.total || 4} 完成`,
+          t('jobGraph.fourPanel'),
+          t('jobGraph.doneOf', { done: summary.done, total: summary.total || 4 }),
         )
         return { nodes: [panels, compose], edges: [{ source: 'panels', target: 'compose' }] }
       }
@@ -109,14 +114,14 @@ export function buildJobGraph(job: JobResponse): JobGraph {
       }
     }
     case 'image.sequence': {
-      const shotNodes = loopIterationNodes(nodes, 'gen-one-shot', (i) => `第 ${i + 1} 张`)
+      const shotNodes = loopIterationNodes(nodes, 'gen-one-shot', (i) => t('jobGraph.shotN', { n: i + 1 }))
       if (shotNodes.length === 0) {
         const summary = loopSummary(nodes, 'gen-one-shot')
         const shots = toGraphNode(
           { name: 'shots', phase: summary.phase, outputs: null, error: '', loop_index: -1 },
           'shots',
-          '连续生成',
-          `${summary.done}/${summary.total} 完成`,
+          t('jobGraph.sequence'),
+          t('jobGraph.doneOf', { done: summary.done, total: summary.total }),
         )
         return { nodes: [shots], edges: [] }
       }
@@ -128,8 +133,8 @@ export function buildJobGraph(job: JobResponse): JobGraph {
       return { nodes: shotNodes, edges: [] }
     }
     case 'video.single': {
-      const gen = toGraphNode(find(nodes, 'gen'), 'gen', '视频生成')
-      const extract = toGraphNode(find(nodes, 'extract'), 'extract', '抽取首尾帧')
+      const gen = toGraphNode(find(nodes, 'gen'), 'gen', t('jobGraph.videoGenerate'))
+      const extract = toGraphNode(find(nodes, 'extract'), 'extract', t('jobGraph.extractFrames'))
       return { nodes: [gen, extract], edges: [{ source: 'gen', target: 'extract' }] }
     }
     case 'video.sequence': {
@@ -143,38 +148,38 @@ export function buildJobGraph(job: JobResponse): JobGraph {
       let prev: string | null = null
       for (const i of shotIndexes) {
         const shotId = `shot-${i}`
-        out.push(toGraphNode(find(nodes, shotId), shotId, `第 ${i} 段`))
+        out.push(toGraphNode(find(nodes, shotId), shotId, t('jobGraph.shotSegment', { n: i })))
         if (prev) edges.push({ source: prev, target: shotId })
         prev = shotId
         const extractId = `shot-${i}-extract`
         const extractNode = find(nodes, extractId)
         if (extractNode) {
-          out.push(toGraphNode(extractNode, extractId, `第 ${i} 段抽帧`))
+          out.push(toGraphNode(extractNode, extractId, t('jobGraph.shotSegmentExtract', { n: i })))
           edges.push({ source: shotId, target: extractId })
           prev = extractId
         }
       }
       const gate = find(nodes, 'gate')
       if (gate || shotIndexes.length > 0) {
-        out.push(toGraphNode(gate, 'gate', '预览门'))
+        out.push(toGraphNode(gate, 'gate', t('jobGraph.previewGate')))
         if (prev) edges.push({ source: prev, target: 'gate' })
         prev = 'gate'
       }
       const redo = find(nodes, 'redo')
       if (redo) {
-        out.push(toGraphNode(redo, 'redo', '重做'))
+        out.push(toGraphNode(redo, 'redo', t('jobGraph.redo')))
         edges.push({ source: 'gate', target: 'redo' })
         prev = 'redo'
       }
       const upgrade = find(nodes, 'upgrade')
       if (upgrade) {
-        out.push(toGraphNode(upgrade, 'upgrade', '升级 2K'))
+        out.push(toGraphNode(upgrade, 'upgrade', t('jobGraph.upgrade2k')))
         edges.push({ source: prev ?? 'gate', target: 'upgrade' })
         prev = 'upgrade'
       }
       const concat = find(nodes, 'concat')
       if (concat) {
-        out.push(toGraphNode(concat, 'concat', '合成'))
+        out.push(toGraphNode(concat, 'concat', t('jobGraph.concat')))
         edges.push({ source: prev ?? 'gate', target: 'concat' })
       }
       return { nodes: out, edges }

@@ -1,26 +1,27 @@
 import { NavLink } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { useAuthStore } from '../lib/authStore'
+import { setStoredLang, type Lang } from '../i18n'
 import AnimatedNumber from './AnimatedNumber'
 
 const LINKS = [
-  { to: '/', label: '生成', icon: '✦', end: true },
-  { to: '/jobs', label: '作业', icon: '◷' },
-  { to: '/assets', label: '资产', icon: '▤' },
-  { to: '/projects', label: '项目', icon: '▧' },
-  { to: '/characters', label: '角色', icon: '☺' },
-  { to: '/presets', label: '预设', icon: '◈' },
+  { to: '/', labelKey: 'rail.generate', icon: '✦', end: true },
+  { to: '/jobs', labelKey: 'rail.jobs', icon: '◷' },
+  { to: '/assets', labelKey: 'rail.assets', icon: '▤' },
+  { to: '/projects', labelKey: 'rail.projects', icon: '▧' },
+  { to: '/characters', labelKey: 'rail.characters', icon: '☺' },
+  { to: '/presets', labelKey: 'rail.presets', icon: '◈' },
 ]
 
-// Left icon rail (jimeng's structural pattern, §19.0①) replacing the old
-// top bar — six tab labels plus balance plus logout couldn't fit one
-// horizontal row without crowding out the creation surface itself, and a
-// vertical rail is where jimeng puts its own suspended/notification badges,
-// which is where 作业's own badge lands below (batch 2 added GET /jobs,
-// finally giving this entry something real to point at instead of a
-// fabricated count).
+// Left icon rail replacing the old top bar — six tab labels plus balance
+// plus logout couldn't fit one horizontal row without crowding out the
+// creation surface itself. 作业's own badge lands below (batch 2 added
+// GET /jobs, finally giving this entry something real to point at instead
+// of a fabricated count).
 export default function Rail() {
+  const { t, i18n } = useTranslation()
   const accessToken = useAuthStore((s) => s.accessToken)
   const logout = useAuthStore((s) => s.logout)
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: !!accessToken })
@@ -38,6 +39,9 @@ export default function Rail() {
   })
   const runningCount = runningJobs.data?.jobs.length ?? 0
   const runningBadge = runningJobs.data?.next_cursor ? '9+' : runningCount > 0 ? String(runningCount) : null
+
+  const lang = (i18n.language === 'en' ? 'en' : 'zh') as Lang
+  const toggleLang = () => setStoredLang(lang === 'zh' ? 'en' : 'zh')
 
   return (
     <aside className="flex w-[76px] shrink-0 flex-col items-center gap-1 border-r border-zinc-800 bg-zinc-950 py-5">
@@ -65,12 +69,19 @@ export default function Rail() {
                 </span>
               )}
             </span>
-            {l.label}
+            {t(l.labelKey)}
           </NavLink>
         ))}
       </nav>
 
       <div className="flex flex-col items-center gap-3 pt-2">
+        <button
+          onClick={toggleLang}
+          title={t('rail.switchLanguage')}
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-800 text-[10px] font-medium text-zinc-500 transition hover:border-zinc-700 hover:text-zinc-300"
+        >
+          {lang === 'zh' ? 'EN' : '中'}
+        </button>
         {accessToken ? (
           <>
             <NavLink to="/credits" className="flex flex-col items-center text-[11px] text-violet-400 hover:text-violet-300">
@@ -79,7 +90,7 @@ export default function Rail() {
             </NavLink>
             <button
               onClick={logout}
-              title="退出登录"
+              title={t('rail.logout')}
               className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-800 text-xs text-zinc-500 transition hover:border-zinc-700 hover:text-zinc-300"
             >
               ⏻
@@ -91,7 +102,7 @@ export default function Rail() {
             className="flex w-16 flex-col items-center gap-1 rounded-xl py-2 text-[11px] text-zinc-500 transition hover:bg-zinc-900 hover:text-zinc-300"
           >
             <span className="text-base leading-none">◍</span>
-            登录
+            {t('login.signIn')}
           </NavLink>
         )}
       </div>

@@ -9,9 +9,15 @@ export const RATIO_VALUES = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'] as con
 // right before submit); Studio's video.single tab greys out the conflicting
 // picker as the second, so violating this should be structurally impossible
 // via the UI — this exists to catch it anyway if it ever isn't.
+//
+// Issue `message` fields are i18n keys, not resolved strings — this schema
+// is built once at module load (not per-render), so it can't call a
+// component's `t()` directly. Callers do `t(issues[0].message)` at display
+// time (Studio.tsx) — same "return a key, resolve at the render site"
+// convention as jobGraph.ts/errors.ts/suggestions.ts use for the same reason.
 export const videoSingleSchema = z
   .object({
-    text: z.string().trim().min(1, '请输入视频描述'),
+    text: z.string().trim().min(1, 'studio.videoValidation.textRequired'),
     duration: z.number().int().min(4).max(15),
     resolution: z.enum(['768P', '2K']),
     ratio: z.string(),
@@ -26,11 +32,11 @@ export const videoSingleSchema = z
     if (hasFirstLast && hasRef) {
       ctx.addIssue({
         code: 'custom',
-        message: '首尾帧模式和参考素材模式不能同时使用',
+        message: 'studio.videoValidation.modeConflict',
       })
     }
     if (!hasFirstLast && !hasRef && !RATIO_VALUES.includes(v.ratio as (typeof RATIO_VALUES)[number])) {
-      ctx.addIssue({ code: 'custom', message: '纯文字生成视频必须选择画面比例', path: ['ratio'] })
+      ctx.addIssue({ code: 'custom', message: 'studio.videoValidation.ratioRequired', path: ['ratio'] })
     }
   })
 

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ReactFlow, Background, Controls, Handle, Position, type NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { api, ApiError, type JobResponse } from '../lib/api'
@@ -41,9 +42,9 @@ function TaskNode({ data }: NodeProps) {
 
 const nodeTypes = { task: TaskNode }
 
-function formatDuration(startedAt?: string | null, finishedAt?: string | null): string {
+function formatDuration(startedAt: string | null | undefined, finishedAt: string | null | undefined, inProgressLabel: string): string {
   if (!startedAt) return ''
-  if (!finishedAt) return '进行中…'
+  if (!finishedAt) return inProgressLabel
   const ms = new Date(finishedAt).getTime() - new Date(startedAt).getTime()
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
 }
@@ -56,7 +57,8 @@ function formatDuration(startedAt?: string | null, finishedAt?: string | null): 
 // populated by internal/application/projection — see handleGetJob's doc
 // for why this data lives there and not on the engine's own NodeState).
 export default function WorkflowGraph({ job }: { job: JobResponse }) {
-  const graph = useMemo(() => buildJobGraph(job), [job])
+  const { t } = useTranslation()
+  const graph = useMemo(() => buildJobGraph(job, t), [job, t])
   const [selected, setSelected] = useState<GraphNode | null>(null)
   const [override, setOverride] = useState('')
   const navigate = useNavigate()
@@ -71,7 +73,7 @@ export default function WorkflowGraph({ job }: { job: JobResponse }) {
       navigate(`/jobs/${data.biz_id}`)
     },
     onError: (err) =>
-      pushToast(err instanceof ApiError ? err.message : '重做失败，请重试', () => selected && retryNode.mutate(selected)),
+      pushToast(err instanceof ApiError ? err.message : t('workflowGraph.retryFailed'), () => selected && retryNode.mutate(selected)),
   })
 
   const flowNodes = graph.nodes.map((n, i) => ({
@@ -123,16 +125,18 @@ export default function WorkflowGraph({ job }: { job: JobResponse }) {
           <PhaseBadge phase={selected.phase} />
           {(selected.startedAt || !!selected.creditCost) && (
             <div className="mt-3 flex gap-4 text-xs text-zinc-500">
-              {selected.startedAt && <span>耗时 {formatDuration(selected.startedAt, selected.finishedAt)}</span>}
+              {selected.startedAt && (
+                <span>{t('workflowGraph.duration', { duration: formatDuration(selected.startedAt, selected.finishedAt, t('workflowGraph.inProgress')) })}</span>
+              )}
               {!!selected.creditCost && (
                 <span>
-                  消耗 <span className="text-violet-400">✦ {selected.creditCost}</span>
+                  {t('workflowGraph.cost')} <span className="text-violet-400">✦ {selected.creditCost}</span>
                 </span>
               )}
             </div>
           )}
           {selected.error && (
-            <p className="mt-3 text-sm text-red-400">{displayNodeError(selected.error)}</p>
+            <p className="mt-3 text-sm text-red-400">{displayNodeError(selected.error, t)}</p>
           )}
           {selected.name &&
             selected.loopIndex !== undefined &&
@@ -143,7 +147,7 @@ export default function WorkflowGraph({ job }: { job: JobResponse }) {
                 <input
                   value={override}
                   onChange={(e) => setOverride(e.target.value)}
-                  placeholder="重做提示词（留空则用原提示词）"
+                  placeholder={t('workflowGraph.retryPromptPlaceholder')}
                   className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600"
                 />
                 <button
@@ -151,7 +155,7 @@ export default function WorkflowGraph({ job }: { job: JobResponse }) {
                   disabled={retryNode.isPending}
                   className="w-full rounded-md bg-violet-600 py-1.5 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-50"
                 >
-                  {retryNode.isPending ? '重做中…' : '重做这一格'}
+                  {retryNode.isPending ? t('workflowGraph.retrying') : t('workflowGraph.retryThis')}
                 </button>
               </div>
             )}

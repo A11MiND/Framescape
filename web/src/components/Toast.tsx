@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 
 // §19.5.3's Toast scope is deliberately narrow — only "提交后网络错误"
 // (retryable). Insufficient-balance and content-moderation blocks are
@@ -21,6 +22,7 @@ export function useToast() {
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const { t } = useTranslation()
   const [toasts, setToasts] = useState<Toast[]>([])
   const nextId = useRef(0)
 
@@ -38,24 +40,24 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={push}>
       {children}
       <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
-        {toasts.map((t) => (
+        {toasts.map((toast) => (
           <div
-            key={t.id}
+            key={toast.id}
             className="flex items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-zinc-200 shadow-lg"
           >
-            <span>{t.message}</span>
-            {t.onRetry && (
+            <span>{toast.message}</span>
+            {toast.onRetry && (
               <button
                 onClick={() => {
-                  t.onRetry?.()
-                  dismiss(t.id)
+                  toast.onRetry?.()
+                  dismiss(toast.id)
                 }}
                 className="rounded-md bg-violet-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-violet-400"
               >
-                重试
+                {t('common.retry')}
               </button>
             )}
-            <button onClick={() => dismiss(t.id)} className="text-zinc-500 hover:text-zinc-300">
+            <button onClick={() => dismiss(toast.id)} className="text-zinc-500 hover:text-zinc-300">
               ×
             </button>
           </div>

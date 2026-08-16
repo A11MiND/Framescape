@@ -17,17 +17,20 @@ export type Tab =
 // merge finished — before that, this lookup harmlessly finds nothing).
 // Shared between Studio (inline results) and JobDetail (/jobs/:bizId) so the
 // two never drift on what "the result" means for a given workflow.
-// Human-readable Chinese labels for each workflow, shared so Studio's tab
+// i18n key for each workflow's human-readable label, shared so Studio's tab
 // nav and JobDetail's page heading (when a job has no title of its own,
 // e.g. an F5.4 auto-split job predating the title-derivation fix) never
-// show a raw workflow_name string like "image.comic4" to the user.
-export const WORKFLOW_LABEL: Record<Tab, string> = {
-  'image.single': '单图',
-  'image.batch': '批量出图',
-  'image.comic4': '四格漫画',
-  'image.sequence': '连续生成',
-  'video.single': '单段影片',
-  'video.sequence': '连续影片',
+// show a raw workflow_name string like "image.comic4" to the user. Callers
+// do `t(WORKFLOW_LABEL_KEY[tab])` — a plain key map rather than resolved
+// strings, so this stays a dependency-free module even though the labels
+// themselves are locale-dependent.
+export const WORKFLOW_LABEL_KEY: Record<Tab, string> = {
+  'image.single': 'workflow.imageSingle',
+  'image.batch': 'workflow.imageBatch',
+  'image.comic4': 'workflow.imageComic4',
+  'image.sequence': 'workflow.imageSequence',
+  'video.single': 'workflow.videoSingle',
+  'video.sequence': 'workflow.videoSequence',
 }
 
 export const RESULT_FIELD: Record<Tab, { node: string; field: string }> = {

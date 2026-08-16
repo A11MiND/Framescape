@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { api, type Character } from '../lib/api'
 import AppShell from '../components/AppShell'
 import { AssetPicker } from '../components/AssetPicker'
@@ -11,6 +12,7 @@ import { useToast } from '../components/Toast'
 // upload their own straight from this form instead of only ever picking
 // from assets a generation already produced.
 export default function Characters() {
+  const { t } = useTranslation()
   const location = useLocation()
   const prefillAssetId = (location.state as { prefillAssetId?: string } | null)?.prefillAssetId
   const [creating, setCreating] = useState(!!prefillAssetId)
@@ -27,12 +29,12 @@ export default function Characters() {
     <AppShell>
       <div className="mx-auto max-w-5xl px-6 py-8">
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-lg font-medium">角色库</h1>
+          <h1 className="text-lg font-medium">{t('characters.title')}</h1>
           <button
             onClick={() => setCreating((v) => !v)}
             className="rounded-lg bg-violet-500 px-4 py-2 text-sm font-medium text-white hover:bg-violet-400"
           >
-            {creating ? '取消' : '+ 新建角色'}
+            {creating ? t('common.cancel') : t('characters.new')}
           </button>
         </div>
 
@@ -47,7 +49,7 @@ export default function Characters() {
         )}
 
         {characters.isSuccess && characters.data.characters.length === 0 && !creating && (
-          <p className="text-zinc-500">还没有角色。先在创作台生成几张图，再回来把它们定为角色参考图。</p>
+          <p className="text-zinc-500">{t('characters.empty')}</p>
         )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -59,6 +61,7 @@ export default function Characters() {
 }
 
 function CharacterCard({ character }: { character: Character }) {
+  const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
   const qc = useQueryClient()
   const pushToast = useToast()
@@ -66,7 +69,7 @@ function CharacterCard({ character }: { character: Character }) {
   const del = useMutation({
     mutationFn: () => api.deleteCharacter(character.biz_id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['characters'] }),
-    onError: () => pushToast('删除失败，请重试', () => del.mutate()),
+    onError: () => pushToast(t('characters.deleteFailed'), () => del.mutate()),
   })
 
   if (editing) {
@@ -84,7 +87,7 @@ function CharacterCard({ character }: { character: Character }) {
         <div className="flex shrink-0 gap-1">
           <button
             onClick={() => setEditing(true)}
-            title="编辑"
+            title={t('common.edit')}
             className="rounded-lg px-2 py-1 text-xs text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-200"
           >
             ✎
@@ -92,7 +95,7 @@ function CharacterCard({ character }: { character: Character }) {
           <button
             onClick={() => del.mutate()}
             disabled={del.isPending}
-            title="删除"
+            title={t('common.delete')}
             className="rounded-lg px-2 py-1 text-xs text-zinc-500 transition hover:bg-zinc-800 hover:text-red-400 disabled:opacity-50"
           >
             ✕
@@ -129,6 +132,7 @@ function CharacterForm({
   onDone: () => void
   onCancel?: () => void
 }) {
+  const { t } = useTranslation()
   const [name, setName] = useState(character?.name ?? '')
   const [description, setDescription] = useState(character?.description ?? '')
   const [seed, setSeed] = useState(() => character?.seed ?? Math.floor(Math.random() * 1_000_000))
@@ -161,7 +165,7 @@ function CharacterForm({
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="角色名"
+          placeholder={t('characters.namePlaceholder')}
           className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-violet-500"
         />
         <input
@@ -176,20 +180,20 @@ function CharacterForm({
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         rows={2}
-        placeholder="外观描述（可选）"
+        placeholder={t('characters.descriptionPlaceholder')}
         className="w-full resize-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-violet-500"
       />
 
       <div>
         <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">
-          选择 1-3 张参考图（已选 {selected.length}）
+          {t('characters.pickRefs', { count: selected.length })}
         </p>
         <AssetPicker
           type="image"
           selected={selected}
           onToggle={toggle}
           max={3}
-          emptyHint="还没有生成过图片，点右侧「上传」添加，或先去创作台生成一些"
+          emptyHint={t('characters.pickerEmptyHint')}
         />
       </div>
 
@@ -201,14 +205,14 @@ function CharacterForm({
           disabled={!canSubmit || save.isPending}
           className="rounded-lg bg-violet-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-violet-400 disabled:opacity-50"
         >
-          {save.isPending ? '保存中…' : character ? '保存' : '创建角色'}
+          {save.isPending ? t('common.saving') : character ? t('common.save') : t('characters.create')}
         </button>
         {onCancel && (
           <button
             onClick={onCancel}
             className="rounded-lg px-4 py-2 text-sm text-zinc-400 transition hover:bg-zinc-800"
           >
-            取消
+            {t('common.cancel')}
           </button>
         )}
       </div>

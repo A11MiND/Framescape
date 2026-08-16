@@ -1,19 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { api, type Preset } from '../lib/api'
 import AppShell from '../components/AppShell'
 
 // F4.3: presets are seed data (style/pose/composition/lighting/camera) — no
 // create endpoint exists, this is a browse/reference view for what the
 // preset chips in the creation studio actually mean.
-const CATEGORY_LABELS: Record<string, string> = {
-  style: '风格',
-  pose: '姿势',
-  composition: '构图',
-  lighting: '光线',
-  camera: '镜头',
-}
-
 export default function Presets() {
+  const { t } = useTranslation()
   const presets = useQuery({ queryKey: ['presets'], queryFn: () => api.listPresets() })
 
   const grouped = (presets.data?.presets ?? []).reduce<Record<string, Preset[]>>((acc, p) => {
@@ -24,12 +18,12 @@ export default function Presets() {
   return (
     <AppShell>
       <div className="mx-auto max-w-5xl space-y-8 px-6 py-8">
-        <h1 className="text-lg font-medium">预设库</h1>
+        <h1 className="text-lg font-medium">{t('presets.title')}</h1>
 
         {Object.entries(grouped).map(([category, items]) => (
           <section key={category}>
             <p className="mb-3 text-xs uppercase tracking-wide text-zinc-500">
-              {CATEGORY_LABELS[category] ?? category}
+              {t(`presets.category.${category}`, category)}
             </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {items.map((p) => (

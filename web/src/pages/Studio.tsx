@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, keepPreviousData } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -12,10 +13,10 @@ import {
   estimateStorySplitCredits,
 } from '../lib/pricing'
 import { videoSingleSchema, RATIO_VALUES } from '../lib/videoSpec'
-import { resultAssetIds, WORKFLOW_LABEL, type Tab } from '../lib/jobResult'
+import { resultAssetIds, WORKFLOW_LABEL_KEY, type Tab } from '../lib/jobResult'
 import { displayNodeError, firstSpecificError } from '../lib/errors'
 import { suggestActions, type SuggestedAction } from '../lib/suggestions'
-import { shotMode, SHOT_MODE_LABEL, SHOT_MODE_CLASS, type ShotMode } from '../lib/shotPlan'
+import { shotMode, SHOT_MODE_LABEL_KEY, SHOT_MODE_CLASS, type ShotMode } from '../lib/shotPlan'
 import { useToast } from '../components/Toast'
 import AppShell from '../components/AppShell'
 import { AssetPicker } from '../components/AssetPicker'
@@ -28,32 +29,31 @@ import { getDeviceId } from '../lib/deviceId'
 import { useJobStream } from '../hooks/useJobStream'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 
-// PRD §19.4.1's full creation studio, now mounted at `/` per §19.3 ("创作台
-// （首页，登录/匿名皆可进入）") instead of behind a login wall — this is
-// the single biggest information-architecture gap the jimeng comparison
-// surfaced: the old build redirected `/` straight to `/login`, so the
-// anonymous trial (F1.2, POST /trial/image, real endpoint since W1) was
-// only reachable from a card buried on the login screen. Guests now land
-// here directly; anything that needs an authed GET (characters/presets/me)
-// is simply not fetched (`enabled: !isGuest`) rather than erroring, and the
-// composer degrades to "compose + one free trial" instead of vanishing.
+// PRD §19.4.1's full creation studio ("工坊"), now mounted at `/` per
+// §19.3 instead of behind a login wall — this is the single biggest
+// information-architecture gap the original jimeng-comparison surfaced: the
+// old build redirected `/` straight to `/login`, so the anonymous trial
+// (F1.2, POST /trial/image, real endpoint since W1) was only reachable from
+// a card buried on the login screen. Guests now land here directly;
+// anything that needs an authed GET (characters/presets/me) is simply not
+// fetched (`enabled: !isGuest`) rather than erroring, and the composer
+// degrades to "compose + one free trial" instead of vanishing.
 //
 // Structural change from the tab-sidebar build: six workflows collapse into
 // one composer (headline dropdown + quick-switch cards drive the same `tab`
-// state) with a capsule parameter row, mirroring jimeng's single-input
-// pattern (§19.0①) instead of six parallel forms behind six sidebar tabs.
-// Every Spec field the old build could set, this one still can — see the
-// blueprint's capsule → Spec field table.
+// state) with a capsule parameter row, instead of six parallel forms behind
+// six sidebar tabs. Every Spec field the old build could set, this one
+// still can — see the blueprint's capsule → Spec field table.
 
-const TAB_META: Record<Tab, { icon: string; blurb: string }> = {
-  'image.single': { icon: '🖼', blurb: '一句话生成一张图' },
-  'image.batch': { icon: '▦', blurb: '同一句话一次出多张' },
-  'image.comic4': { icon: '🗯', blurb: '共享角色与风格的四格' },
-  'image.sequence': { icon: '⛓', blurb: '同角色连续出一组图' },
-  'video.single': { icon: '🎬', blurb: '文生视频或图生视频' },
-  'video.sequence': { icon: '🎞', blurb: '768P 预览后再定稿 2K' },
+const TAB_META_KEY: Record<Tab, { icon: string; blurbKey: string }> = {
+  'image.single': { icon: '🖼', blurbKey: 'studio.tabMeta.imageSingle' },
+  'image.batch': { icon: '▦', blurbKey: 'studio.tabMeta.imageBatch' },
+  'image.comic4': { icon: '🗯', blurbKey: 'studio.tabMeta.imageComic4' },
+  'image.sequence': { icon: '⛓', blurbKey: 'studio.tabMeta.imageSequence' },
+  'video.single': { icon: '🎬', blurbKey: 'studio.tabMeta.videoSingle' },
+  'video.sequence': { icon: '🎞', blurbKey: 'studio.tabMeta.videoSequence' },
 }
-const TABS = Object.keys(TAB_META) as Tab[]
+const TABS = Object.keys(TAB_META_KEY) as Tab[]
 
 // video.sequence's shots need a stable identity per row for dnd-kit's
 // drag-reorder (array index isn't stable across a reorder) — this is the
@@ -69,10 +69,10 @@ function toShotItems(texts: string[]): ShotItem[] {
 // F6.5's "双保险": videoSpec.ts's zod schema is still the structural second
 // guard checked right before submit — this is the first guard, and it's now
 // enforced by construction (only one panel can ever be mounted) instead of
-// by graying out whichever panel lost the race, which is what jimeng's
-// single "全能参考" dropdown gets right that two parallel opacity-40 panels
-// don't: there's no state where the user has to read a tooltip to find out
-// why something is disabled.
+// by graying out whichever panel lost the race, which is what a single
+// "全能参考" dropdown gets right that two parallel opacity-40 panels don't:
+// there's no state where the user has to read a tooltip to find out why
+// something is disabled.
 type RefMode = 'none' | 'firstLast' | 'reference'
 
 function useCharacters(enabled: boolean) {
@@ -86,13 +86,14 @@ function useMe(enabled: boolean) {
 }
 
 export default function Studio() {
+  const { t } = useTranslation()
   const accessToken = useAuthStore((s) => s.accessToken)
   const isGuest = !accessToken
   const navigate = useNavigate()
   const location = useLocation()
 
   const [tab, setTab] = useState<Tab>('image.single')
-  const [text, setText] = useState('一只狐狸站在雪地上，水彩风格')
+  const [text, setText] = useState(t('studio.examples.fox'))
   const [n, setN] = useState(4)
   const [panels, setPanels] = useState(['', '', '', ''])
   const [shots, setShots] = useState([''])
@@ -102,7 +103,7 @@ export default function Studio() {
   const [bizId, setBizId] = useState<string | null>(null)
 
   // video.single-only state (F6.1-F6.5).
-  const [vText, setVText] = useState('镜头缓缓推进，一只狐狸转身望向镜头，雪花飘落')
+  const [vText, setVText] = useState(t('studio.examples.foxVideo'))
   const [duration, setDuration] = useState(5)
   const [resolution, setResolution] = useState<'768P' | '2K'>('768P')
   const [ratio, setRatio] = useState<(typeof RATIO_VALUES)[number]>('16:9')
@@ -193,10 +194,10 @@ export default function Studio() {
   // moves a pixel or two before release.
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
-  // F1.2's anonymous trial — relocated here from the login page (§19.0's
-  // "先给价值再要注册" only works if the value is visible before the wall,
-  // not after it). Self-contained, doesn't touch jobs/credits/assets.
-  const [trialPrompt, setTrialPrompt] = useState('两人在天台对峙，黄昏逆光，风很大')
+  // F1.2's anonymous trial — relocated here from the login page ("give
+  // value before the wall" only works if the value is visible before the
+  // wall, not after it). Self-contained, doesn't touch jobs/credits/assets.
+  const [trialPrompt, setTrialPrompt] = useState(t('studio.examples.rooftop'))
   const [trialImageUrl, setTrialImageUrl] = useState<string | null>(null)
   const [trialError, setTrialError] = useState<string | null>(null)
   const [trialBusy, setTrialBusy] = useState(false)
@@ -208,7 +209,7 @@ export default function Studio() {
       const res = await api.trialImage(trialPrompt, getDeviceId())
       setTrialImageUrl(res.image_url)
     } catch (err) {
-      setTrialError(err instanceof ApiError ? err.message : '生成失败，请重试')
+      setTrialError(err instanceof ApiError ? err.message : t('studio.errors.trialFailed'))
     } finally {
       setTrialBusy(false)
     }
@@ -321,13 +322,17 @@ export default function Studio() {
   const createJob = useMutation({
     mutationFn: () => {
       if (tab === 'image.comic4' && comicMode === 'auto' && !story.trim()) {
-        throw new Error('请输入剧情描述')
+        throw new Error(t('studio.errors.storyRequired'))
       }
       if (tab === 'video.single' && !videoValidation.success) {
-        throw new Error(videoValidation.error.issues[0]?.message ?? '参数不合法')
+        throw new Error(
+          videoValidation.error.issues[0]?.message
+            ? t(videoValidation.error.issues[0].message)
+            : t('studio.errors.paramsInvalid'),
+        )
       }
       if (tab === 'video.sequence' && vsShots.filter((s) => s.text.trim()).length === 0) {
-        throw new Error('至少需要一段镜头描述')
+        throw new Error(t('studio.errors.needOneShot'))
       }
       const idemKey = crypto.randomUUID()
       return api.createJob(tab as WorkflowName, buildSpec(), idemKey)
@@ -336,7 +341,7 @@ export default function Studio() {
       setBizId(res.biz_id)
       me.refetch()
     },
-    onError: () => pushToast('提交失败，请重试', () => createJob.mutate()),
+    onError: () => pushToast(t('studio.errors.submitFailed'), () => createJob.mutate()),
   })
 
   const jobStream = useJobStream(bizId)
@@ -347,20 +352,21 @@ export default function Studio() {
   const cancelJob = useMutation({
     mutationFn: () => api.cancelJob(bizId!),
     onSuccess: () => jobStream.refetch(),
-    onError: () => pushToast('取消失败，请重试', () => cancelJob.mutate()),
+    onError: () => pushToast(t('jobDetail.cancelFailed'), () => cancelJob.mutate()),
   })
 
   useEffect(() => {
     if (jobStream.isError) {
-      pushToast('网络连接不稳定，无法获取作业状态', () => jobStream.refetch())
+      pushToast(t('jobDetail.connectionUnstable'), () => jobStream.refetch())
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobStream.isError, jobStream.refetch, pushToast])
 
   const assetIds = resultAssetIds(job, tab)
   const running = !!bizId && job?.status !== 'succeeded' && job?.status !== 'failed'
   const gateNode = job?.nodes.find((n) => n.name === 'gate')
   const gateSuspended = tab === 'video.sequence' && gateNode?.phase === 'Suspended'
-  const suggestions = job && job.status === 'succeeded' ? suggestActions(job, tab, assetIds) : []
+  const suggestions = job && job.status === 'succeeded' ? suggestActions(job, tab, assetIds, t) : []
 
   function applySuggestion(action: SuggestedAction) {
     switch (action.kind) {
@@ -394,21 +400,20 @@ export default function Studio() {
       <div className="mx-auto max-w-4xl space-y-8 px-6 py-10">
         <header className="text-center">
           <h1 className="text-3xl font-semibold tracking-tight">
-            开启你的{' '}
             <select
               value={tab}
               onChange={(e) => setTab(e.target.value as Tab)}
               className="appearance-none border-b-2 border-dashed border-violet-500/60 bg-transparent px-1 text-violet-400 outline-none"
             >
-              {TABS.map((t) => (
-                <option key={t} value={t} className="bg-zinc-900 text-zinc-100">
-                  {WORKFLOW_LABEL[t]}
+              {TABS.map((tb) => (
+                <option key={tb} value={tb} className="bg-zinc-900 text-zinc-100">
+                  {t(WORKFLOW_LABEL_KEY[tb])}
                 </option>
               ))}
             </select>{' '}
-            即刻创作
+            {t('studio.headlineSuffix')}
           </h1>
-          {isGuest && <p className="mt-2 text-sm text-zinc-500">先免费试用一次，注册后解锁全部形态与素材库</p>}
+          {isGuest && <p className="mt-2 text-sm text-zinc-500">{t('studio.guestHint')}</p>}
         </header>
 
         {/* ── Composer ─────────────────────────────────────────── */}
@@ -419,13 +424,13 @@ export default function Studio() {
               onChange={(e) => setText(e.target.value)}
               rows={3}
               className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 p-4 outline-none focus:border-violet-500"
-              placeholder="两人在天台对峙，黄昏逆光，风很大"
+              placeholder={t('studio.examples.rooftop')}
             />
           )}
 
           {tab === 'image.single' && (
             <div>
-              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">参考图（可选，图生图）</p>
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">{t('studio.image2imageRef')}</p>
               <AssetPicker
                 type="image"
                 selected={sourceImageId ? [sourceImageId] : []}
@@ -442,14 +447,14 @@ export default function Studio() {
                   onClick={() => setComicMode('manual')}
                   className={`rounded-lg px-3 py-1.5 ${comicMode === 'manual' ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-950'}`}
                 >
-                  逐格手写
+                  {t('studio.comic.manual')}
                 </button>
                 <button
                   onClick={() => setComicMode('auto')}
                   className={`rounded-lg px-3 py-1.5 ${comicMode === 'auto' ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-950'}`}
-                  title="用 AI 把一段剧情自动拆成 4 格画面描述"
+                  title={t('studio.comic.autoTooltip')}
                 >
-                  剧情自动拆 4 格
+                  {t('studio.comic.auto')}
                 </button>
               </div>
 
@@ -462,7 +467,7 @@ export default function Studio() {
                       onChange={(e) => setPanels((cur) => cur.map((c, ci) => (ci === i ? e.target.value : c)))}
                       rows={3}
                       className="resize-none rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm outline-none focus:border-violet-500"
-                      placeholder={`格 ${i + 1}`}
+                      placeholder={t('studio.comic.panelPlaceholder', { n: i + 1 })}
                     />
                   ))}
                 </div>
@@ -472,7 +477,7 @@ export default function Studio() {
                   onChange={(e) => setStory(e.target.value)}
                   rows={4}
                   className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 p-4 outline-none focus:border-violet-500"
-                  placeholder="一段完整的剧情描述，系统会自动拆成 4 个连续分镜"
+                  placeholder={t('studio.comic.storyPlaceholder')}
                 />
               )}
             </div>
@@ -482,8 +487,8 @@ export default function Studio() {
             <ShotList
               shots={shots}
               setShots={setShots}
-              placeholder={(i) => `第 ${i + 1} 张`}
-              addLabel="+ 添加一张"
+              placeholder={(i) => t('studio.imageSequence.shotPlaceholder', { n: i + 1 })}
+              addLabel={t('studio.imageSequence.addLabel')}
             />
           )}
 
@@ -494,25 +499,25 @@ export default function Studio() {
                 onChange={(e) => setVText(e.target.value)}
                 rows={3}
                 className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 p-4 outline-none focus:border-violet-500"
-                placeholder="镜头缓缓推进，一只狐狸转身望向镜头，雪花飘落"
+                placeholder={t('studio.examples.foxVideo')}
               />
 
               <div>
                 <Capsule>
-                  <span className="text-zinc-500">参考模式</span>
+                  <span className="text-zinc-500">{t('studio.capsule.refMode')}</span>
                   <select
                     value={refMode}
                     onChange={(e) => setRefModeAndClear(e.target.value as RefMode)}
                     className="bg-transparent text-zinc-100 outline-none"
                   >
                     <option value="none" className="bg-zinc-900">
-                      不使用
+                      {t('studio.refMode.none')}
                     </option>
                     <option value="firstLast" className="bg-zinc-900">
-                      首尾帧
+                      {t('studio.refMode.firstLast')}
                     </option>
                     <option value="reference" className="bg-zinc-900">
-                      参考素材
+                      {t('studio.refMode.reference')}
                     </option>
                   </select>
                 </Capsule>
@@ -520,7 +525,7 @@ export default function Studio() {
                 {refMode === 'firstLast' && (
                   <div className="mt-3 space-y-2">
                     <div>
-                      <p className="mb-1 text-xs text-zinc-600">首帧</p>
+                      <p className="mb-1 text-xs text-zinc-600">{t('studio.firstFrame')}</p>
                       <AssetPicker
                         type="image"
                         selected={firstFrameAssetId ? [firstFrameAssetId] : []}
@@ -529,7 +534,7 @@ export default function Studio() {
                       />
                     </div>
                     <div>
-                      <p className="mb-1 text-xs text-zinc-600">尾帧</p>
+                      <p className="mb-1 text-xs text-zinc-600">{t('studio.lastFrame')}</p>
                       <AssetPicker
                         type="image"
                         selected={lastFrameAssetId ? [lastFrameAssetId] : []}
@@ -543,7 +548,7 @@ export default function Studio() {
                 {refMode === 'reference' && (
                   <div className="mt-3 space-y-2">
                     <div>
-                      <p className="mb-1 text-xs text-zinc-600">参考图片</p>
+                      <p className="mb-1 text-xs text-zinc-600">{t('studio.refImages')}</p>
                       <AssetPicker
                         type="image"
                         selected={refImageIds}
@@ -553,7 +558,7 @@ export default function Studio() {
                       />
                     </div>
                     <div>
-                      <p className="mb-1 text-xs text-zinc-600">参考视频</p>
+                      <p className="mb-1 text-xs text-zinc-600">{t('studio.refVideos')}</p>
                       <AssetPicker
                         type="video"
                         selected={refVideoIds}
@@ -566,17 +571,14 @@ export default function Studio() {
                 )}
               </div>
 
-              <label
-                className="flex items-center gap-2 text-sm text-zinc-400"
-                title="生成前用 AI 深度理解并润色你的提示词，按用量额外计费"
-              >
+              <label className="flex items-center gap-2 text-sm text-zinc-400" title={t('studio.promptEnhanceTooltip')}>
                 <input
                   type="checkbox"
                   checked={promptEnhance}
                   onChange={(e) => setPromptEnhance(e.target.checked)}
                   className="accent-violet-500"
                 />
-                AI 提示词增强（+约 {estimatePromptEnhanceCredits()} 积分）
+                {t('studio.promptEnhance', { cost: estimatePromptEnhanceCredits() })}
               </label>
             </div>
           )}
@@ -614,12 +616,10 @@ export default function Studio() {
                 onClick={() => setVsShots((cur) => [...cur, { id: crypto.randomUUID(), text: '' }])}
                 className="text-sm text-violet-400 hover:text-violet-300"
               >
-                + 添加一段
+                {t('studio.addSegment')}
               </button>
               {vsShots.length > 4 && (
-                <p className="text-xs text-amber-500">
-                  ⚠ 镜头数 &gt;4，已自动每 {vsRecalibrateEvery} 段重新锚定一次角色，防止漂移
-                </p>
+                <p className="text-xs text-amber-500">{t('studio.driftWarning', { n: vsRecalibrateEvery })}</p>
               )}
             </div>
           )}
@@ -628,7 +628,7 @@ export default function Studio() {
           <div className="flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-4">
             {tab === 'image.batch' && (
               <Capsule>
-                <span className="text-zinc-500">数量</span>
+                <span className="text-zinc-500">{t('studio.capsule.count')}</span>
                 <select value={n} onChange={(e) => setN(Number(e.target.value))} className="bg-transparent text-zinc-100 outline-none">
                   {[2, 4, 6, 9].map((v) => (
                     <option key={v} value={v} className="bg-zinc-900">
@@ -641,7 +641,7 @@ export default function Studio() {
 
             {(tab === 'video.single' || tab === 'video.sequence') && (
               <Capsule>
-                <span className="text-zinc-500">时长</span>
+                <span className="text-zinc-500">{t('studio.capsule.duration')}</span>
                 <select
                   value={tab === 'video.single' ? duration : vsDuration}
                   onChange={(e) =>
@@ -660,7 +660,7 @@ export default function Studio() {
 
             {tab === 'video.single' && (
               <Capsule>
-                <span className="text-zinc-500">解析度</span>
+                <span className="text-zinc-500">{t('studio.capsule.resolution')}</span>
                 <select
                   value={resolution}
                   onChange={(e) => setResolution(e.target.value as '768P' | '2K')}
@@ -673,8 +673,8 @@ export default function Studio() {
             )}
 
             {tab === 'video.single' && (
-              <Capsule disabled={refMode !== 'none'} title={refMode !== 'none' ? '首尾帧/参考素材模式下画面比例由素材决定' : undefined}>
-                <span className="text-zinc-500">比例</span>
+              <Capsule disabled={refMode !== 'none'} title={refMode !== 'none' ? t('studio.capsule.ratioDisabledTooltip') : undefined}>
+                <span className="text-zinc-500">{t('studio.capsule.ratio')}</span>
                 <select
                   value={ratio}
                   onChange={(e) => setRatio(e.target.value as (typeof RATIO_VALUES)[number])}
@@ -693,7 +693,7 @@ export default function Studio() {
             {tab === 'video.sequence' && (
               <>
                 <Capsule>
-                  <span className="text-zinc-500">比例</span>
+                  <span className="text-zinc-500">{t('studio.capsule.ratio')}</span>
                   <select value={vsRatio} onChange={(e) => setVsRatio(e.target.value as (typeof RATIO_VALUES)[number])} className="bg-transparent text-zinc-100 outline-none">
                     {RATIO_VALUES.map((r) => (
                       <option key={r} value={r} className="bg-zinc-900">
@@ -702,8 +702,8 @@ export default function Studio() {
                     ))}
                   </select>
                 </Capsule>
-                <Capsule title="每 N 段重新锚定一次角色参考图（r2va），其余段落用前一段尾帧续接（i2va）">
-                  <span className="text-zinc-500">锚定间隔</span>
+                <Capsule title={t('studio.capsule.anchorIntervalTooltip')}>
+                  <span className="text-zinc-500">{t('studio.capsule.anchorInterval')}</span>
                   <select
                     value={vsRecalibrateEvery}
                     onChange={(e) => setVsRecalibrateEvery(Number(e.target.value))}
@@ -711,7 +711,7 @@ export default function Studio() {
                   >
                     {[2, 3, 4, 5].map((v) => (
                       <option key={v} value={v} className="bg-zinc-900">
-                        每 {v} 段
+                        {t('studio.capsule.everyNSegments', { n: v })}
                       </option>
                     ))}
                   </select>
@@ -722,11 +722,11 @@ export default function Studio() {
             {!isGuest && (
               <>
                 <Capsule>
-                  <span className="text-zinc-500">角色 A</span>
+                  <span className="text-zinc-500">{t('studio.capsule.characterA')}</span>
                   <CharacterSelectInline value={slotA} onChange={setSlotA} options={characters.data?.characters ?? []} />
                 </Capsule>
                 <Capsule>
-                  <span className="text-zinc-500">角色 B</span>
+                  <span className="text-zinc-500">{t('studio.capsule.characterB')}</span>
                   <CharacterSelectInline value={slotB} onChange={setSlotB} options={characters.data?.characters ?? []} />
                 </Capsule>
               </>
@@ -746,23 +746,25 @@ export default function Studio() {
                   }
                   className="rounded-full bg-violet-500 px-5 py-2 text-sm font-medium text-white transition hover:bg-violet-400 disabled:opacity-50"
                 >
-                  {createJob.isPending ? '提交中…' : running ? '生成中…' : '生成 →'}
+                  {createJob.isPending ? t('studio.submitting') : running ? t('studio.generating') : t('studio.generate')}
                 </button>
               </>
             ) : (
               <Link to="/login" className="rounded-full bg-violet-500 px-5 py-2 text-sm font-medium text-white transition hover:bg-violet-400">
-                登录后生成 →
+                {t('studio.loginToGenerate')}
               </Link>
             )}
           </div>
 
-          {insufficientBalance && <p className="text-sm text-red-400">积分不足（余额 {balance}）</p>}
+          {insufficientBalance && <p className="text-sm text-red-400">{t('studio.insufficientBalance', { balance })}</p>}
           {tab === 'video.single' && !videoValidation.success && (
-            <p className="text-sm text-amber-400">{videoValidation.error.issues[0]?.message}</p>
+            <p className="text-sm text-amber-400">
+              {videoValidation.error.issues[0]?.message ? t(videoValidation.error.issues[0].message) : ''}
+            </p>
           )}
 
           {!isGuest && characters.isSuccess && characters.data.characters.length === 0 && (
-            <p className="text-xs text-zinc-600">还没有角色，去「角色库」创建</p>
+            <p className="text-xs text-zinc-600">{t('studio.noCharactersHint')}</p>
           )}
 
           {!isGuest && !!presets.data?.presets.length && (
@@ -776,26 +778,26 @@ export default function Studio() {
 
         {/* ── Format quick-switch cards ──────────────────────────── */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          {TABS.map((t) => (
+          {TABS.map((tb) => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={tb}
+              onClick={() => setTab(tb)}
               className={`rounded-xl border p-3 text-left transition ${
-                tab === t ? 'border-violet-500 bg-violet-500/10' : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700'
+                tab === tb ? 'border-violet-500 bg-violet-500/10' : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700'
               }`}
             >
-              <p className="text-lg leading-none">{TAB_META[t].icon}</p>
-              <p className={`mt-1.5 text-sm font-medium ${tab === t ? 'text-violet-300' : 'text-zinc-200'}`}>
-                {WORKFLOW_LABEL[t]}
+              <p className="text-lg leading-none">{TAB_META_KEY[tb].icon}</p>
+              <p className={`mt-1.5 text-sm font-medium ${tab === tb ? 'text-violet-300' : 'text-zinc-200'}`}>
+                {t(WORKFLOW_LABEL_KEY[tb])}
               </p>
-              <p className="mt-0.5 text-xs text-zinc-500">{TAB_META[t].blurb}</p>
+              <p className="mt-0.5 text-xs text-zinc-500">{t(TAB_META_KEY[tb].blurbKey)}</p>
             </button>
           ))}
         </div>
 
         {bizId && (
           <Link to={`/jobs/${bizId}`} className="text-sm text-violet-400 hover:text-violet-300">
-            查看流程图 →
+            {t('studio.viewGraph')}
           </Link>
         )}
 
@@ -807,7 +809,7 @@ export default function Studio() {
 
           {!bizId && isGuest && (
             <div className="mx-auto max-w-md space-y-3 text-center">
-              <p className="text-sm text-zinc-400">不用注册，先免费试用一次单图生成</p>
+              <p className="text-sm text-zinc-400">{t('studio.trial.intro')}</p>
               <textarea
                 value={trialPrompt}
                 onChange={(e) => setTrialPrompt(e.target.value)}
@@ -819,13 +821,13 @@ export default function Studio() {
                 disabled={trialBusy || !trialPrompt.trim()}
                 className="w-full rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800 disabled:opacity-50"
               >
-                {trialBusy ? '生成中…' : '✦ 匿名试用一次'}
+                {trialBusy ? t('studio.generating') : t('studio.trial.tryOnce')}
               </button>
               {trialError && <p className="text-sm text-red-400">{trialError}</p>}
               {trialImageUrl && (
                 <div className="pt-2">
                   <img src={trialImageUrl} alt="" className="mx-auto rounded-lg" />
-                  <p className="mt-2 text-xs text-zinc-500">喜欢这张？登录后才能保存到素材库</p>
+                  <p className="mt-2 text-xs text-zinc-500">{t('studio.trial.likeIt')}</p>
                 </div>
               )}
             </div>
@@ -839,20 +841,22 @@ export default function Studio() {
             <div className="flex min-h-64 flex-col items-center justify-center gap-3">
               <GenerationProgress kind={tab.startsWith('video') ? 'video' : 'image'} />
               {jobStream.streamState === 'reconnecting' && (
-                <p className="text-xs text-amber-500">实时连接不稳定，重新连接中…</p>
+                <p className="text-xs text-amber-500">{t('jobDetail.reconnecting')}</p>
               )}
               <button
                 onClick={() => cancelJob.mutate()}
                 disabled={cancelJob.isPending}
                 className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-400 transition hover:border-red-500 hover:text-red-400 disabled:opacity-50"
               >
-                {cancelJob.isPending ? '取消中…' : '取消作业'}
+                {cancelJob.isPending ? t('jobDetail.cancelling') : t('jobDetail.cancelJob')}
               </button>
             </div>
           )}
 
           {job?.status === 'failed' && (
-            <p className="text-center text-red-400">生成失败：{displayNodeError(job && firstSpecificError(job.nodes))}</p>
+            <p className="text-center text-red-400">
+              {t('studio.generationFailed', { error: displayNodeError(job && firstSpecificError(job.nodes), t) })}
+            </p>
           )}
 
           {job?.status === 'succeeded' && (
@@ -868,7 +872,7 @@ export default function Studio() {
 
               {suggestions.length > 0 && (
                 <div className="flex flex-wrap items-center justify-center gap-2 border-t border-zinc-800 pt-4">
-                  <span className="text-xs text-zinc-500">猜你想接着做：</span>
+                  <span className="text-xs text-zinc-500">{t('studio.suggestionsLabel')}</span>
                   {suggestions.map((s) => (
                     <button
                       key={s.kind}
@@ -918,6 +922,7 @@ function SortableShotRow({
   onRemove: () => void
   removable: boolean
 }) {
+  const { t } = useTranslation()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: shot.id })
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
 
@@ -927,13 +932,13 @@ function SortableShotRow({
         type="button"
         {...attributes}
         {...listeners}
-        title="拖拽排序"
+        title={t('studio.dragToReorder')}
         className="shrink-0 cursor-grab touch-none px-1 text-zinc-600 transition hover:text-zinc-400 active:cursor-grabbing"
       >
         ⋮⋮
       </button>
       <span
-        title={SHOT_MODE_LABEL[mode]}
+        title={t(SHOT_MODE_LABEL_KEY[mode])}
         className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-mono ${SHOT_MODE_CLASS[mode]}`}
       >
         {mode}
@@ -942,7 +947,7 @@ function SortableShotRow({
         value={shot.text}
         onChange={(e) => onChange(e.target.value)}
         className="flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-violet-500"
-        placeholder={`第 ${index + 1} 段镜头描述`}
+        placeholder={t('studio.videoSequence.shotPlaceholder', { n: index + 1 })}
       />
       {removable && (
         <button
@@ -994,18 +999,18 @@ function ShotList({
   )
 }
 
-// §19.4.1's cold-start "灵感引导" empty state: reuses preset cover images
-// (already fetched for the carousel above) instead of a bare "结果会显示在
-// 这里" placeholder — clicking one drops its prompt fragment straight into
-// the active input.
+// F19.4.1's cold-start empty state: reuses preset cover images (already
+// fetched for the carousel above) instead of a bare placeholder — clicking
+// one drops its prompt fragment straight into the active input.
 function EmptyState({ presets, onPick }: { presets: { biz_id: string; name: string; cover_url: string; prompt_fragment: string }[]; onPick: (fragment: string) => void }) {
+  const { t } = useTranslation()
   const sample = presets.slice(0, 4)
   if (sample.length === 0) {
-    return <p className="text-center text-zinc-500">结果会显示在这里</p>
+    return <p className="text-center text-zinc-500">{t('studio.emptyResult')}</p>
   }
   return (
     <div className="mx-auto max-w-md text-center">
-      <p className="mb-3 text-sm text-zinc-500">猜你想生成：</p>
+      <p className="mb-3 text-sm text-zinc-500">{t('studio.guessWhat')}</p>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {sample.map((p) => (
           <button
@@ -1035,10 +1040,11 @@ function CharacterSelectInline({
   onChange: (v: string) => void
   options: { biz_id: string; name: string }[]
 }) {
+  const { t } = useTranslation()
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} className="bg-transparent text-zinc-100 outline-none">
       <option value="" className="bg-zinc-900">
-        未选择
+        {t('studio.unselected')}
       </option>
       {options.map((c) => (
         <option key={c.biz_id} value={c.biz_id} className="bg-zinc-900">

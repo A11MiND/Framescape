@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import AppShell from '../components/AppShell'
 import { useToast } from '../components/Toast'
@@ -16,6 +17,7 @@ import { useToast } from '../components/Toast'
 type Filter = 'all' | 'image' | 'video'
 
 export default function Assets() {
+  const { t } = useTranslation()
   const [filter, setFilter] = useState<Filter>('all')
   const [selected, setSelected] = useState<string[]>([])
   const [searchParams, setSearchParams] = useSearchParams()
@@ -42,7 +44,7 @@ export default function Assets() {
       setSelected((cur) => cur.filter((id) => id !== bizId))
       queryClient.invalidateQueries({ queryKey: ['assets'] })
     },
-    onError: () => pushToast('删除失败，请重试'),
+    onError: () => pushToast(t('assets.deleteFailed')),
   })
 
   // F2.7's batch download: the response is a zip blob, not JSON — trigger a
@@ -58,7 +60,7 @@ export default function Assets() {
       a.click()
       URL.revokeObjectURL(url)
     },
-    onError: () => pushToast('批量下载失败，请重试'),
+    onError: () => pushToast(t('assets.batchDownloadFailed')),
   })
 
   const toggleSelected = (bizId: string) =>
@@ -68,30 +70,30 @@ export default function Assets() {
     mutationFn: ({ bizId, projectId }: { bizId: string; projectId?: string }) =>
       api.setAssetProject(bizId, projectId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['assets'] }),
-    onError: () => pushToast('归类失败，请重试'),
+    onError: () => pushToast(t('assets.assignFailed')),
   })
 
   return (
     <AppShell>
       <div className="mx-auto max-w-5xl px-6 py-8">
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-lg font-medium">素材库</h1>
+          <h1 className="text-lg font-medium">{t('rail.assets')}</h1>
           <div className="flex items-center gap-3">
             {selected.length > 0 && (
               <>
-                <span className="text-sm text-zinc-500">已选 {selected.length}</span>
+                <span className="text-sm text-zinc-500">{t('assets.selectedCount', { count: selected.length })}</span>
                 <button
                   onClick={() => batchDownload.mutate()}
                   disabled={batchDownload.isPending}
                   className="rounded-lg bg-violet-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-violet-400 disabled:opacity-50"
                 >
-                  {batchDownload.isPending ? '打包中…' : '批量下载'}
+                  {batchDownload.isPending ? t('assets.zipping') : t('assets.batchDownload')}
                 </button>
                 <button
                   onClick={() => setSelected([])}
                   className="rounded-lg px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-900"
                 >
-                  取消选择
+                  {t('assets.deselect')}
                 </button>
               </>
             )}
@@ -100,7 +102,7 @@ export default function Assets() {
               onChange={(e) => setProjectFilter(e.target.value)}
               className="rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-300 outline-none focus:border-violet-500"
             >
-              <option value="">全部项目</option>
+              <option value="">{t('assets.allProjects')}</option>
               {projects.data?.projects.map((p) => (
                 <option key={p.biz_id} value={p.biz_id}>
                   {p.name}
@@ -118,7 +120,7 @@ export default function Assets() {
                       : 'text-zinc-400 hover:bg-zinc-900'
                   }`}
                 >
-                  {f === 'all' ? '全部' : f === 'image' ? '图片' : '视频'}
+                  {t(`assets.filter.${f}`)}
                 </button>
               ))}
             </div>
@@ -126,7 +128,7 @@ export default function Assets() {
         </div>
 
         {assets.isSuccess && assets.data.assets.length === 0 && (
-          <p className="text-zinc-500">还没有生成过任何素材，去「创作台」生成一些</p>
+          <p className="text-zinc-500">{t('assets.empty')}</p>
         )}
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -156,7 +158,7 @@ export default function Assets() {
                   e.stopPropagation()
                   deleteAsset.mutate(a.biz_id)
                 }}
-                title="软删除"
+                title={t('common.delete')}
                 className="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-xs text-zinc-300 opacity-0 transition hover:text-red-400 group-hover:opacity-100"
               >
                 ✕
@@ -189,10 +191,10 @@ export default function Assets() {
                 onChange={(e) => {
                   setAssetProject.mutate({ bizId: a.biz_id, projectId: e.target.value || undefined })
                 }}
-                title="归入项目"
+                title={t('assets.assignToProject')}
                 className="absolute bottom-1.5 right-1.5 z-10 max-w-[92px] truncate rounded bg-black/60 px-1 py-0.5 text-[10px] text-zinc-300 opacity-0 outline-none transition group-hover:opacity-100"
               >
-                <option value="">未分组</option>
+                <option value="">{t('assets.unassigned')}</option>
                 {projects.data?.projects.map((p) => (
                   <option key={p.biz_id} value={p.biz_id}>
                     {p.name}

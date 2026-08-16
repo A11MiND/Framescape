@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { api, type JobResponse } from '../lib/api'
 import { estimateVideoCredits } from '../lib/pricing'
 
@@ -26,6 +27,7 @@ export default function PreviewGate({
   duration: number
   onResumed: () => void
 }) {
+  const { t } = useTranslation()
   const shots = job.nodes
     .filter((n) => /^shot-\d+$/.test(n.name))
     .map((n) => ({
@@ -69,14 +71,12 @@ export default function PreviewGate({
 
   return (
     <div className="w-full space-y-4">
-      <p className="text-sm text-zinc-400">
-        {shots.length} 段已生成 768P 草稿，逐段选择保留 / 重做 / 升级 2K
-      </p>
+      <p className="text-sm text-zinc-400">{t('previewGate.intro', { count: shots.length })}</p>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {shots.map((s) => (
           <div key={s.index} className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-            <p className="mb-2 text-xs text-zinc-500">第 {s.index} 段</p>
+            <p className="mb-2 text-xs text-zinc-500">{t('previewGate.segmentN', { n: s.index })}</p>
             <ShotPreview assetId={s.assetId} />
             {originalPrompts[s.index - 1] && (
               <p className="mt-1.5 line-clamp-2 text-xs text-zinc-500" title={originalPrompts[s.index - 1]}>
@@ -94,7 +94,7 @@ export default function PreviewGate({
                       : 'border-zinc-800 text-zinc-500 hover:border-zinc-700'
                   }`}
                 >
-                  {b === 'keep' ? '保留' : b === 'redo' ? '重做' : '升 2K'}
+                  {t(`previewGate.bucket.${b}`)}
                 </button>
               ))}
             </div>
@@ -102,7 +102,7 @@ export default function PreviewGate({
               <input
                 value={overrides[s.index] ?? ''}
                 onChange={(e) => setOverrides((cur) => ({ ...cur, [s.index]: e.target.value }))}
-                placeholder="重做提示词（留空则用原提示词）"
+                placeholder={t('workflowGraph.retryPromptPlaceholder')}
                 className="mt-2 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs outline-none focus:border-violet-500"
               />
             )}
@@ -112,16 +112,18 @@ export default function PreviewGate({
 
       <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-950 p-3">
         <p className="text-sm text-zinc-400">
-          当前选择：升级 {upgradeCount} 段
+          {t('previewGate.currentSelection', { count: upgradeCount })}
           {Object.values(buckets).filter((b) => b === 'redo').length > 0 &&
-            ` · 重做 ${Object.values(buckets).filter((b) => b === 'redo').length} 段`}
+            ` · ${t('previewGate.redoCount', { count: Object.values(buckets).filter((b) => b === 'redo').length })}`}
         </p>
         <p className="text-sm text-zinc-300">
-          将消耗 <span className="font-mono text-violet-300">✦ {upgradeCost}</span>
+          {t('previewGate.willCost')} <span className="font-mono text-violet-300">✦ {upgradeCost}</span>
           <span className="text-zinc-600">
             {' '}
-            （对比：全部直接出 2K 需 <span className="font-mono">✦ {allUpgradeCost}</span>
-            {upgradeCount > 0 && savedPct > 0 ? `，省 ${savedPct}%` : ''}）
+            {t('previewGate.compareOpen')}
+            {t('previewGate.compareAllUpgrade')} <span className="font-mono">✦ {allUpgradeCost}</span>
+            {upgradeCount > 0 && savedPct > 0 ? t('previewGate.savedPct', { pct: savedPct }) : ''}
+            {t('previewGate.compareClose')}
           </span>
         </p>
         <div className="flex items-center gap-3 pt-1">
@@ -130,7 +132,11 @@ export default function PreviewGate({
             disabled={resume.isPending}
             className="rounded-lg bg-violet-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-violet-400 disabled:opacity-50"
           >
-            {resume.isPending ? '提交中…' : `确认并合成${upgradeCount > 0 ? ` (✦ +${upgradeCost} 升级)` : ''}`}
+            {resume.isPending
+              ? t('previewGate.submitting')
+              : upgradeCount > 0
+                ? t('previewGate.confirmWithUpgrade', { cost: upgradeCost })
+                : t('previewGate.confirm')}
           </button>
           {resume.isError && <p className="text-sm text-red-400">{(resume.error as Error).message}</p>}
         </div>

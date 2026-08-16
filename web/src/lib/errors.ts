@@ -13,9 +13,12 @@ const MODERATION_PREFIX = 'sensitive_content:'
 // what actually skips past it to find the real cause.
 const GENERIC_AGGREGATE_ERROR = 'one or more tasks failed'
 
-export function displayNodeError(raw: string | undefined | null): string {
-  if (!raw) return '未知错误'
-  if (raw.startsWith(MODERATION_PREFIX)) return '描述涉及敏感内容，未扣除积分'
+// t is threaded through explicitly rather than imported directly — see
+// jobGraph.ts's buildJobGraph doc for why (same pattern: a pure function
+// called from render, not a hook).
+export function displayNodeError(raw: string | undefined | null, t: (key: string) => string): string {
+  if (!raw) return t('errors.unknown')
+  if (raw.startsWith(MODERATION_PREFIX)) return t('errors.moderationBlocked')
   return raw
 }
 

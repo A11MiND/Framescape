@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
-import { useParams } from 'react-router-dom'
-import { resultAssetIds, statusToPhase, WORKFLOW_LABEL, type Tab } from '../lib/jobResult'
+import { Link, useParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import { resultAssetIds, statusToPhase, WORKFLOW_LABEL_KEY, type Tab } from '../lib/jobResult'
 import { displayNodeError, firstSpecificError } from '../lib/errors'
 import { useToast } from '../components/Toast'
 import AppShell from '../components/AppShell'
@@ -17,6 +18,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 // submitted in that browser tab): fetches job + spec fresh from
 // GET /jobs/{bizID} rather than relying on any client-side state.
 export default function JobDetail() {
+  const { t } = useTranslation()
   const { bizId } = useParams<{ bizId: string }>()
   const pushToast = useToast()
 
@@ -24,15 +26,16 @@ export default function JobDetail() {
 
   useEffect(() => {
     if (jobQuery.isError) {
-      pushToast('网络连接不稳定，无法获取作业状态', () => jobQuery.refetch())
+      pushToast(t('jobDetail.connectionUnstable'), () => jobQuery.refetch())
     }
-  }, [jobQuery.isError, jobQuery.refetch, pushToast])
+  }, [jobQuery.isError, jobQuery.refetch, pushToast, t])
 
   const job = jobQuery.data
   const gateNode = job?.nodes.find((n) => n.name === 'gate')
   const gateSuspended = job?.workflow_name === 'video.sequence' && gateNode?.phase === 'Suspended'
   const assetIds = job ? resultAssetIds(job, job.workflow_name as Tab) : []
   const running = job && job.status !== 'succeeded' && job.status !== 'failed' && job.status !== 'cancelled'
+  const label = job ? t(WORKFLOW_LABEL_KEY[job.workflow_name as Tab]) || job.workflow_name : ''
 
   // F7.4: stops the run and lets the existing terminal-phase machinery
   // (jobsvc.Service.Cancel's own doc) settle credits — this just fires the
@@ -41,24 +44,32 @@ export default function JobDetail() {
   const cancelJob = useMutation({
     mutationFn: () => api.cancelJob(bizId!),
     onSuccess: () => jobQuery.refetch(),
-    onError: (err) => pushToast(err instanceof ApiError ? err.message : '取消失败，请重试', () => cancelJob.mutate()),
+    onError: (err) => pushToast(err instanceof ApiError ? err.message : t('jobDetail.cancelFailed'), () => cancelJob.mutate()),
   })
 
   return (
     <AppShell>
       <div className="mx-auto max-w-5xl space-y-6 px-6 py-8">
-        {!job && <p className="text-zinc-500">加载中…</p>}
+        {!job && <p className="text-zinc-500">{t('common.loading')}</p>}
 
         {job && (
           <>
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-lg font-medium">
-                  {job.title || WORKFLOW_LABEL[job.workflow_name as Tab] || job.workflow_name}
+                  {!!job.retry_of_job_id && (
+                    <Link
+                      to={`/jobs/${job.retry_of_job_id}`}
+                      title={t('jobs.retryIndicatorLinkTitle')}
+                      className="mr-1 text-violet-400 hover:text-violet-300"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      ↻
+                    </Link>
+                  )}
+                  {job.title || label}
                 </h1>
-                <p className="text-sm text-zinc-500">
-                  {WORKFLOW_LABEL[job.workflow_name as Tab] ?? job.workflow_name}
-                </p>
+                <p className="text-sm text-zinc-500">{label}</p>
               </div>
               <div className="flex items-center gap-3">
                 <PhaseBadge phase={statusToPhase(job.status)} />
@@ -68,7 +79,7 @@ export default function JobDetail() {
                     disabled={cancelJob.isPending}
                     className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-red-500 hover:text-red-400 disabled:opacity-50"
                   >
-                    {cancelJob.isPending ? '取消中…' : '取消作业'}
+                    {cancelJob.isPending ? t('jobDetail.cancelling') : t('jobDetail.cancelJob')}
                   </button>
                 )}
               </div>
@@ -80,7 +91,7 @@ export default function JobDetail() {
               <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
                 <GenerationProgress kind={job.workflow_name.startsWith('video') ? 'video' : 'image'} />
                 {jobQuery.streamState === 'reconnecting' && (
-                  <p className="mt-2 text-center text-xs text-amber-500">实时连接不稳定，重新连接中…</p>
+                  <p className="mt-2 text-center text-xs text-amber-500">{t('jobDetail.reconnecting')}</p>
                 )}
               </div>
             )}
@@ -97,7 +108,7 @@ export default function JobDetail() {
             )}
 
             {job.status === 'failed' && (
-              <p className="text-red-400">{displayNodeError(firstSpecificError(job.nodes))}</p>
+              <p className="text-red-400">{displayNodeError(firstSpecificError(job.nodes), t)}</p>
             )}
 
             {job.status === 'succeeded' && assetIds.length > 0 && (

@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next'
 import type { JobResponse } from './api'
 import type { Tab } from './jobResult'
 
@@ -16,30 +17,30 @@ export type SuggestedAction =
   | { kind: 'upgrade-2k'; label: string; icon: string }
   | { kind: 'save-frame-character'; label: string; icon: string; sourceAssetId: string }
 
-export function suggestActions(job: JobResponse, tab: Tab, resultAssetIds: string[]): SuggestedAction[] {
+export function suggestActions(job: JobResponse, tab: Tab, resultAssetIds: string[], t: TFunction): SuggestedAction[] {
   const out: SuggestedAction[] = []
   const firstAsset = resultAssetIds[0]
 
   if ((tab === 'image.single' || tab === 'image.batch') && firstAsset) {
-    out.push({ kind: 'to-video', label: '转成视频', icon: '🎬', sourceAssetId: firstAsset })
-    out.push({ kind: 'more-batch', label: '再来一批', icon: '🔁' })
+    out.push({ kind: 'to-video', label: t('suggestions.toVideo'), icon: '🎬', sourceAssetId: firstAsset })
+    out.push({ kind: 'more-batch', label: t('suggestions.moreBatch'), icon: '🔁' })
     if (!job.spec.characters?.length) {
-      out.push({ kind: 'save-character', label: '存为角色', icon: '☺', sourceAssetId: firstAsset })
+      out.push({ kind: 'save-character', label: t('suggestions.saveCharacter'), icon: '☺', sourceAssetId: firstAsset })
     }
   }
 
   if (tab === 'image.comic4' && job.spec.panels?.length) {
-    out.push({ kind: 'to-sequence', label: '转成分镜', icon: '✨', shots: job.spec.panels })
+    out.push({ kind: 'to-sequence', label: t('suggestions.toSequence'), icon: '✨', shots: job.spec.panels })
   }
 
   if (tab === 'video.single') {
     if (job.spec.resolution === '768P') {
-      out.push({ kind: 'upgrade-2k', label: '升级 2K', icon: '⬆' })
+      out.push({ kind: 'upgrade-2k', label: t('suggestions.upgrade2k'), icon: '⬆' })
     }
     const extractNode = job.nodes.find((n) => n.name === 'extract')
     const frameAssetId = extractNode?.outputs?.['first-frame-asset-id'] as string | undefined
     if (frameAssetId) {
-      out.push({ kind: 'save-frame-character', label: '抽帧存为角色', icon: '☺', sourceAssetId: frameAssetId })
+      out.push({ kind: 'save-frame-character', label: t('suggestions.saveFrameCharacter'), icon: '☺', sourceAssetId: frameAssetId })
     }
   }
 

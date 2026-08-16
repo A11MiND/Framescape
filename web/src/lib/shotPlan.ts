@@ -14,10 +14,12 @@ export function shotMode(idx: number, recalibrateEvery: number, hasCharacterAnch
   return 'i2va'
 }
 
-export const SHOT_MODE_LABEL: Record<ShotMode, string> = {
-  r2va: 'r2va · 角色锚定',
-  t2va: 't2va · 纯文字',
-  i2va: 'i2va · 尾帧续接',
+// See jobResult.ts's WORKFLOW_LABEL_KEY doc for why this is a key map, not
+// resolved strings — callers do `t(SHOT_MODE_LABEL_KEY[mode])`.
+export const SHOT_MODE_LABEL_KEY: Record<ShotMode, string> = {
+  r2va: 'shotMode.r2va',
+  t2va: 'shotMode.t2va',
+  i2va: 'shotMode.i2va',
 }
 
 export const SHOT_MODE_CLASS: Record<ShotMode, string> = {

@@ -1,12 +1,5 @@
+import { useTranslation } from 'react-i18next'
 import type { Preset } from '../lib/api'
-
-const CATEGORY_LABELS: Record<string, string> = {
-  style: '风格',
-  pose: '姿势',
-  composition: '构图',
-  lighting: '光线',
-  camera: '镜头',
-}
 
 // §19.4.1's right-rail "预设卡片横滑区" — the previous build only ever
 // rendered Preset.name as a text pill, leaving Preset.cover_url and
@@ -23,6 +16,7 @@ export default function PresetCarousel({
   selected: string[]
   onToggle: (id: string) => void
 }) {
+  const { t } = useTranslation()
   const grouped = presets.reduce<Record<string, Preset[]>>((acc, p) => {
     ;(acc[p.category] ??= []).push(p)
     return acc
@@ -35,7 +29,7 @@ export default function PresetCarousel({
       {Object.entries(grouped).map(([category, items]) => (
         <div key={category}>
           <p className="mb-1.5 text-xs uppercase tracking-wide text-zinc-500">
-            {CATEGORY_LABELS[category] ?? category}
+            {t(`presets.category.${category}`, category)}
           </p>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {items.map((p) => {
@@ -54,7 +48,7 @@ export default function PresetCarousel({
                     <img src={p.cover_url} alt="" className="h-full w-full object-cover" />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center bg-zinc-900 text-xs text-zinc-600">
-                      无封面
+                      {t('presetCarousel.noCover')}
                     </div>
                   )}
                   <div

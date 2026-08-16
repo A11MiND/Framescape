@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { api, ApiError, type AssetResponse } from '../lib/api'
 import { uploadAsset } from '../lib/upload'
 
@@ -33,6 +34,7 @@ export function AssetPicker({
   disabled?: boolean
   emptyHint?: string
 }) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const qc = useQueryClient()
@@ -73,7 +75,7 @@ export function AssetPicker({
             onClick={() => setExpanded((v) => !v)}
             className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-dashed border-zinc-700 text-xs text-zinc-500 transition hover:border-zinc-500 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {expanded ? '收起' : '+ 选择'}
+            {expanded ? t('assetPicker.collapse') : t('assetPicker.choose')}
           </button>
         )}
         <button
@@ -83,11 +85,11 @@ export function AssetPicker({
           className="flex h-14 w-14 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-zinc-700 text-xs text-zinc-500 transition hover:border-violet-500 hover:text-violet-300 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {upload.isPending ? (
-            <span className="animate-pulse">上传中</span>
+            <span className="animate-pulse">{t('assetPicker.uploading')}</span>
           ) : (
             <>
               <span className="text-base leading-none">⇧</span>
-              上传
+              {t('assetPicker.upload')}
             </>
           )}
         </button>
@@ -104,9 +106,9 @@ export function AssetPicker({
         />
       </div>
 
-      {empty && <p className="text-sm text-zinc-600">{emptyHint ?? `还没有${type === 'image' ? '图片' : '视频'}，点右侧「上传」添加`}</p>}
+      {empty && <p className="text-sm text-zinc-600">{emptyHint ?? t(`assetPicker.emptyDefault.${type}`)}</p>}
       {upload.isError && (
-        <p className="text-xs text-red-400">{upload.error instanceof ApiError ? upload.error.message : '上传失败，请重试'}</p>
+        <p className="text-xs text-red-400">{upload.error instanceof ApiError ? upload.error.message : t('assetPicker.uploadFailed')}</p>
       )}
 
       {expanded && (

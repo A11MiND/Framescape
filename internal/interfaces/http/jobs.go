@@ -73,8 +73,34 @@ func (s *Server) handleListJobs(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, errBody("internal", "list jobs"))
 		return
 	}
+
+	// Batch-resolve retry_of_job_id -> biz_id once for the whole page, same
+	// reasoning as handleListAssets' project_id resolution — the frontend
+	// renders its own locale-aware retry indicator from this rather than
+	// parsing any hardcoded-language text (jobsvc.RetryNode's own doc).
+	retryOfIDs := make([]uint64, 0)
+	seen := map[uint64]bool{}
+	for _, j := range rows {
+		if j.RetryOfJobID != nil && !seen[*j.RetryOfJobID] {
+			seen[*j.RetryOfJobID] = true
+			retryOfIDs = append(retryOfIDs, *j.RetryOfJobID)
+		}
+	}
+	retryOfBizByID := make(map[uint64]string, len(retryOfIDs))
+	if len(retryOfIDs) > 0 {
+		var srcJobs []persistence.Job
+		_ = s.db.WithContext(c.Request.Context()).Where("id IN ?", retryOfIDs).Find(&srcJobs).Error
+		for _, sj := range srcJobs {
+			retryOfBizByID[sj.ID] = sj.BizID
+		}
+	}
+
 	out := make([]gin.H, 0, len(rows))
 	for _, j := range rows {
+		retryOfBizID := ""
+		if j.RetryOfJobID != nil {
+			retryOfBizID = retryOfBizByID[*j.RetryOfJobID]
+		}
 		out = append(out, gin.H{
 			"biz_id":           j.BizID,
 			"workflow_name":    j.WorkflowName,
@@ -88,6 +114,7 @@ func (s *Server) handleListJobs(c *gin.Context) {
 			"credit_settled":   j.CreditSettled,
 			"created_at":       j.CreatedAt,
 			"finished_at":      j.FinishedAt,
+			"retry_of_job_id":  retryOfBizID,
 		})
 	}
 	resp := gin.H{"jobs": out}
@@ -204,12 +231,19 @@ func (s *Server) handleGetJob(c *gin.Context) {
 		}
 	}
 
+	retryOfBizID := ""
+	if job.RetryOfJobID != nil {
+		_ = s.db.WithContext(c.Request.Context()).Model(&persistence.Job{}).
+			Select("biz_id").Where("id = ?", *job.RetryOfJobID).Scan(&retryOfBizID).Error
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"biz_id":          job.BizID,
 		"workflow_name":   job.WorkflowName,
 		"title":           job.Title,
 		"status":          job.Status,
 		"workflow_run_id": job.WorkflowRunID,
+		"retry_of_job_id": retryOfBizID,
 		"nodes":           nodes,
 		// json.RawMessage so job.Spec's already-valid JSON bytes embed
 		// directly rather than being marshaled as a base64 string. Needed so

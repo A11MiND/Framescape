@@ -1,4 +1,5 @@
 import { useAuthStore } from './authStore'
+import i18n from '../i18n'
 
 // PRD §13.1: base /api/v1, JSON error envelope {code,message,request_id}.
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8080/api/v1'
@@ -118,6 +119,7 @@ export interface JobResponse {
   workflow_run_id: string
   nodes: JobNode[]
   spec: Spec
+  retry_of_job_id: string
 }
 
 export interface AssetResponse {
@@ -226,6 +228,10 @@ export interface JobSummary {
   credit_settled: number
   created_at: string
   finished_at: string | null
+  // "" when this job wasn't submitted by jobsvc.RetryNode — see that
+  // handler's own doc for why titles carry no language-specific prefix
+  // and this field is the real (locale-agnostic) retry-provenance signal.
+  retry_of_job_id: string
 }
 
 export interface CreditLedgerEntry {
@@ -332,7 +338,7 @@ export const api = {
     }),
   uploadToPresignedURL: async (url: string, file: File): Promise<void> => {
     const resp = await fetch(url, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
-    if (!resp.ok) throw new ApiError('upload_failed', `上传失败（${resp.status}）`)
+    if (!resp.ok) throw new ApiError('upload_failed', i18n.t('api.uploadFailed', { status: resp.status }))
   },
   completeAsset: (bizId: string, body: { storage_key: string; width?: number; height?: number; duration_ms?: number }) =>
     request<AssetResponse>('POST', `/assets/${bizId}/complete`, body),

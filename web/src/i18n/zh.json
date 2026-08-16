@@ -1,0 +1,354 @@
+{
+  "brand": {
+    "name": "帧境",
+    "tagline": "一帧一境，说出来就有"
+  },
+  "common": {
+    "cancel": "取消",
+    "save": "保存",
+    "saving": "保存中…",
+    "delete": "删除",
+    "edit": "编辑",
+    "create": "创建",
+    "confirm": "确认",
+    "loading": "加载中…",
+    "retry": "重试",
+    "close": "关闭",
+    "optional": "可选",
+    "processing": "处理中…",
+    "somethingWentWrong": "出错了"
+  },
+  "login": {
+    "signIn": "登录",
+    "signUp": "注册",
+    "email": "邮箱",
+    "passwordPlaceholder": "密码（至少 8 位）",
+    "createAccount": "创建账号",
+    "notSure": "还没想好？",
+    "tryFree": "先去工坊免费试用一次"
+  },
+  "rail": {
+    "generate": "工坊",
+    "jobs": "作业",
+    "assets": "资产",
+    "projects": "项目",
+    "characters": "角色",
+    "presets": "预设",
+    "switchLanguage": "切换语言",
+    "logout": "退出登录"
+  },
+  "credits": {
+    "title": "积分",
+    "balance": "可用余额",
+    "held": "持有中（作业进行中预扣）",
+    "ledger": "流水",
+    "empty": "还没有流水记录",
+    "loadMore": "加载更多",
+    "direction": {
+      "recharge": "充值",
+      "hold": "持有",
+      "commit": "结算",
+      "refund": "退回"
+    }
+  },
+  "projects": {
+    "title": "项目",
+    "new": "+ 新建项目",
+    "empty": "还没有项目。创建一个，再去资产库把素材归类进去。",
+    "deleteFailed": "删除失败，请重试",
+    "namePlaceholder": "项目名",
+    "descriptionPlaceholder": "说明（可选）",
+    "create": "创建项目"
+  },
+  "characters": {
+    "title": "角色库",
+    "new": "+ 新建角色",
+    "empty": "还没有角色。先在工坊生成几张图，再回来把它们定为角色参考图。",
+    "deleteFailed": "删除失败，请重试",
+    "namePlaceholder": "角色名",
+    "descriptionPlaceholder": "外观描述（可选）",
+    "pickRefs": "选择 1-3 张参考图（已选 {{count}}）",
+    "pickerEmptyHint": "还没有生成过图片，点右侧「上传」添加，或先去工坊生成一些",
+    "create": "创建角色"
+  },
+  "presets": {
+    "title": "预设库",
+    "category": {
+      "style": "风格",
+      "pose": "姿势",
+      "composition": "构图",
+      "lighting": "光线",
+      "camera": "镜头"
+    }
+  },
+  "workflow": {
+    "imageSingle": "单图",
+    "imageBatch": "批量出图",
+    "imageComic4": "四格漫画",
+    "imageSequence": "连续生成",
+    "videoSingle": "单段影片",
+    "videoSequence": "连续影片"
+  },
+  "shotMode": {
+    "r2va": "r2va · 角色锚定",
+    "t2va": "t2va · 纯文字",
+    "i2va": "i2va · 尾帧续接"
+  },
+  "jobs": {
+    "empty": "还没有作业，去「工坊」生成一些",
+    "nodesDone": "{{done}}/{{total}} 完成",
+    "held": "持有 {{count}}",
+    "retryIndicator": "这是一次节点重做",
+    "retryIndicatorLinkTitle": "查看原作业",
+    "filter": {
+      "all": "全部",
+      "running": "进行中",
+      "succeeded": "已完成",
+      "failed": "失败",
+      "cancelled": "已取消"
+    }
+  },
+  "jobDetail": {
+    "connectionUnstable": "网络连接不稳定，无法获取作业状态",
+    "cancelFailed": "取消失败，请重试",
+    "cancelling": "取消中…",
+    "cancelJob": "取消作业",
+    "reconnecting": "实时连接不稳定，重新连接中…"
+  },
+  "phase": {
+    "created": "待创建",
+    "ready": "就绪",
+    "pending": "等待中",
+    "running": "生成中",
+    "suspended": "暂停中",
+    "succeeded": "已完成",
+    "failed": "失败",
+    "error": "错误",
+    "timeout": "超时",
+    "skipped": "已跳过",
+    "cancelled": "已取消",
+    "unknown": "未知"
+  },
+  "jobGraph": {
+    "generate": "生成",
+    "compose": "拼接",
+    "panel": "格 {{n}}",
+    "fourPanel": "四格生成",
+    "doneOf": "{{done}}/{{total}} 完成",
+    "shotN": "第 {{n}} 张",
+    "sequence": "连续生成",
+    "videoGenerate": "视频生成",
+    "extractFrames": "抽取首尾帧",
+    "shotSegment": "第 {{n}} 段",
+    "shotSegmentExtract": "第 {{n}} 段抽帧",
+    "previewGate": "预览门",
+    "redo": "重做",
+    "upgrade2k": "升级 2K",
+    "concat": "合成"
+  },
+  "workflowGraph": {
+    "inProgress": "进行中…",
+    "duration": "耗时 {{duration}}",
+    "cost": "消耗",
+    "retryPromptPlaceholder": "重做提示词（留空则用原提示词）",
+    "retrying": "重做中…",
+    "retryThis": "重做这一格",
+    "retryFailed": "重做失败，请重试"
+  },
+  "generationProgress": {
+    "generating": "生成中，请勿关闭页面…",
+    "elapsed": "已用时 {{time}}",
+    "minSec": "{{min}}分{{sec}}秒",
+    "stage": {
+      "image": {
+        "sketch": "起稿",
+        "outline": "勾勒轮廓",
+        "detail": "添加细节",
+        "color": "上色",
+        "lighting": "添加光影",
+        "checkDetail": "检查细节",
+        "checkOverall": "检查整体效果"
+      },
+      "video": {
+        "storyboard": "构思分镜",
+        "render": "渲染画面",
+        "motion": "添加运动与转场",
+        "colorGrade": "调色",
+        "audio": "合成音效",
+        "encode": "编码输出",
+        "finalCheck": "最终质检"
+      }
+    }
+  },
+  "previewGate": {
+    "intro": "{{count}} 段已生成 768P 草稿，逐段选择保留 / 重做 / 升级 2K",
+    "segmentN": "第 {{n}} 段",
+    "bucket": {
+      "keep": "保留",
+      "redo": "重做",
+      "upgrade": "升 2K"
+    },
+    "currentSelection": "当前选择：升级 {{count}} 段",
+    "redoCount": "重做 {{count}} 段",
+    "willCost": "将消耗",
+    "compareOpen": "（",
+    "compareAllUpgrade": "对比：全部直接出 2K 需",
+    "savedPct": "，省 {{pct}}%",
+    "compareClose": "）",
+    "submitting": "提交中…",
+    "confirm": "确认并合成",
+    "confirmWithUpgrade": "确认并合成 (✦ +{{cost}} 升级)"
+  },
+  "assets": {
+    "deleteFailed": "删除失败，请重试",
+    "batchDownloadFailed": "批量下载失败，请重试",
+    "assignFailed": "归类失败，请重试",
+    "selectedCount": "已选 {{count}}",
+    "zipping": "打包中…",
+    "batchDownload": "批量下载",
+    "deselect": "取消选择",
+    "allProjects": "全部项目",
+    "empty": "还没有生成过任何素材，去「工坊」生成一些",
+    "assignToProject": "归入项目",
+    "unassigned": "未分组",
+    "filter": {
+      "all": "全部",
+      "image": "图片",
+      "video": "视频"
+    }
+  },
+  "assetDetail": {
+    "backToLibrary": "← 返回素材库",
+    "uploadedNoParams": "这个素材是直接上传的，没有生成参数",
+    "fromJob": "来自作业 #{{id}}… →",
+    "regenerateFromThis": "以此再生成",
+    "saveAsCharacter": "存为角色",
+    "download": "下载",
+    "deleting": "删除中…",
+    "meta": {
+      "model": "模型",
+      "prompt": "提示词",
+      "seed": "Seed",
+      "mode": "模式",
+      "layout": "拼版",
+      "providerTaskId": "MiniMax 任务"
+    }
+  },
+  "assetPicker": {
+    "collapse": "收起",
+    "choose": "+ 选择",
+    "uploading": "上传中",
+    "upload": "上传",
+    "uploadFailed": "上传失败，请重试",
+    "emptyDefault": {
+      "image": "还没有图片，点右侧「上传」添加",
+      "video": "还没有视频，点右侧「上传」添加"
+    }
+  },
+  "presetCarousel": {
+    "noCover": "无封面"
+  },
+  "errors": {
+    "unknown": "未知错误",
+    "moderationBlocked": "描述涉及敏感内容，未扣除积分"
+  },
+  "suggestions": {
+    "toVideo": "转成视频",
+    "moreBatch": "再来一批",
+    "saveCharacter": "存为角色",
+    "toSequence": "转成分镜",
+    "upgrade2k": "升级 2K",
+    "saveFrameCharacter": "抽帧存为角色"
+  },
+  "studio": {
+    "tabMeta": {
+      "imageSingle": "一句话生成一张图",
+      "imageBatch": "同一句话一次出多张",
+      "imageComic4": "共享角色与风格的四格",
+      "imageSequence": "同角色连续出一组图",
+      "videoSingle": "文生视频或图生视频",
+      "videoSequence": "768P 预览后再定稿 2K"
+    },
+    "examples": {
+      "fox": "一只狐狸站在雪地上，水彩风格",
+      "foxVideo": "镜头缓缓推进，一只狐狸转身望向镜头，雪花飘落",
+      "rooftop": "两人在天台对峙，黄昏逆光，风很大"
+    },
+    "guestHint": "先免费试用一次，注册后解锁全部形态与素材库",
+    "headlineSuffix": "· 现在就开始",
+    "image2imageRef": "参考图（可选，图生图）",
+    "comic": {
+      "manual": "逐格手写",
+      "auto": "剧情自动拆 4 格",
+      "autoTooltip": "用 AI 把一段剧情自动拆成 4 格画面描述",
+      "panelPlaceholder": "格 {{n}}",
+      "storyPlaceholder": "一段完整的剧情描述，系统会自动拆成 4 个连续分镜"
+    },
+    "imageSequence": {
+      "addLabel": "+ 添加一张",
+      "shotPlaceholder": "第 {{n}} 张"
+    },
+    "videoSequence": {
+      "shotPlaceholder": "第 {{n}} 段镜头描述"
+    },
+    "capsule": {
+      "refMode": "参考模式",
+      "count": "数量",
+      "duration": "时长",
+      "resolution": "解析度",
+      "ratio": "比例",
+      "ratioDisabledTooltip": "首尾帧/参考素材模式下画面比例由素材决定",
+      "anchorInterval": "锚定间隔",
+      "anchorIntervalTooltip": "每 N 段重新锚定一次角色参考图（r2va），其余段落用前一段尾帧续接（i2va）",
+      "everyNSegments": "每 {{n}} 段",
+      "characterA": "角色 A",
+      "characterB": "角色 B"
+    },
+    "refMode": {
+      "none": "不使用",
+      "firstLast": "首尾帧",
+      "reference": "参考素材"
+    },
+    "firstFrame": "首帧",
+    "lastFrame": "尾帧",
+    "refImages": "参考图片",
+    "refVideos": "参考视频",
+    "promptEnhanceTooltip": "生成前用 AI 深度理解并润色你的提示词，按用量额外计费",
+    "promptEnhance": "AI 提示词增强（+约 {{cost}} 积分）",
+    "addSegment": "+ 添加一段",
+    "driftWarning": "⚠ 镜头数 >4，已自动每 {{n}} 段重新锚定一次角色，防止漂移",
+    "submitting": "提交中…",
+    "generating": "生成中…",
+    "generate": "生成 →",
+    "loginToGenerate": "登录后生成 →",
+    "insufficientBalance": "积分不足（余额 {{balance}}）",
+    "noCharactersHint": "还没有角色，去「角色库」创建",
+    "viewGraph": "查看流程图 →",
+    "trial": {
+      "intro": "不用注册，先免费试用一次单图生成",
+      "tryOnce": "✦ 匿名试用一次",
+      "likeIt": "喜欢这张？登录后才能保存到素材库"
+    },
+    "generationFailed": "生成失败：{{error}}",
+    "suggestionsLabel": "猜你想接着做：",
+    "emptyResult": "结果会显示在这里",
+    "guessWhat": "猜你想生成：",
+    "unselected": "未选择",
+    "dragToReorder": "拖拽排序",
+    "errors": {
+      "trialFailed": "生成失败，请重试",
+      "storyRequired": "请输入剧情描述",
+      "paramsInvalid": "参数不合法",
+      "needOneShot": "至少需要一段镜头描述",
+      "submitFailed": "提交失败，请重试"
+    },
+    "videoValidation": {
+      "textRequired": "请输入视频描述",
+      "modeConflict": "首尾帧模式和参考素材模式不能同时使用",
+      "ratioRequired": "纯文字生成视频必须选择画面比例"
+    }
+  },
+  "api": {
+    "uploadFailed": "上传失败（{{status}}）"
+  }
+}
