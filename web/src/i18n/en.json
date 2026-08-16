@@ -123,7 +123,8 @@
     "reconnecting": "Live connection unstable, reconnecting…",
     "creditSettled": "Settled",
     "creditHeld": "Held",
-    "creditEstimated": "Estimated"
+    "creditEstimated": "Estimated",
+    "notFound": "This job can't be found"
   },
   "phase": {
     "created": "Created",
@@ -248,7 +249,8 @@
     "providerCacheTooltip": "Whether this is currently cached with MiniMax (avoids re-uploading the same asset)",
     "cached": "Cached",
     "cacheExpired": "Cache expired",
-    "notCached": "Not cached"
+    "notCached": "Not cached",
+    "notFound": "This asset can't be found — it may have been deleted"
   },
   "assetPicker": {
     "collapse": "Collapse",

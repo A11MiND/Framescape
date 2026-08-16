@@ -22,8 +22,14 @@ import (
 // projection assetToJSON gives everywhere else — see assetDetailJSON's own
 // doc for what the difference is and why it's only worth paying for here.
 func (s *Server) handleGetAsset(c *gin.Context) {
+	// Every sibling single-resource handler (handleUpdateAsset,
+	// handleDeleteAsset, and the character/project equivalents) filters
+	// deleted_at IS NULL — this one didn't, an isolated oversight found
+	// live: a soft-deleted asset stayed fully viewable, downloadable, and
+	// re-deletable via its own direct URL indefinitely after F2.7's
+	// "delete" supposedly removed it.
 	var a persistence.Asset
-	if err := s.db.Where("biz_id = ? AND user_id = ?", c.Param("bizID"), userID(c)).First(&a).Error; err != nil {
+	if err := s.db.Where("biz_id = ? AND user_id = ? AND deleted_at IS NULL", c.Param("bizID"), userID(c)).First(&a).Error; err != nil {
 		c.JSON(http.StatusNotFound, errBody("not_found", "asset not found"))
 		return
 	}

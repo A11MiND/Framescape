@@ -123,7 +123,8 @@
     "reconnecting": "实时连接不稳定，重新连接中…",
     "creditSettled": "已结算",
     "creditHeld": "已持有",
-    "creditEstimated": "预估"
+    "creditEstimated": "预估",
+    "notFound": "找不到这个作业"
   },
   "phase": {
     "created": "待创建",
@@ -248,7 +249,8 @@
     "providerCacheTooltip": "是否已缓存到 MiniMax（避免同一素材重复上传）",
     "cached": "已缓存",
     "cacheExpired": "缓存已过期",
-    "notCached": "未缓存"
+    "notCached": "未缓存",
+    "notFound": "找不到这个素材，可能已被删除"
   },
   "assetPicker": {
     "collapse": "收起",

@@ -51,7 +51,17 @@ export default function JobDetail() {
   return (
     <AppShell>
       <div className="mx-auto max-w-5xl space-y-6 px-6 py-8">
-        {!job && <p className="text-zinc-500">{t('common.loading')}</p>}
+        {/* Same bug as AssetDetail.tsx, found alongside it: this only ever
+            checked `!job`, so a bizId that never successfully loads (bad
+            link, or a job belonging to another user — jobsvc.Get's own
+            user_id filter) rendered "loading..." forever. Distinct from a
+            *transient* error on a job that already loaded once — `job`
+            keeps its last-known-good data through that (react-query's
+            normal behavior), so this branch only fires when nothing has
+            ever loaded at all; the existing toast+refetch above still
+            handles the transient case without replacing the page. */}
+        {!job && !jobQuery.isError && <p className="text-zinc-500">{t('common.loading')}</p>}
+        {!job && jobQuery.isError && <p className="text-zinc-500">{t('jobDetail.notFound')}</p>}
 
         {job && (
           <>

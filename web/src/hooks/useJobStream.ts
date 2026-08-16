@@ -22,6 +22,14 @@ export function useJobStream(bizId: string | null | undefined) {
     queryFn: () => api.getJob(bizId!),
     enabled: !!bizId,
     refetchInterval: (q) => {
+      // Found live, alongside an identical bug in AssetDetail.tsx: a bizId
+      // that 404s forever (bad link, wrong-user job — jobsvc.Get's own
+      // user_id filter) never gets a `.status`, so the old check here
+      // never matched and this polled every 1500ms indefinitely. Bail out
+      // once react-query's own retries are exhausted and the query has
+      // settled into a terminal error, rather than hammering a dead
+      // endpoint forever.
+      if (q.state.status === 'error') return false
       const status = q.state.data?.status
       if (status === 'succeeded' || status === 'failed') return false
       return streamState === 'live' ? false : 1500

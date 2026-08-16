@@ -70,7 +70,12 @@ export default function AssetDetail() {
           {t('assetDetail.backToLibrary')}
         </Link>
 
-        {!a && <p className="text-zinc-500">{t('common.loading')}</p>}
+        {/* Found live: this only ever checked `!a`, so a 404 (deleted
+            asset, bad link) rendered "loading..." forever instead of ever
+            settling — asset.isError only becomes true after react-query's
+            default retries exhaust, but nothing here was reading it. */}
+        {asset.isLoading && <p className="text-zinc-500">{t('common.loading')}</p>}
+        {asset.isError && <p className="text-zinc-500">{t('assetDetail.notFound')}</p>}
 
         {a && (
           <div className="space-y-4">
