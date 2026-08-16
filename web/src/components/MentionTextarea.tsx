@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api, type AssetResponse } from '../lib/api'
@@ -16,21 +16,97 @@ function SparkleIcon({ className }: { className?: string }) {
   )
 }
 
-// §04's "@ 引用素材語法" gap — jimeng's composer lets typing "@" mid-prompt
-// open a picker and insert a token like "@圖片1" that also feeds that asset
-// into the actual generation request, not just decorative text. A full
-// mention parser (syntax highlighting, arbitrary-position edits) needs a
-// rich-text editor this codebase doesn't have; this is the plain-<textarea>
-// version — it only ever triggers on an "@" typed at the very end of the
-// current selection, which covers the same "type @, pick something, keep
-// typing" flow the PRD's screenshot shows without needing to parse mentions
-// out of arbitrary cursor positions later.
+// Matches an inserted mention token ("#图片1", "#视频2", ...) anywhere in the
+// text, for the highlight overlay below.
+const MENTION_RE = /#[^\s#]*/g
+
+function renderHighlighted(text: string) {
+  const nodes: React.ReactNode[] = []
+  let last = 0
+  let m: RegExpExecArray | null
+  const re = new RegExp(MENTION_RE)
+  while ((m = re.exec(text))) {
+    if (m.index > last) nodes.push(text.slice(last, m.index))
+    nodes.push(
+      <span key={m.index} className="rounded bg-violet-500/25 text-violet-300">
+        {m[0]}
+      </span>,
+    )
+    last = m.index + m[0].length
+  }
+  nodes.push(text.slice(last) + '​') // trailing zero-width space: preserves a real trailing newline's line height
+  return nodes
+}
+
+// §07's "打字機效果教用戶用#" ask: cycles through a couple of example
+// phrases with a type/pause/erase animation instead of a single static
+// placeholder sitting there looking like real (if slightly grey) content —
+// a user specifically pushed back on the old prefilled-example pattern for
+// exactly that "looks like it's already decided what to generate" reason.
+// Stops entirely once the field has real content or focus, same as a plain
+// placeholder would, so it never competes with what the user is typing.
+function useTypewriterHint(phrases: string[], active: boolean) {
+  const [text, setText] = useState('')
+  useEffect(() => {
+    if (!active || phrases.length === 0) {
+      setText('')
+      return
+    }
+    let phraseIndex = 0
+    let charIndex = 0
+    let erasing = false
+    let cancelled = false
+    function tick() {
+      if (cancelled) return
+      const phrase = phrases[phraseIndex]
+      if (!erasing) {
+        charIndex++
+        setText(phrase.slice(0, charIndex))
+        if (charIndex >= phrase.length) {
+          erasing = true
+          setTimeout(tick, 1600)
+          return
+        }
+        setTimeout(tick, 45)
+      } else {
+        charIndex--
+        setText(phrase.slice(0, charIndex))
+        if (charIndex <= 0) {
+          erasing = false
+          phraseIndex = (phraseIndex + 1) % phrases.length
+          setTimeout(tick, 300)
+          return
+        }
+        setTimeout(tick, 20)
+      }
+    }
+    const startTimer = setTimeout(tick, 300)
+    return () => {
+      cancelled = true
+      clearTimeout(startTimer)
+    }
+  }, [active, phrases])
+  return text
+}
+
+// §04's "@ 引用素材語法" gap, now "#" instead (a user asked for the swap —
+// distinct enough from social platforms' "@mention" not to read as copying
+// one) — jimeng's composer lets typing "#" mid-prompt open a picker and
+// insert a token like "#圖片1" that also feeds that asset into the actual
+// generation request, not just decorative text. A full mention parser
+// (rich-text editing at arbitrary cursor positions) needs an editor this
+// codebase doesn't have; this is the plain-<textarea> version — it only
+// ever triggers on a "#" typed at the very end of the current selection,
+// and highlights inserted tokens via a same-text overlay <div> sitting
+// behind a color-transparent textarea (kept in scroll-sync), the standard
+// technique for styling substrings a native textarea can't style itself.
 export function MentionTextarea({
   value,
   onChange,
   onMentionAsset,
   rows = 3,
   placeholder,
+  hintPhrases,
   className = '',
   enableRewrite = true,
 }: {
@@ -38,7 +114,12 @@ export function MentionTextarea({
   onChange: (v: string) => void
   onMentionAsset?: (asset: AssetResponse) => void
   rows?: number
+  // Static fallback placeholder (used as-is if hintPhrases isn't given).
   placeholder?: string
+  // Animated typewriter hint phrases — cycles through these instead of a
+  // static placeholder. Falls back to `placeholder` (no animation) when
+  // omitted, and always includes the "#" tip as its last phrase.
+  hintPhrases?: string[]
   className?: string
   // The ✨ AI-rewrite corner button — on by default since every current
   // caller is a free-text prompt field it makes sense for; a caller can
@@ -47,7 +128,9 @@ export function MentionTextarea({
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
+  const [focused, setFocused] = useState(false)
   const ref = useRef<HTMLTextAreaElement>(null)
+  const overlayRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const rewrite = useMutation({
     mutationFn: () => api.rewritePrompt(value),
@@ -67,11 +150,24 @@ export function MentionTextarea({
     enabled: open,
   })
 
+  // Folds the old static `placeholder` string in as a single-phrase fallback
+  // so every existing caller gets the animation for free, not just ones
+  // updated to pass hintPhrases explicitly — either way there's always a
+  // real animated hint once any base phrase exists, never a native
+  // ::placeholder sitting underneath a color-transparent textarea (which
+  // renders invisible in most browsers, since ::placeholder mostly follows
+  // the element's own color).
+  const phrases = useMemo(() => {
+    const base = hintPhrases?.length ? hintPhrases : placeholder ? [placeholder] : []
+    return base.length ? [...base, t('studio.mention.typeHint')] : []
+  }, [hintPhrases, placeholder, t])
+  const typedHint = useTypewriterHint(phrases, value === '' && !focused)
+
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const v = e.target.value
     onChange(v)
     const pos = e.target.selectionStart
-    setOpen(v.slice(0, pos).endsWith('@'))
+    setOpen(v.slice(0, pos).endsWith('#'))
   }
 
   function pick(asset: AssetResponse, index: number) {
@@ -81,7 +177,7 @@ export function MentionTextarea({
       const pos = el.selectionStart
       const before = value.slice(0, pos)
       const after = value.slice(pos)
-      if (before.endsWith('@')) {
+      if (before.endsWith('#')) {
         const next = before + label + ' ' + after
         onChange(next)
         requestAnimationFrame(() => {
@@ -97,13 +193,30 @@ export function MentionTextarea({
 
   return (
     <div ref={rootRef} className="relative">
+      {/* Overlay shows what should actually be visible (plain text at
+          normal color, "#mentions" highlighted, or the typewriter hint) —
+          the real textarea underneath stays permanently color-transparent
+          (below) so it never double-renders its own plain-color text on
+          top of this. Both share identical font/padding/wrapping so the
+          overlay's text lines up exactly with the real caret position. */}
+      <div
+        ref={overlayRef}
+        aria-hidden
+        className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words rounded-xl bg-zinc-950 p-4 text-zinc-100"
+      >
+        {value ? renderHighlighted(value) : <span className="text-zinc-600">{typedHint}</span>}
+      </div>
       <textarea
         ref={ref}
         value={value}
         onChange={handleChange}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        onScroll={(e) => {
+          if (overlayRef.current) overlayRef.current.scrollTop = e.currentTarget.scrollTop
+        }}
         rows={rows}
-        placeholder={placeholder}
-        className={`w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 p-4 outline-none focus:border-violet-500 ${className}`}
+        className={`relative w-full resize-none rounded-xl border border-zinc-800 bg-transparent p-4 text-transparent caret-zinc-100 outline-none focus:border-violet-500 ${className}`}
       />
       {enableRewrite && (
         <button

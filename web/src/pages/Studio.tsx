@@ -624,11 +624,10 @@ export default function Studio() {
                 rows={3}
                 placeholder={t('studio.examples.rooftop')}
                 onMentionAsset={(asset) => {
-                  // The one tab with a real single-slot reference is
-                  // image.single's source_image_asset_id (F5.8) — @-mentioning
-                  // an image there sets it, matching the visible AssetPicker
-                  // right below. image.batch has no reference slot at all, so
-                  // the mention there stays purely textual.
+                  // #-mentioning an image here also sets it as the shared
+                  // source_image_asset_id reference (F5.8, now every
+                  // image.* mode's own doc) — matches the visible
+                  // AssetPicker right below, same field either way.
                   if (asset.type === 'image') setSourceImageId(asset.biz_id)
                 }}
               />
@@ -676,24 +675,23 @@ export default function Studio() {
               {comicMode === 'manual' ? (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {panels.map((p, i) => (
-                    <textarea
+                    <MentionTextarea
                       key={i}
                       value={p}
-                      onChange={(e) => setPanels((cur) => cur.map((c, ci) => (ci === i ? e.target.value : c)))}
+                      onChange={(v) => setPanels((cur) => cur.map((c, ci) => (ci === i ? v : c)))}
                       rows={3}
-                      className="resize-none rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm outline-none focus:border-violet-500"
-                      placeholder={t('studio.comic.panelPlaceholder', { n: i + 1 })}
+                      className="text-sm"
+                      hintPhrases={[t('studio.comic.panelPlaceholder', { n: i + 1 })]}
                     />
                   ))}
                 </div>
               ) : (
                 <div>
-                  <textarea
+                  <MentionTextarea
                     value={story}
-                    onChange={(e) => setStory(e.target.value)}
+                    onChange={setStory}
                     rows={4}
-                    className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 p-4 outline-none focus:border-violet-500"
-                    placeholder={t('studio.comic.storyPlaceholder')}
+                    hintPhrases={[t('studio.comic.storyPlaceholder')]}
                   />
                   <CharCount value={story} max={capabilities.data?.image.max_prompt_chars} />
                 </div>
@@ -720,7 +718,7 @@ export default function Studio() {
                   placeholder={t('studio.examples.foxVideo')}
                   onMentionAsset={(asset) => {
                     // video.single is the one workflow with real multi-slot
-                    // reference arrays (F6.1-F6.4) — an @-mentioned asset
+                    // reference arrays (F6.1-F6.4) — a #-mentioned asset
                     // joins whichever list matches its type, deduped, and
                     // switches refMode so the AssetPicker below reflects it
                     // immediately instead of silently holding a reference
@@ -1312,21 +1310,22 @@ function SortableShotRow({
         ⋮⋮
       </button>
       <span
-        title={t(SHOT_MODE_LABEL_KEY[mode])}
-        className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-mono ${SHOT_MODE_CLASS[mode]}`}
+        title={mode}
+        className={`shrink-0 rounded-full border px-2 py-1 text-[11px] ${SHOT_MODE_CLASS[mode]}`}
       >
-        {mode}
+        {t(SHOT_MODE_LABEL_KEY[mode])}
       </span>
-      <input
+      <MentionTextarea
         value={shot.text}
-        onChange={(e) => onChange(e.target.value)}
-        className="flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-violet-500"
-        placeholder={t('studio.videoSequence.shotPlaceholder', { n: index + 1 })}
+        onChange={onChange}
+        rows={2}
+        className="text-sm"
+        hintPhrases={[t('studio.videoSequence.shotPlaceholder', { n: index + 1 })]}
       />
       {removable && (
         <button
           onClick={onRemove}
-          className="shrink-0 rounded-lg border border-zinc-800 px-2 text-zinc-500 hover:text-red-400"
+          className="h-fit shrink-0 rounded-lg border border-zinc-800 px-2 py-1.5 text-zinc-500 hover:text-red-400"
         >
           ×
         </button>
@@ -1350,16 +1349,17 @@ function ShotList({
     <div className="space-y-2">
       {shots.map((s, i) => (
         <div key={i} className="flex gap-2">
-          <input
+          <MentionTextarea
             value={s}
-            onChange={(e) => setShots((cur) => cur.map((c, ci) => (ci === i ? e.target.value : c)))}
-            className="flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-violet-500"
-            placeholder={placeholder(i)}
+            onChange={(v) => setShots((cur) => cur.map((c, ci) => (ci === i ? v : c)))}
+            rows={2}
+            className="text-sm"
+            hintPhrases={[placeholder(i)]}
           />
           {shots.length > 1 && (
             <button
               onClick={() => setShots((cur) => cur.filter((_, ci) => ci !== i))}
-              className="rounded-lg border border-zinc-800 px-2 text-zinc-500 hover:text-red-400"
+              className="h-fit shrink-0 rounded-lg border border-zinc-800 px-2 py-1.5 text-zinc-500 hover:text-red-400"
             >
               ×
             </button>
