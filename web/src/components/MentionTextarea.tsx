@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api, type AssetResponse } from '../lib/api'
+import { useClickOutside } from '../hooks/useClickOutside'
 
 // §04's "@ 引用素材語法" gap — jimeng's composer lets typing "@" mid-prompt
 // open a picker and insert a token like "@圖片1" that also feeds that asset
@@ -30,6 +31,15 @@ export function MentionTextarea({
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLTextAreaElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  // Covers the general "clicked elsewhere on the page" case; the
+  // asset-picker buttons' own onMouseDown preventDefault (below) is a
+  // separate, still-necessary mechanism — it stops the textarea from
+  // blurring at all on a picker click, which is what let the previous
+  // onBlur+setTimeout(150ms) version distinguish "picking an asset" from
+  // "clicking away" in the first place. Both live inside rootRef's
+  // subtree, so this hook never fires for either.
+  useClickOutside(rootRef, () => setOpen(false), open)
   const recent = useQuery({
     queryKey: ['assets', 'mention-recent'],
     queryFn: () => api.listAssets({ limit: 8 }),
@@ -65,12 +75,11 @@ export function MentionTextarea({
   }
 
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <textarea
         ref={ref}
         value={value}
         onChange={handleChange}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
         rows={rows}
         placeholder={placeholder}
         className={`w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 p-4 outline-none focus:border-violet-500 ${className}`}

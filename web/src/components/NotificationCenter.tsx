@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { WORKFLOW_LABEL_KEY, type Tab } from '../lib/jobResult'
+import { useClickOutside } from '../hooks/useClickOutside'
 
 // §07/09's "通知中心 + 數字角標" gap — the running-job badge Rail already
 // had (elsewhere in this file) only ever pointed at the plain job list; R12
@@ -16,6 +17,8 @@ import { WORKFLOW_LABEL_KEY, type Tab } from '../lib/jobResult'
 export default function NotificationCenter() {
   const { t, i18n } = useTranslation()
   const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  useClickOutside(rootRef, () => setOpen(false), open)
 
   const suspended = useQuery({
     queryKey: ['jobs', 'notif-suspended'],
@@ -41,7 +44,7 @@ export default function NotificationCenter() {
   }
 
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

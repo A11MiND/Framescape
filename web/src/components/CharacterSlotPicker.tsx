@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api, type Character } from '../lib/api'
+import { useClickOutside } from '../hooks/useClickOutside'
 
 // §07's "角色槽 A/B 缺頭像縮圖／快捷新建" gap — the plain <select>
 // CharacterSelectInline used couldn't show a thumbnail at all (native
@@ -23,10 +24,12 @@ export function CharacterSlotPicker({
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  useClickOutside(rootRef, () => setOpen(false), open)
   const selected = options.find((c) => c.biz_id === value)
 
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
