@@ -92,10 +92,10 @@ function TabIcon({ tab, className }: { tab: Tab; className?: string }) {
     case 'image.sequence':
       return (
         <svg {...common}>
-          <rect x="1.5" y="7" width="4.5" height="4.5" rx="1" />
-          <rect x="7.75" y="7" width="4.5" height="4.5" rx="1" />
-          <rect x="14" y="7" width="4.5" height="4.5" rx="1" />
-          <path d="M6 9.25h1.75M12.25 9.25h1.75" />
+          <rect x="1.75" y="8.25" width="3.5" height="3.5" rx="0.8" />
+          <rect x="8.25" y="8.25" width="3.5" height="3.5" rx="0.8" />
+          <rect x="14.75" y="8.25" width="3.5" height="3.5" rx="0.8" />
+          <path d="M5.25 10h3M11.75 10h3" />
         </svg>
       )
     case 'video.single':
