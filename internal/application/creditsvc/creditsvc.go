@@ -20,10 +20,36 @@ package creditsvc
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 )
+
+// remarkPayload is what actually lands in credit_ledger.remark: a
+// machine-readable kind plus whatever numeric/text context that kind needs,
+// not a pre-rendered English sentence — the frontend owns turning `kind`
+// into localized text (credits.remark.<kind> in zh.json/en.json), the same
+// split already used for job cost breakdowns (EstimateItem.Kind). Rows
+// written before this existed still hold a plain English sentence in this
+// column; handleCreditsLedger falls back to showing that verbatim when it
+// fails to parse as JSON, so old history doesn't break, it just stays
+// untranslated.
+type remarkPayload struct {
+	Kind     string  `json:"kind"`
+	Amount   int     `json:"amount,omitempty"`
+	Workflow string  `json:"workflow,omitempty"`
+	CostYuan float64 `json:"cost_yuan,omitempty"`
+	Text     string  `json:"text,omitempty"` // recharge_custom only: the operator's own CLI-supplied text, inherently unlocalizable
+}
+
+func encodeRemark(p remarkPayload) string {
+	b, err := json.Marshal(p)
+	if err != nil {
+		return p.Kind
+	}
+	return string(b)
+}
 
 // marginK is §12.2's configurable margin factor (POC default 2.0).
 const marginK = 2.0
@@ -65,7 +91,11 @@ func New(db *sql.DB) *Service {
 // hold operation (jobsvc uses "job:{bizID}:hold" and, for video.sequence's
 // upgrade step, "job:{bizID}:hold:upgrade" — §12.3's own two-phase design).
 // A retry with the same idemKey is a safe no-op (unique index on idem_key).
-func (s *Service) Hold(ctx context.Context, userID uint64, idemKey, refType, refID string, amount int, remark string) error {
+// kind is one of "job"/"retry"/"draft"/"upgrade" (why this hold happened,
+// becomes remark's "hold_"+kind); workflow is the job's workflow name, for
+// kinds where that varies (job/retry) — pass "" where it doesn't (draft/
+// upgrade are always video.sequence, baked into their own translated string).
+func (s *Service) Hold(ctx context.Context, userID uint64, idemKey, refType, refID string, amount int, kind, workflow string) error {
 	if amount <= 0 {
 		return nil
 	}
@@ -89,7 +119,7 @@ func (s *Service) Hold(ctx context.Context, userID uint64, idemKey, refType, ref
 		return insertLedger(ctx, tx, ledgerRow{
 			UserID: userID, Direction: "hold", Amount: 0, BalanceAfter: balance, HeldAfter: held,
 			RefType: refType, RefID: refID, IdemKey: idemKey,
-			Remark: fmt.Sprintf("held %d credits: %s", amount, remark),
+			Remark: encodeRemark(remarkPayload{Kind: "hold_" + kind, Amount: amount, Workflow: workflow}),
 		})
 	})
 }
@@ -156,7 +186,7 @@ func (s *Service) Commit(ctx context.Context, userID uint64, idemKey, taskRunID 
 		return insertLedger(ctx, tx, ledgerRow{
 			UserID: userID, Direction: "commit", Amount: -actual, BalanceAfter: balance, HeldAfter: held,
 			RefType: "task_run", RefID: taskRunID, IdemKey: idemKey,
-			Remark: fmt.Sprintf("committed %d credits (cost %.4f yuan)", actual, costYuan),
+			Remark: encodeRemark(remarkPayload{Kind: "commit", Amount: actual, CostYuan: costYuan}),
 		})
 	})
 	return actual, err
@@ -210,14 +240,28 @@ func (s *Service) Refund(ctx context.Context, userID uint64, idemKey, jobBizID s
 		return insertLedger(ctx, tx, ledgerRow{
 			UserID: userID, Direction: "refund", Amount: 0, BalanceAfter: balance, HeldAfter: held,
 			RefType: "job", RefID: jobBizID, IdemKey: idemKey,
-			Remark: fmt.Sprintf("refunded %d unused held credits", actual),
+			Remark: encodeRemark(remarkPayload{Kind: "refund", Amount: actual}),
 		})
 	})
 }
 
-// Recharge is F1.6's manual grant (cmd/creditcli) — the only direction with
-// no counterpart consuming it later, a straightforward addition to balance.
+// Recharge is F1.6's manual grant (cmd/cli) — the only direction with no
+// counterpart consuming it later, a straightforward addition to balance.
+// remark is an operator-supplied CLI flag, free text by nature (there's no
+// fixed set of reasons to translate), so it's stored as recharge_custom's
+// raw `text` rather than a `kind` the frontend can localize.
 func (s *Service) Recharge(ctx context.Context, userID uint64, idemKey string, amount int, remark string) error {
+	return s.recharge(ctx, userID, idemKey, amount, encodeRemark(remarkPayload{Kind: "recharge_custom", Amount: amount, Text: remark}))
+}
+
+// RechargeDemo is handleCreditsTopup's self-serve demo grant (§07's "充值
+// 入口" gap) — same mechanics as Recharge, but a fixed, translatable reason
+// instead of an arbitrary operator string.
+func (s *Service) RechargeDemo(ctx context.Context, userID uint64, idemKey string, amount int) error {
+	return s.recharge(ctx, userID, idemKey, amount, encodeRemark(remarkPayload{Kind: "recharge_demo", Amount: amount}))
+}
+
+func (s *Service) recharge(ctx context.Context, userID uint64, idemKey string, amount int, remark string) error {
 	if amount <= 0 {
 		return fmt.Errorf("recharge amount must be positive, got %d", amount)
 	}

@@ -205,7 +205,7 @@ func (s *Service) RetryNode(ctx context.Context, userID uint64, bizID, nodeName 
 	}
 
 	bizID2 := id.New()
-	if err := s.credits.Hold(ctx, userID, "job:"+bizID2+":hold", "job", bizID2, estimatedCredits, job.WorkflowName+" retry"); err != nil {
+	if err := s.credits.Hold(ctx, userID, "job:"+bizID2+":hold", "job", bizID2, estimatedCredits, "retry", job.WorkflowName); err != nil {
 		return nil, fmt.Errorf("hold credits: %w", err)
 	}
 	runID, err := s.eng.Submit(ctx, &workflow.Definition{Name: "retry-" + nodeName, JSON: satelliteJSON}, nil)

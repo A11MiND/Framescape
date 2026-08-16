@@ -50,6 +50,16 @@
       "commit": "Settle",
       "refund": "Refund"
     },
+    "remark": {
+      "hold_job": "Held {{amount}} credits: {{workflow}}",
+      "hold_retry": "Held {{amount}} credits: {{workflow}} (retry)",
+      "hold_draft": "Held {{amount}} credits: sequence draft",
+      "hold_upgrade": "Held {{amount}} credits: upgrade to 2K",
+      "commit": "Settled {{amount}} credits (cost ¥{{cost}})",
+      "refund": "Refunded {{amount}} unused held credits",
+      "recharge_demo": "Demo top-up (not a real payment)",
+      "recharge_custom": "Admin recharge: {{text}}"
+    },
     "topupFailed": "Top-up failed",
     "topupTooltip": "POC demo top-up — not a real payment, credits your account directly",
     "topupPending": "Crediting…",
@@ -124,7 +134,8 @@
     "creditSettled": "Settled",
     "creditHeld": "Held",
     "creditEstimated": "Estimated",
-    "notFound": "This job can't be found"
+    "notFound": "This job can't be found",
+    "assetMissing": "Asset missing"
   },
   "phase": {
     "created": "Created",
@@ -402,6 +413,11 @@
   "settings": {
     "title": "Settings",
     "account": "Account",
+    "security": "Security",
+    "currentPasswordPlaceholder": "Current password",
+    "newPasswordPlaceholder": "New password (min. 8 characters)",
+    "changePassword": "Change password",
+    "passwordChanged": "Password changed",
     "appearance": "Appearance",
     "themeDark": "Dark",
     "themeLight": "Light",

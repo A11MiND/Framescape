@@ -143,7 +143,7 @@ func (s *Service) createVideoSequence(ctx context.Context, userID uint64, spec S
 	// regardless of what gets upgraded later at Resume time.
 	estimatedCredits := creditsvc.EstimateVideoCredits(duration, "768P") * len(plans)
 	bizID := id.New()
-	if err := s.credits.Hold(ctx, userID, "job:"+bizID+":hold", "job", bizID, estimatedCredits, "video.sequence draft"); err != nil {
+	if err := s.credits.Hold(ctx, userID, "job:"+bizID+":hold", "job", bizID, estimatedCredits, "draft", "video.sequence"); err != nil {
 		return nil, fmt.Errorf("hold credits: %w", err)
 	}
 
@@ -538,7 +538,7 @@ func (s *Service) Resume(ctx context.Context, userID uint64, bizID string, req R
 	// still 768P, already covered by the original estimate.
 	if len(upgradeItems) > 0 {
 		upgradeCredits := creditsvc.EstimateVideoCredits(duration, "2K") * len(upgradeItems)
-		if err := s.credits.Hold(ctx, userID, "job:"+bizID+":hold:upgrade", "job", bizID, upgradeCredits, "video.sequence upgrade to 2K"); err != nil {
+		if err := s.credits.Hold(ctx, userID, "job:"+bizID+":hold:upgrade", "job", bizID, upgradeCredits, "upgrade", "video.sequence"); err != nil {
 			return fmt.Errorf("hold upgrade credits: %w", err)
 		}
 		if err := s.db.WithContext(ctx).Model(&persistence.Job{}).Where("id = ?", job.ID).

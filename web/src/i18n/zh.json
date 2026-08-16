@@ -50,6 +50,16 @@
       "commit": "结算",
       "refund": "退回"
     },
+    "remark": {
+      "hold_job": "预留 {{amount}} 积分：{{workflow}}",
+      "hold_retry": "预留 {{amount}} 积分：{{workflow}}（重试）",
+      "hold_draft": "预留 {{amount}} 积分：连续镜头草稿",
+      "hold_upgrade": "预留 {{amount}} 积分：升级至 2K",
+      "commit": "结算 {{amount}} 积分（成本 ¥{{cost}}）",
+      "refund": "退还 {{amount}} 积分（未使用的预留额度）",
+      "recharge_demo": "演示充值（非真实支付）",
+      "recharge_custom": "管理员充值：{{text}}"
+    },
     "topupFailed": "充值失败",
     "topupTooltip": "POC 示范充值，非真实支付，直接为帐号增加积分",
     "topupPending": "充值中…",
@@ -124,7 +134,8 @@
     "creditSettled": "已结算",
     "creditHeld": "已持有",
     "creditEstimated": "预估",
-    "notFound": "找不到这个作业"
+    "notFound": "找不到这个作业",
+    "assetMissing": "素材缺失"
   },
   "phase": {
     "created": "待创建",
@@ -402,6 +413,11 @@
   "settings": {
     "title": "设置",
     "account": "帐号",
+    "security": "安全",
+    "currentPasswordPlaceholder": "当前密码",
+    "newPasswordPlaceholder": "新密码（至少 8 位）",
+    "changePassword": "修改密码",
+    "passwordChanged": "密码已修改",
     "appearance": "外观",
     "themeDark": "深色",
     "themeLight": "浅色",

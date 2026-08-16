@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api, type CreditLedgerEntry } from '../lib/api'
+import { WORKFLOW_LABEL_KEY, type Tab } from '../lib/jobResult'
 import AppShell from '../components/AppShell'
 import AnimatedNumber from '../components/AnimatedNumber'
 import { useToast } from '../components/Toast'
@@ -99,10 +100,20 @@ function LedgerRow({ entry }: { entry: CreditLedgerEntry }) {
   // `remark` instead, which is exactly what's shown for those two
   // directions so this row is never just "0" with no useful information.
   const showAmount = entry.direction === 'recharge' || entry.direction === 'commit'
+  const remark = entry.remark
+  const remarkText = !remark.kind
+    ? remark.text
+    : remark.kind === 'recharge_custom'
+      ? t('credits.remark.recharge_custom', { text: remark.text })
+      : t(`credits.remark.${remark.kind}`, {
+          amount: remark.amount,
+          workflow: remark.workflow ? t(WORKFLOW_LABEL_KEY[remark.workflow as Tab]) || remark.workflow : '',
+          cost: remark.cost_yuan.toFixed(4),
+        })
   return (
     <tr className="border-b border-zinc-800 last:border-0">
       <td className="px-4 py-2.5 text-zinc-400">{t(`credits.direction.${entry.direction}`, entry.direction)}</td>
-      <td className="px-4 py-2.5 text-zinc-500">{entry.remark}</td>
+      <td className="px-4 py-2.5 text-zinc-500">{remarkText}</td>
       <td className="px-4 py-2.5 text-right font-mono text-xs text-zinc-600">
         {new Date(entry.created_at).toLocaleString(i18n.language === 'en' ? 'en-US' : 'zh-CN', {
           month: '2-digit',

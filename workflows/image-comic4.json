@@ -71,6 +71,7 @@
           "inputs": {
             "parameters": [
               { "name": "prompt", "type": "string" },
+              { "name": "seed", "type": "string" },
               { "name": "user-id", "type": "string" },
               { "name": "n", "type": "string", "value": "1" }
             ]

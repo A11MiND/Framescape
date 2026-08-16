@@ -6,7 +6,6 @@ import { displayNodeError, firstSpecificError } from '../lib/errors'
 import { useToast } from '../components/Toast'
 import AppShell from '../components/AppShell'
 import PhaseBadge from '../components/PhaseBadge'
-import WorkflowGraph from '../components/WorkflowGraph'
 import PreviewGate from '../components/PreviewGate'
 import GenerationProgress from '../components/GenerationProgress'
 import { useJobStream } from '../hooks/useJobStream'
@@ -134,8 +133,6 @@ export default function JobDetail() {
               </div>
             )}
 
-            <WorkflowGraph job={job} />
-
             {job.status !== 'succeeded' && job.status !== 'failed' && !gateSuspended && (
               <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
                 <GenerationProgress kind={job.workflow_name.startsWith('video') ? 'video' : 'image'} />
@@ -180,7 +177,14 @@ export default function JobDetail() {
 // an extra click through to /assets/:id first.
 function ResultAsset({ assetId }: { assetId: string }) {
   const { t } = useTranslation()
-  const { data } = useQuery({ queryKey: ['asset', assetId], queryFn: () => api.getAsset(assetId) })
+  const { data, isError } = useQuery({ queryKey: ['asset', assetId], queryFn: () => api.getAsset(assetId) })
+  if (isError) {
+    return (
+      <div className="flex h-48 w-48 items-center justify-center rounded-lg border border-dashed border-zinc-800 text-center text-xs text-zinc-600">
+        {t('jobDetail.assetMissing')}
+      </div>
+    )
+  }
   if (!data) return <div className="h-48 w-48 animate-pulse rounded-lg bg-zinc-800" />
   return (
     <div className="group relative">

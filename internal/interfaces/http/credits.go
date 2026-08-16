@@ -7,6 +7,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -61,7 +62,7 @@ func (s *Server) handleCreditsLedger(c *gin.Context) {
 			"held_after":    r.HeldAfter,
 			"ref_type":      r.RefType,
 			"ref_id":        r.RefID,
-			"remark":        r.Remark,
+			"remark":        parseRemark(r.Remark),
 			"created_at":    r.CreatedAt,
 		})
 	}
@@ -72,6 +73,25 @@ func (s *Server) handleCreditsLedger(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// parseRemark turns credit_ledger.remark's stored JSON (creditsvc's own
+// remarkPayload) back into a structured object the frontend can localize
+// via credits.remark.<kind> — a row written before that JSON encoding
+// existed just fails to unmarshal into a nonempty Kind, so it falls back to
+// showing its plain-English text verbatim rather than breaking.
+func parseRemark(raw string) gin.H {
+	var p struct {
+		Kind     string  `json:"kind"`
+		Amount   int     `json:"amount"`
+		Workflow string  `json:"workflow"`
+		CostYuan float64 `json:"cost_yuan"`
+		Text     string  `json:"text"`
+	}
+	if err := json.Unmarshal([]byte(raw), &p); err != nil || p.Kind == "" {
+		return gin.H{"kind": "", "amount": 0, "workflow": "", "cost_yuan": 0, "text": raw}
+	}
+	return gin.H{"kind": p.Kind, "amount": p.Amount, "workflow": p.Workflow, "cost_yuan": p.CostYuan, "text": p.Text}
+}
+
 // handleCreditsTopup is POST /api/v1/credits/topup: see demoTopupCredits'
 // doc for why this exists instead of a real payment flow. idemKey is a
 // fresh ULID every call, not derived from any client input — each click is
@@ -79,7 +99,7 @@ func (s *Server) handleCreditsLedger(c *gin.Context) {
 // should ever get deduplicated the way job submission does.
 func (s *Server) handleCreditsTopup(c *gin.Context) {
 	uid := userID(c)
-	if err := s.credits.Recharge(c.Request.Context(), uid, "topup:"+id.New(), demoTopupCredits, "demo top-up (POC, no real payment)"); err != nil {
+	if err := s.credits.RechargeDemo(c.Request.Context(), uid, "topup:"+id.New(), demoTopupCredits); err != nil {
 		c.JSON(http.StatusInternalServerError, errBody("internal", "topup failed"))
 		return
 	}

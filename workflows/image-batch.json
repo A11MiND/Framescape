@@ -12,6 +12,7 @@
     "arguments": {
       "parameters": [
         { "name": "prompt", "type": "string" },
+        { "name": "seed", "type": "string" },
         { "name": "user-id", "type": "string" },
         { "name": "n", "type": "string", "default": "4" }
       ]
@@ -27,6 +28,7 @@
               "arguments": {
                 "parameters": [
                   { "name": "prompt", "valueFrom": { "parameter": "workflow.parameters.prompt" } },
+                  { "name": "seed", "valueFrom": { "parameter": "workflow.parameters.seed" } },
                   { "name": "user-id", "valueFrom": { "parameter": "workflow.parameters.user-id" } },
                   { "name": "n", "valueFrom": { "parameter": "workflow.parameters.n" } }
                 ]
@@ -42,6 +44,7 @@
           "inputs": {
             "parameters": [
               { "name": "prompt", "type": "string" },
+              { "name": "seed", "type": "string" },
               { "name": "user-id", "type": "string" },
               { "name": "n", "type": "string" }
             ]

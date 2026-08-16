@@ -169,11 +169,13 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 	case "image.single":
 		compiled := prompt.Compile(prompt.Input{Text: spec.Text, Characters: characters, Presets: presets, Seed: spec.Seed})
 		args["prompt"] = compiled.Prompt
+		args["seed"] = formatSeed(compiled.Seed)
 		args["source-image-asset-id"] = spec.SourceImageAssetID
 		estimatedCredits = creditsvc.EstimateImageCredits(1)
 	case "image.batch":
 		compiled := prompt.Compile(prompt.Input{Text: spec.Text, Characters: characters, Presets: presets, Seed: spec.Seed})
 		args["prompt"] = compiled.Prompt
+		args["seed"] = formatSeed(compiled.Seed)
 		n := spec.N
 		if n <= 0 {
 			n = 4
@@ -196,7 +198,7 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 			panels := make([]map[string]any, 4)
 			for i, panelText := range spec.Panels {
 				compiled := prompt.Compile(prompt.Input{Text: panelText, Characters: characters, Presets: presets, Seed: spec.Seed})
-				panels[i] = map[string]any{"prompt": compiled.Prompt, "user-id": strconv.FormatUint(userID, 10)}
+				panels[i] = map[string]any{"prompt": compiled.Prompt, "seed": formatSeed(compiled.Seed), "user-id": strconv.FormatUint(userID, 10)}
 			}
 			args["panels"] = panels
 			// Per-node, not EstimateImageCredits(4): each panel is its own
@@ -223,10 +225,7 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 		// compile is enough to run the compiler's own seed-resolution rule
 		// (explicit spec.Seed, else the first bound character's fixed seed).
 		seed := prompt.Compile(prompt.Input{Characters: characters, Seed: spec.Seed}).Seed
-		seedStr := ""
-		if seed != nil {
-			seedStr = strconv.FormatInt(*seed, 10)
-		}
+		seedStr := formatSeed(seed)
 		shots := make([]map[string]any, len(spec.Shots))
 		for i, shotText := range spec.Shots {
 			compiled := prompt.Compile(prompt.Input{Text: shotText, Characters: characters, Presets: presets, Seed: seed})
@@ -286,7 +285,7 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 	// §12.3: hold before Submit, never after — a failed hold (insufficient
 	// balance) must never let a job start running.
 	bizID := id.New()
-	if err := s.credits.Hold(ctx, userID, "job:"+bizID+":hold", "job", bizID, estimatedCredits, workflowName); err != nil {
+	if err := s.credits.Hold(ctx, userID, "job:"+bizID+":hold", "job", bizID, estimatedCredits, "job", workflowName); err != nil {
 		return nil, fmt.Errorf("hold credits: %w", err)
 	}
 
@@ -690,6 +689,18 @@ func truncate(s string, n int) string {
 }
 
 func ptrTime(t time.Time) *time.Time { return &t }
+
+// formatSeed renders a compiled seed (explicit spec.Seed override, else a
+// bound character's fixed seed — prompt.Compile's own resolution rule) as
+// the string minimax.image's node config expects; nil (no override, no
+// bound character) becomes "", which image.go reads as "let MiniMax pick
+// one" rather than parsing a seed at all.
+func formatSeed(seed *int64) string {
+	if seed == nil {
+		return ""
+	}
+	return strconv.FormatInt(*seed, 10)
+}
 
 // nonNil turns a nil slice into an empty one so it JSON-marshals to `[]`
 // instead of `null` — workflow.parameters of type "array" bind cleanly

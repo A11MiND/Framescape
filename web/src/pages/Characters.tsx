@@ -120,10 +120,7 @@ function CharacterCard({ character, projects }: { character: Character; projects
       {character.description && (
         <p className="mt-1 line-clamp-2 text-sm text-zinc-400">{character.description}</p>
       )}
-      <div className="mt-2 flex items-center justify-between">
-        <p className="font-mono text-xs text-zinc-600">seed {character.seed}</p>
-        {projectName && <p className="truncate text-xs text-zinc-500">{projectName}</p>}
-      </div>
+      {projectName && <p className="mt-2 truncate text-xs text-zinc-500">{projectName}</p>}
       {/* §07's "用這個角色創作直達 Composer 的捷徑" gap — mirrors
           suggestActions' save-character round trip in the other direction:
           drops slotA prefilled via router state (Studio's own useEffect
@@ -165,7 +162,11 @@ function CharacterForm({
   const { t } = useTranslation()
   const [name, setName] = useState(character?.name ?? '')
   const [description, setDescription] = useState(character?.description ?? '')
-  const [seed, setSeed] = useState(() => character?.seed ?? Math.floor(Math.random() * 1_000_000))
+  // §07's "seed 輸入框對用戶無意義" gap — a raw integer meant nothing to
+  // anyone reviewing the form; it stays fully in effect as the actual
+  // consistency lever generation reads (F3.1, prompt.Compile's own
+  // resolution rule), just generated once here and never re-surfaced.
+  const [seed] = useState(() => character?.seed ?? Math.floor(Math.random() * 1_000_000))
   const [selected, setSelected] = useState<string[]>(character?.ref_asset_ids ?? initialSelected ?? [])
   const [projectId, setProjectId] = useState(character?.project_id ?? '')
   const qc = useQueryClient()
@@ -199,21 +200,12 @@ function CharacterForm({
 
   return (
     <div className="mb-8 space-y-4 rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder={t('characters.namePlaceholder')}
-          className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-violet-500"
-        />
-        <input
-          type="number"
-          value={seed}
-          onChange={(e) => setSeed(Number(e.target.value))}
-          placeholder="seed"
-          className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-violet-500"
-        />
-      </div>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder={t('characters.namePlaceholder')}
+        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-violet-500"
+      />
       <textarea
         value={description}
         onChange={(e) => setDescription(e.target.value)}

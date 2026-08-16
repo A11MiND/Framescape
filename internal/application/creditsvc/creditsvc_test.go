@@ -54,7 +54,7 @@ func TestCommitClampReconciliation(t *testing.T) {
 	if err := svc.Recharge(ctx, userID, "test:recharge", 100, "test recharge"); err != nil {
 		t.Fatalf("recharge: %v", err)
 	}
-	if err := svc.Hold(ctx, userID, "test:hold", "job", "test-job", 3, "test hold"); err != nil {
+	if err := svc.Hold(ctx, userID, "test:hold", "job", "test-job", 3, "job", "test-workflow"); err != nil {
 		t.Fatalf("hold: %v", err)
 	}
 

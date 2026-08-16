@@ -268,6 +268,20 @@ export interface JobSummary {
   retry_of_job_id: string
 }
 
+// remark.kind is a machine-readable constant (creditsvc's own
+// remarkPayload.Kind on the Go side) — same split as EstimateItem.kind, the
+// frontend maps it to a translated string via credits.remark.<kind>. kind
+// is "" for ledger rows written before this existed (a bare English
+// sentence lives in `text` for those, shown verbatim as a fallback) and for
+// recharge_custom (operator-supplied CLI text, inherently unlocalizable).
+export interface CreditRemark {
+  kind: string
+  amount: number
+  workflow: string
+  cost_yuan: number
+  text: string
+}
+
 export interface CreditLedgerEntry {
   direction: string
   amount: number
@@ -275,7 +289,7 @@ export interface CreditLedgerEntry {
   held_after: number
   ref_type: string
   ref_id: string
-  remark: string
+  remark: CreditRemark
   created_at: string
 }
 
@@ -285,6 +299,8 @@ export const api = {
   login: (email: string, password: string) =>
     request<TokenPair>('POST', '/auth/login', { email, password }, { auth: false }),
   me: () => request<MeResponse>('GET', '/me'),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<void>('PATCH', '/me/password', { current_password: currentPassword, new_password: newPassword }),
 
   // PRD §10.5/§13.2's Capability Matrix — public (no auth), so it loads
   // before login same as the trial below. Studio fetches this once and

@@ -49,9 +49,12 @@ export default function NotificationCenter() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         title={t('notifications.title')}
-        className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-zinc-800 text-xs text-zinc-500 transition hover:border-zinc-700 hover:text-zinc-300"
+        className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-zinc-800 text-zinc-500 transition hover:border-zinc-700 hover:text-zinc-300"
       >
-        🔔
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+          <path d="M5 8a5 5 0 0 1 10 0c0 3.2 1 4.6 1.5 5.2a.6.6 0 0 1-.5 1H4a.6.6 0 0 1-.5-1C4 12.6 5 11.2 5 8Z" />
+          <path d="M8.2 16.5a1.8 1.8 0 0 0 3.6 0" />
+        </svg>
         {count > 0 && (
           <span className="absolute -right-1 -top-1 rounded-full bg-amber-500 px-1 text-[9px] font-medium leading-[14px] text-black">
             {count}

@@ -26,6 +26,11 @@ type refreshRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }
 
+type changePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required,min=8"`
+}
+
 type tokenPair struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
@@ -138,4 +143,37 @@ func (s *Server) handleMe(c *gin.Context) {
 		"email":   user.Email,
 		"balance": acct.Balance,
 	})
+}
+
+// handleChangePassword is Settings' account-security addition — the app
+// previously had no way to change a password short of the CLI/DB directly.
+// Requires the current password (not just a valid session) so a stolen,
+// still-live access token can't silently lock the real owner out.
+func (s *Server) handleChangePassword(c *gin.Context) {
+	var req changePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
+		return
+	}
+
+	var user persistence.User
+	if err := s.db.First(&user, userID(c)).Error; err != nil {
+		c.JSON(http.StatusNotFound, errBody("not_found", "user not found"))
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.CurrentPassword)) != nil {
+		c.JSON(http.StatusUnauthorized, errBody("invalid_credentials", "current password incorrect"))
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "hash password"))
+		return
+	}
+	if err := s.db.Model(&persistence.User{}).Where("id = ?", user.ID).Update("password_hash", string(hash)).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "update password"))
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
