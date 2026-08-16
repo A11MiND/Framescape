@@ -58,6 +58,7 @@ const TAB_META_KEY: Record<Tab, { icon: string; blurbKey: string }> = {
   'video.sequence': { icon: '🎞', blurbKey: 'studio.tabMeta.videoSequence' },
 }
 const TABS = Object.keys(TAB_META_KEY) as Tab[]
+const SLOT_LETTERS = 'ABCDEF'
 
 // video.sequence's shots need a stable identity per row for dnd-kit's
 // drag-reorder (array index isn't stable across a reorder) — this is the
@@ -122,8 +123,19 @@ export default function Studio() {
   const [n, setN] = useState(4)
   const [panels, setPanels] = useState(['', '', '', ''])
   const [shots, setShots] = useState([''])
-  const [slotA, setSlotA] = useState('')
-  const [slotB, setSlotB] = useState('')
+  // §07's "只能綁定 2 個角色" gap — the backend never actually capped this
+  // (CharacterSlot's own doc: "slots beyond A/B are accepted but the PRD
+  // only defines those two", and prompt.Compile embeds every bound
+  // character's description with no length of its own), so the fixed
+  // slotA/slotB pair was purely a frontend limitation. A hard cap still
+  // makes sense though: each extra character only ever contributes a text
+  // description here (no visual reference — MiniMax's subject_reference
+  // is source-image-asset-id's separate img2img mechanism, F5.8, not
+  // wired to character slots at all), and they all compete for the same
+  // 1500-char image prompt budget, so an unbounded list would just start
+  // silently losing characters to the compiler's own trim step.
+  const MAX_CHARACTER_SLOTS = 6
+  const [characterSlotIds, setCharacterSlotIds] = useState<string[]>(['', ''])
   const [presetIds, setPresetIds] = useState<string[]>([])
   const [bizId, setBizId] = useState<string | null>(null)
   const [projectId, setProjectId] = useState('')
@@ -166,7 +178,7 @@ export default function Studio() {
   useEffect(() => {
     const prefillCharacterId = (location.state as { prefillCharacterId?: string } | null)?.prefillCharacterId
     if (!prefillCharacterId) return
-    setSlotA(prefillCharacterId)
+    setCharacterSlotIds((cur) => [prefillCharacterId, ...cur.slice(1)])
     navigate('.', { replace: true, state: {} })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state])
@@ -178,8 +190,8 @@ export default function Studio() {
     setTab(workflowName)
     setBizId(null)
 
-    setSlotA(spec.characters?.find((c) => c.slot === 'A')?.character_id ?? '')
-    setSlotB(spec.characters?.find((c) => c.slot === 'B')?.character_id ?? '')
+    const boundIds = (spec.characters ?? []).map((c) => c.character_id)
+    setCharacterSlotIds(boundIds.length ? boundIds : ['', ''])
     setPresetIds(spec.preset_ids ?? [])
 
     if (workflowName === 'image.single' || workflowName === 'image.batch') {
@@ -334,10 +346,9 @@ export default function Studio() {
   // the user like "the same submission," not two separate copies of this
   // switch that could quietly drift apart.
   function buildSpec(): Spec {
-    const characterSlots = [
-      slotA && { slot: 'A', character_id: slotA },
-      slotB && { slot: 'B', character_id: slotB },
-    ].filter(Boolean) as Spec['characters']
+    const characterSlots = characterSlotIds
+      .map((id, i) => id && { slot: SLOT_LETTERS[i], character_id: id })
+      .filter(Boolean) as Spec['characters']
 
     const spec: Spec = {
       characters: characterSlots?.length ? characterSlots : undefined,
@@ -735,7 +746,7 @@ export default function Studio() {
                       key={shot.id}
                       shot={shot}
                       index={i}
-                      mode={shotMode(i + 1, vsRecalibrateEvery, !!slotA)}
+                      mode={shotMode(i + 1, vsRecalibrateEvery, characterSlotIds.some(Boolean))}
                       onChange={(text) => setVsShots((cur) => cur.map((s) => (s.id === shot.id ? { ...s, text } : s)))}
                       onRemove={() => setVsShots((cur) => cur.filter((s) => s.id !== shot.id))}
                       removable={vsShots.length > 1}
@@ -855,14 +866,37 @@ export default function Studio() {
 
             {!isGuest && (
               <>
-                <Capsule>
-                  <span className="text-zinc-500">{t('studio.capsule.characterA')}</span>
-                  <CharacterSlotPicker value={slotA} onChange={setSlotA} options={characters.data?.characters ?? []} />
-                </Capsule>
-                <Capsule>
-                  <span className="text-zinc-500">{t('studio.capsule.characterB')}</span>
-                  <CharacterSlotPicker value={slotB} onChange={setSlotB} options={characters.data?.characters ?? []} />
-                </Capsule>
+                {characterSlotIds.map((id, i) => (
+                  <Capsule key={i}>
+                    <span className="text-zinc-500">{t('studio.capsule.characterSlot', { letter: SLOT_LETTERS[i] })}</span>
+                    <CharacterSlotPicker
+                      value={id}
+                      onChange={(v) =>
+                        setCharacterSlotIds((cur) => cur.map((cur_id, cur_i) => (cur_i === i ? v : cur_id)))
+                      }
+                      options={characters.data?.characters ?? []}
+                    />
+                    {characterSlotIds.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setCharacterSlotIds((cur) => cur.filter((_, cur_i) => cur_i !== i))}
+                        title={t('common.delete')}
+                        className="text-zinc-600 transition hover:text-red-400"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </Capsule>
+                ))}
+                {characterSlotIds.length < MAX_CHARACTER_SLOTS && (
+                  <button
+                    type="button"
+                    onClick={() => setCharacterSlotIds((cur) => [...cur, ''])}
+                    className="rounded-full border border-dashed border-zinc-700 px-3 py-1.5 text-xs text-zinc-500 transition hover:border-violet-500 hover:text-violet-300"
+                  >
+                    {t('studio.capsule.addCharacter')}
+                  </button>
+                )}
                 {!!projects.data?.projects.length && (
                   <Capsule title={t('studio.capsule.projectTooltip')}>
                     <span className="text-zinc-500">{t('studio.capsule.project')}</span>

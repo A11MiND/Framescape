@@ -330,8 +330,8 @@
       "anchorInterval": "Anchor interval",
       "anchorIntervalTooltip": "Every N segments, re-anchor to the character reference image (r2va); other segments continue from the previous segment's last frame (i2va)",
       "everyNSegments": "Every {{n}} segments",
-      "characterA": "Character A",
-      "characterB": "Character B",
+      "characterSlot": "Character {{letter}}",
+      "addCharacter": "+ Add character",
       "project": "Project",
       "projectTooltip": "File this generation under a project — filterable later in Assets/Jobs"
     },

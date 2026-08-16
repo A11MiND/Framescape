@@ -330,8 +330,8 @@
       "anchorInterval": "锚定间隔",
       "anchorIntervalTooltip": "每 N 段重新锚定一次角色参考图（r2va），其余段落用前一段尾帧续接（i2va）",
       "everyNSegments": "每 {{n}} 段",
-      "characterA": "角色 A",
-      "characterB": "角色 B",
+      "characterSlot": "角色 {{letter}}",
+      "addCharacter": "+ 添加角色",
       "project": "项目",
       "projectTooltip": "把这次生成归类到某个项目下，之后可在资产库/作业列表按项目筛选"
     },
