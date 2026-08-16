@@ -183,6 +183,14 @@ export default function Studio() {
   const [n, setN] = useState(4)
   const [panels, setPanels] = useState(['', '', '', ''])
   const [shots, setShots] = useState([''])
+  // image.sequence's cross-shot referencing (Spec.ShotSourceRefs' own doc):
+  // parallel array to shots, null/0 = no reference, else the 1-based index
+  // of an earlier shot in shots whose generated image becomes this shot's
+  // own source-image-asset-id. Kept as real state (not parsed back out of
+  // the mention token text) — same "state is the source of truth, the
+  // inserted text is cosmetic" pattern sourceImageId/refImageIds etc.
+  // already use everywhere else in this file.
+  const [shotSourceRefs, setShotSourceRefs] = useState<(number | null)[]>([null])
   // §07's "只能綁定 2 個角色" gap — the backend never actually capped this
   // (CharacterSlot's own doc: "slots beyond A/B are accepted but the PRD
   // only defines those two", and prompt.Compile embeds every bound
@@ -272,7 +280,11 @@ export default function Studio() {
         setStory(spec.story)
       }
     } else if (workflowName === 'image.sequence') {
-      setShots(spec.shots?.length ? spec.shots : [''])
+      const restoredShots = spec.shots?.length ? spec.shots : ['']
+      setShots(restoredShots)
+      const restoredRefs = spec.shot_source_refs ?? []
+      setShotSourceRefs(restoredShots.map((_, i) => restoredRefs[i] || null))
+      setSourceImageId(spec.source_image_asset_id ?? '')
     } else if (workflowName === 'video.single') {
       setVText(spec.text ?? '')
       if (spec.duration_seconds) setDuration(spec.duration_seconds)
@@ -437,7 +449,14 @@ export default function Studio() {
       }
       if (sourceImageId) spec.source_image_asset_id = sourceImageId
     } else if (tab === 'image.sequence') {
-      spec.shots = shots.filter((s) => s.trim())
+      // Blank shots get dropped, which shifts every later shot's position —
+      // filterShotsWithRefs renumbers shotSourceRefs' 1-based indices (and
+      // drops/orphans a ref whose target itself got dropped) so a blank row
+      // left in the middle can never silently point cross-shot refs at the
+      // wrong shot.
+      const { shots: filteredShots, refs } = filterShotsWithRefs(shots, shotSourceRefs)
+      spec.shots = filteredShots
+      if (refs.some((r) => r > 0)) spec.shot_source_refs = refs
       if (sourceImageId) spec.source_image_asset_id = sourceImageId
     } else if (tab === 'video.single') {
       spec.text = vText
@@ -710,6 +729,8 @@ export default function Studio() {
             <ShotList
               shots={shots}
               setShots={setShots}
+              sourceRefs={shotSourceRefs}
+              setSourceRefs={setShotSourceRefs}
               placeholder={(i) => t('studio.imageSequence.shotPlaceholder', { n: i + 1 })}
               addLabel={t('studio.imageSequence.addLabel')}
             />
@@ -1373,31 +1394,78 @@ function SortableShotRow({
   )
 }
 
+// filterShotsWithRefs drops blank shots (buildSpec's existing behavior)
+// while keeping shotSourceRefs' 1-based indices valid: every kept shot's
+// position can shift, so a ref pointing past a dropped shot gets
+// renumbered, and a ref whose target was itself blank (and so got dropped)
+// is orphaned back to 0 rather than silently pointing at the wrong shot.
+function filterShotsWithRefs(shots: string[], sourceRefs: (number | null)[]): { shots: string[]; refs: number[] } {
+  const keepIndices: number[] = []
+  shots.forEach((s, i) => {
+    if (s.trim()) keepIndices.push(i)
+  })
+  const oldToNew = new Map<number, number>() // 1-based old index -> 1-based new index
+  keepIndices.forEach((oldIdx, newPos) => oldToNew.set(oldIdx + 1, newPos + 1))
+  return {
+    shots: keepIndices.map((i) => shots[i]),
+    refs: keepIndices.map((i) => {
+      const r = sourceRefs[i]
+      return r ? (oldToNew.get(r) ?? 0) : 0
+    }),
+  }
+}
+
 function ShotList({
   shots,
   setShots,
+  sourceRefs,
+  setSourceRefs,
   placeholder,
   addLabel,
 }: {
   shots: string[]
   setShots: React.Dispatch<React.SetStateAction<string[]>>
+  sourceRefs: (number | null)[]
+  setSourceRefs: React.Dispatch<React.SetStateAction<(number | null)[]>>
   placeholder: (i: number) => string
   addLabel: string
 }) {
+  const { t } = useTranslation()
   return (
     <div className="space-y-2">
       {shots.map((s, i) => (
         <div key={i} className="flex gap-2">
-          <MentionTextarea
-            value={s}
-            onChange={(v) => setShots((cur) => cur.map((c, ci) => (ci === i ? v : c)))}
-            rows={2}
-            className="text-sm"
-            hintPhrases={[placeholder(i)]}
-          />
+          <div className="flex-1">
+            <MentionTextarea
+              value={s}
+              onChange={(v) => setShots((cur) => cur.map((c, ci) => (ci === i ? v : c)))}
+              rows={2}
+              className="text-sm"
+              hintPhrases={[placeholder(i)]}
+              siblingShots={shots.slice(0, i).map((text, idx) => ({ index: idx + 1, text }))}
+              onMentionShot={(shotIndex) => setSourceRefs((cur) => cur.map((r, ri) => (ri === i ? shotIndex : r)))}
+            />
+            {sourceRefs[i] != null && (
+              <p className="mt-1 flex items-center gap-1 text-xs text-violet-400">
+                {t('studio.imageSequence.linkedToShot', { n: sourceRefs[i] })}
+                <button
+                  type="button"
+                  onClick={() => setSourceRefs((cur) => cur.map((r, ri) => (ri === i ? null : r)))}
+                  className="text-zinc-500 hover:text-red-400"
+                >
+                  ×
+                </button>
+              </p>
+            )}
+          </div>
           {shots.length > 1 && (
             <button
-              onClick={() => setShots((cur) => cur.filter((_, ci) => ci !== i))}
+              onClick={() => {
+                setShots((cur) => cur.filter((_, ci) => ci !== i))
+                setSourceRefs((cur) =>
+                  cur.filter((_, ci) => ci !== i).map((r) => (r == null ? r : r === i + 1 ? null : r > i + 1 ? r - 1 : r)),
+                )
+              }}
               className="h-fit shrink-0 rounded-lg border border-zinc-800 px-2 py-1.5 text-zinc-500 hover:text-red-400"
             >
               ×
@@ -1405,7 +1473,13 @@ function ShotList({
           )}
         </div>
       ))}
-      <button onClick={() => setShots((cur) => [...cur, ''])} className="text-sm text-violet-400 hover:text-violet-300">
+      <button
+        onClick={() => {
+          setShots((cur) => [...cur, ''])
+          setSourceRefs((cur) => [...cur, null])
+        }}
+        className="text-sm text-violet-400 hover:text-violet-300"
+      >
         {addLabel}
       </button>
     </div>

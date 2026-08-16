@@ -22,28 +22,34 @@ import (
 // re-trigger a single already-terminal task in place without reopening the
 // vendored engine's own one-way Phase invariant, see engine.go's doc).
 //
-// Scoped to leaf `task` templates only — video.sequence's per-shot nodes
-// are each their own nested DAG (gen+extract), not a leaf task, so no
-// single-task satellite can stand in for one; that one genuinely doesn't
-// fit this package's "re-run exactly one leaf task" model.
+// Scoped to leaf `task` templates that all share one call-site name (this
+// map is workflow_name -> a single node_name, not a pattern) whose inputs
+// are fully reconstructible from the job's own persisted Spec alone.
+// video.sequence's per-shot nodes were never eligible (each is its own
+// nested DAG, not a leaf task). image.sequence (F5.5's cross-shot-
+// referencing extension, image_sequence.go's own doc) isn't eligible either
+// as of that change: every shot is now its own distinctly-named "shot-N"
+// DAG task instead of "gen-one-shot" Loop iterations sharing one name +
+// loop_index, and a shot that references an earlier one needs that shot's
+// already-materialized asset id, not just its own Spec entry — the same
+// "genuinely doesn't fit this package's re-run-one-leaf-task model"
+// reasoning video.sequence's exclusion already documents.
 var retryableNodes = map[string]string{
-	"image.comic4":   "gen-one-panel",
-	"image.sequence": "gen-one-shot",
-	"video.single":   "gen",
+	"image.comic4": "gen-one-panel",
+	"video.single": "gen",
 }
 
 // retryTemplateName maps workflow_name to the *definition file's own*
 // template name for that node — usually identical to retryableNodes' entry,
 // except video.single: its DAG call-site is named "gen" (matching
-// job_nodes.node_name, jobGraph.ts's convention) but invokes a template
-// declared as "gen-video". buildRetryWorkflow needs the template name to
-// find the right `task` block in workflows/*.json; RetryNode needs the
-// job_nodes name to look up the failed row — two different identifiers for
-// the same node, so both maps exist rather than conflating them.
+// job_nodes.node_name) but invokes a template declared as "gen-video".
+// buildRetryWorkflow needs the template name to find the right `task` block
+// in workflows/*.json; RetryNode needs the job_nodes name to look up the
+// failed row — two different identifiers for the same node, so both maps
+// exist rather than conflating them.
 var retryTemplateName = map[string]string{
-	"image.comic4":   "gen-one-panel",
-	"image.sequence": "gen-one-shot",
-	"video.single":   "gen-video",
+	"image.comic4": "gen-one-panel",
+	"video.single": "gen-video",
 }
 
 // RetryNode resubmits exactly one Failed/Error/Timeout leaf task from an
@@ -119,24 +125,6 @@ func (s *Service) RetryNode(ctx context.Context, userID uint64, bizID, nodeName 
 		}
 		compiled := prompt.Compile(prompt.Input{Text: text, Characters: characters, Presets: presets, Seed: spec.Seed})
 		values["prompt"] = compiled.Prompt
-		estimatedCredits = creditsvc.EstimatePerNodeImageCredits(1)
-	case "image.sequence":
-		if loopIndex < 0 || loopIndex >= len(spec.Shots) {
-			return nil, fmt.Errorf("shot index %d out of range for %d shots", loopIndex, len(spec.Shots))
-		}
-		text = spec.Shots[loopIndex]
-		if promptOverride != "" {
-			text = promptOverride
-		}
-		// Same seed resolution as Create's image.sequence branch: resolve
-		// once from an empty-text compile, so every shot (including a
-		// retried one) keeps the job's one shared seed (F5.5's "同 seed").
-		seed := prompt.Compile(prompt.Input{Characters: characters, Seed: spec.Seed}).Seed
-		compiled := prompt.Compile(prompt.Input{Text: text, Characters: characters, Presets: presets, Seed: seed})
-		values["prompt"] = compiled.Prompt
-		if seed != nil {
-			values["seed"] = strconv.FormatInt(*seed, 10)
-		}
 		estimatedCredits = creditsvc.EstimatePerNodeImageCredits(1)
 	case "video.single":
 		if loopIndex != -1 {

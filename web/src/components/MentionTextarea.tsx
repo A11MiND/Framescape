@@ -104,6 +104,8 @@ export function MentionTextarea({
   value,
   onChange,
   onMentionAsset,
+  onMentionShot,
+  siblingShots,
   rows = 3,
   placeholder,
   hintPhrases,
@@ -113,6 +115,17 @@ export function MentionTextarea({
   value: string
   onChange: (v: string) => void
   onMentionAsset?: (asset: AssetResponse) => void
+  // image.sequence's cross-shot referencing: #-referencing an earlier shot
+  // in the same batch (not yet a real asset — it hasn't generated yet)
+  // instead of an existing library asset. Fires with that shot's 1-based
+  // index; ShotList (Studio.tsx) turns this into a per-shot dependency,
+  // Spec.ShotSourceRefs' own doc covers why it's backward-only.
+  onMentionShot?: (shotIndex: number) => void
+  // Earlier shots in the current batch, offered as pickable mention targets
+  // above the regular asset grid when non-empty. Callers pass only shots
+  // that come before the one being edited — see ShotList, which is the only
+  // caller that ever sets this.
+  siblingShots?: { index: number; text: string }[]
   rows?: number
   // Static fallback placeholder (used as-is if hintPhrases isn't given).
   placeholder?: string
@@ -191,6 +204,27 @@ export function MentionTextarea({
     setOpen(false)
   }
 
+  function pickShot(shotIndex: number) {
+    const el = ref.current
+    const label = t('studio.mention.shot', { n: shotIndex })
+    if (el) {
+      const pos = el.selectionStart
+      const before = value.slice(0, pos)
+      const after = value.slice(pos)
+      if (before.endsWith('#')) {
+        const next = before + label + ' ' + after
+        onChange(next)
+        requestAnimationFrame(() => {
+          const caret = before.length + label.length + 1
+          el.setSelectionRange(caret, caret)
+          el.focus()
+        })
+      }
+    }
+    onMentionShot?.(shotIndex)
+    setOpen(false)
+  }
+
   return (
     <div ref={rootRef} className="relative">
       {/* Overlay shows what should actually be visible (plain text at
@@ -232,6 +266,25 @@ export function MentionTextarea({
       {rewrite.isError && <p className="mt-1 text-xs text-red-400">{t('studio.rewrite.failed')}</p>}
       {open && (
         <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-xl border border-zinc-800 bg-zinc-900 p-2 shadow-xl">
+          {siblingShots && siblingShots.length > 0 && (
+            <div className="mb-2 border-b border-zinc-800 pb-2">
+              <p className="mb-1.5 px-1 text-[11px] uppercase tracking-wide text-zinc-500">{t('studio.mention.shotPickHint')}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {siblingShots.map((shot) => (
+                  <button
+                    key={shot.index}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pickShot(shot.index)}
+                    title={shot.text}
+                    className="rounded-lg border border-zinc-800 px-2 py-1 text-xs text-zinc-300 transition hover:border-violet-500 hover:text-violet-300"
+                  >
+                    {t('studio.mention.shot', { n: shot.index })}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <p className="mb-1.5 px-1 text-[11px] uppercase tracking-wide text-zinc-500">{t('studio.mention.pickHint')}</p>
           {recent.isLoading && <p className="px-1 py-2 text-xs text-zinc-500">{t('common.loading')}</p>}
           {recent.data?.assets.length === 0 && <p className="px-1 py-2 text-xs text-zinc-500">{t('studio.mention.empty')}</p>}

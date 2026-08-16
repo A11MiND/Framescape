@@ -110,9 +110,11 @@ export interface JobNode {
   phase: string
   outputs: Record<string, unknown> | null
   error: string
-  // -1 outside a Loop iteration — see jobGraph.ts's loopIterationNodes for
-  // why this exists: it's what lets image.comic4/image.sequence show each
-  // panel/shot's own status instead of one aggregated "k/n done" box.
+  // -1 outside a Loop iteration — lets image.comic4's 4 gen-one-panel
+  // iterations (which all share that one node name) show each panel's own
+  // status instead of one aggregated "k/n done" box. image.sequence doesn't
+  // need this anymore: each shot is its own distinctly-named "shot-N" DAG
+  // task (image_sequence.go's own doc), so loop_index is always -1 there.
   loop_index: number
   // Only present once this specific task_run_id has a matching row in the
   // job_nodes projection table (handleGetJob's own doc) — absent for a
@@ -211,6 +213,7 @@ export interface Spec {
   panels?: string[]
   story?: string // image.comic4 only, F5.4: auto-split into 4 panels instead of panels
   shots?: string[]
+  shot_source_refs?: number[] // image.sequence only — cross-shot referencing, see jobsvc.go's Spec.ShotSourceRefs doc
   characters?: CharacterSlot[]
   preset_ids?: string[]
   seed?: number
@@ -370,12 +373,13 @@ export const api = {
   resumeJob: (bizId: string, body: ResumeVideoSequenceRequest) =>
     request<void>('POST', `/jobs/${bizId}/resume`, body),
   cancelJob: (bizId: string) => request<void>('POST', `/jobs/${bizId}/cancel`),
-  // Node-retry: supported for image.comic4's gen-one-panel, image.sequence's
-  // gen-one-shot, and video.single's gen (loopIndex -1 for that last one —
-  // it's not a loop iteration) — jobsvc.RetryNode's own doc covers why
-  // video.sequence's per-shot nodes don't fit (each is its own nested DAG,
-  // not a single leaf task). Returns a brand new satellite job, not a patch
-  // to bizId's own run.
+  // Node-retry: supported for image.comic4's gen-one-panel and video.single's
+  // gen (loopIndex -1 for that last one — it's not a loop iteration) —
+  // jobsvc.RetryNode's own doc covers why video.sequence's and
+  // image.sequence's per-shot nodes don't fit (each shot is its own
+  // distinctly-named DAG task whose inputs can depend on another shot's
+  // runtime output, not a single leaf task reconstructible from Spec alone).
+  // Returns a brand new satellite job, not a patch to bizId's own run.
   retryNode: (bizId: string, nodeName: string, loopIndex: number, promptOverride?: string) =>
     request<CreateJobResponse>('POST', `/jobs/${bizId}/nodes/${nodeName}/retry`, {
       loop_index: loopIndex,

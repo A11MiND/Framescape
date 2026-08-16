@@ -14,13 +14,13 @@ import (
 func TestBuildRetryWorkflow(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
-		defFile      string
+		defFile      string // "" means image.sequence's genOneShotDefJSON() instead of a workflows/*.json file
 		templateName string
 		callSiteName string
 		values       map[string]any
 	}{
 		{"comic4", "image-comic4", "gen-one-panel", "gen-one-panel", map[string]any{"prompt": "a corrected panel", "user-id": "7", "n": "1"}},
-		{"sequence", "image-sequence", "gen-one-shot", "gen-one-shot", map[string]any{"prompt": "a corrected shot", "user-id": "7", "n": "1", "seed": "42"}},
+		{"sequence", "", "gen-one-shot", "gen-one-shot", map[string]any{"prompt": "a corrected shot", "user-id": "7", "n": "1", "seed": "42"}},
 		// video.single is the one case where templateName != callSiteName
 		// (retryTemplateName's own doc) and the one with array-typed
 		// values — this is what actually proves array literals work as
@@ -36,9 +36,15 @@ func TestBuildRetryWorkflow(t *testing.T) {
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			raw, err := workflowdefs.FS.ReadFile(tc.defFile + ".json")
-			if err != nil {
-				t.Fatalf("read %s: %v", tc.defFile, err)
+			var raw []byte
+			if tc.defFile == "" {
+				raw = genOneShotDefJSON()
+			} else {
+				var err error
+				raw, err = workflowdefs.FS.ReadFile(tc.defFile + ".json")
+				if err != nil {
+					t.Fatalf("read %s: %v", tc.defFile, err)
+				}
 			}
 			out, err := buildRetryWorkflow(raw, tc.templateName, tc.callSiteName, tc.values)
 			if err != nil {

@@ -337,7 +337,8 @@
     },
     "imageSequence": {
       "addLabel": "+ Add an image",
-      "shotPlaceholder": "Image {{n}}"
+      "shotPlaceholder": "Image {{n}}",
+      "linkedToShot": "Linked to image {{n}}"
     },
     "videoSequence": {
       "shotPlaceholder": "Segment {{n}} shot description",
@@ -406,7 +407,9 @@
     "mention": {
       "video": "video{{n}}",
       "image": "image{{n}}",
+      "shot": "Image {{n}}",
       "pickHint": "Pick an asset to reference",
+      "shotPickHint": "Reference a shot in this batch",
       "empty": "No assets yet",
       "typeHint": "Tip: type # to reference an existing asset"
     },

@@ -26,16 +26,17 @@ import (
 )
 
 // definitions maps our business-layer workflow_name (dotted, e.g.
-// "image.single") to the aether/v1 document that implements it. Static
-// files for W1-W4; video.sequence (W6) generates its DAG dynamically instead
-// of loading a static file (docs/aether-validation-report.md §four) but
-// still registers itself here under its business name once that lands.
+// "image.single") to the aether/v1 document that implements it. Static files
+// only — video.sequence (W6) and image.sequence (its own cross-shot-
+// referencing extension) both generate their DAG dynamically per job instead
+// of loading a static file (docs/aether-validation-report.md §four, and
+// image_sequence.go's package doc), so neither is listed here; Create()
+// special-cases both before this map is ever consulted.
 var definitions = map[string]string{
-	"image.single":   "image-single",
-	"image.batch":    "image-batch",
-	"image.comic4":   "image-comic4",
-	"image.sequence": "image-sequence",
-	"video.single":   "video-single",
+	"image.single": "image-single",
+	"image.batch":  "image-batch",
+	"image.comic4": "image-comic4",
+	"video.single": "video-single",
 }
 
 // CharacterSlot binds a character to a generation slot (F3.2; slots beyond
@@ -55,6 +56,19 @@ type Spec struct {
 	Panels     []string        `json:"panels,omitempty"`     // image.comic4 only: exactly 4 panel prompts (PRD F5.3)
 	Story      string          `json:"story,omitempty"`      // image.comic4 only, F5.4: auto-split into 4 panels instead of Panels; ignored if Panels is set
 	Shots      []string        `json:"shots,omitempty"`      // image.sequence only: N shot descriptions (PRD F5.5)
+	// ShotSourceRefs is image.sequence's cross-shot referencing (§07 gap: a
+	// user asked to #-reference a sibling shot's about-to-be-generated
+	// image, not just an existing library asset). Parallel array to Shots,
+	// same length when present: ShotSourceRefs[i] is 0 for "no cross-shot
+	// reference" (shot i falls back to the batch-wide SourceImageAssetID, if
+	// any — unchanged default behavior), or a 1-based index j < i+1 of an
+	// earlier shot in this same batch whose generated asset becomes shot
+	// i's own source-image-asset-id once shot j finishes. Backward-only by
+	// construction (the frontend picker only ever offers earlier shots, and
+	// image_sequence.go's validateShotSourceRefs rejects anything else
+	// server-side too) — a forward or self reference would be a real
+	// dependency cycle, not just tasteless.
+	ShotSourceRefs []int `json:"shot_source_refs,omitempty"`
 	Characters []CharacterSlot `json:"characters,omitempty"` // F3.2
 	PresetIDs  []string        `json:"preset_ids,omitempty"` // F4.3
 	Seed       *int64          `json:"seed,omitempty"`       // explicit override; else a bound character's fixed seed wins
@@ -160,6 +174,15 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 		// frame", so the draft phase must be a code-generated linear DAG).
 		return s.createVideoSequence(ctx, userID, spec, idemKey, projectID)
 	}
+	if workflowName == "image.sequence" {
+		// Also dynamically generated, same reasoning as video.sequence
+		// above: ShotSourceRefs' own doc explains why a shot's
+		// source-image-asset-id can now depend on another shot's
+		// runtime-produced output, which a static Loop-based document (the
+		// old workflows/image-sequence.json) has no way to express — see
+		// image_sequence.go's package doc.
+		return s.createImageSequence(ctx, userID, spec, idemKey, projectID)
+	}
 
 	defFile, ok := definitions[workflowName]
 	if !ok {
@@ -250,27 +273,6 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 		default:
 			return nil, fmt.Errorf("image.comic4 requires exactly 4 panels, or a story to auto-split")
 		}
-	case "image.sequence":
-		if len(spec.Shots) == 0 {
-			return nil, fmt.Errorf("image.sequence requires at least 1 shot")
-		}
-		// Resolve the seed once (F5.5: "同 seed") — every shot embeds it,
-		// same reasoning as image.comic4's user-id above. An empty Text
-		// compile is enough to run the compiler's own seed-resolution rule
-		// (explicit spec.Seed, else the first bound character's fixed seed).
-		seed := prompt.Compile(prompt.Input{Characters: characters, Seed: spec.Seed}).Seed
-		seedStr := formatSeed(seed)
-		shots := make([]map[string]any, len(spec.Shots))
-		for i, shotText := range spec.Shots {
-			compiled := prompt.Compile(prompt.Input{Text: shotText, Characters: characters, Presets: presets, Seed: seed})
-			shots[i] = map[string]any{
-				"prompt": compiled.Prompt, "seed": seedStr,
-				"source-image-asset-id": spec.SourceImageAssetID, "user-id": strconv.FormatUint(userID, 10),
-			}
-		}
-		args["shots"] = shots
-		// Per-node, same reasoning as image.comic4's Loop above.
-		estimatedCredits = creditsvc.EstimatePerNodeImageCredits(len(spec.Shots))
 	case "video.single":
 		// §3.2's 7000-char cap, not image's 1500 (PRD §3.1) — video.go itself
 		// also hard-truncates at 7000 as a backstop, same belt-and-braces
