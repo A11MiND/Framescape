@@ -351,7 +351,6 @@
     "submitting": "提交中…",
     "generating": "生成中…",
     "generate": "生成 →",
-    "loginToGenerate": "登录后生成 →",
     "insufficientBalance": "积分不足（余额 {{balance}}）",
     "noCharactersHint": "还没有角色，去「角色库」创建",
     "viewGraph": "查看流程图 →",

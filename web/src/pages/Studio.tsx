@@ -300,7 +300,10 @@ export default function Studio() {
   // F1.2's anonymous trial — relocated here from the login page ("give
   // value before the wall" only works if the value is visible before the
   // wall, not after it). Self-contained, doesn't touch jobs/credits/assets.
-  const [trialPrompt, setTrialPrompt] = useState(t('studio.examples.rooftop'))
+  // Shares the main composer's own `text` field rather than a second prompt
+  // input — a guest used to have to retype their prompt into a duplicate
+  // box further down the page just to actually generate anything, which is
+  // exactly the box this replaces (§07 gap: found live during review).
   const [trialImageUrl, setTrialImageUrl] = useState<string | null>(null)
   const [trialError, setTrialError] = useState<string | null>(null)
   const [trialBusy, setTrialBusy] = useState(false)
@@ -309,7 +312,7 @@ export default function Studio() {
     setTrialBusy(true)
     setTrialError(null)
     try {
-      const res = await api.trialImage(trialPrompt, getDeviceId())
+      const res = await api.trialImage(text, getDeviceId())
       setTrialImageUrl(res.image_url)
     } catch (err) {
       setTrialError(err instanceof ApiError ? err.message : t('studio.errors.trialFailed'))
@@ -964,9 +967,13 @@ export default function Studio() {
                 </button>
               </>
             ) : (
-              <Link to="/login" className="rounded-full bg-violet-500 px-5 py-2 text-sm font-medium text-white transition hover:bg-violet-400">
-                {t('studio.loginToGenerate')}
-              </Link>
+              <button
+                onClick={runTrial}
+                disabled={trialBusy || !text.trim()}
+                className="rounded-full bg-violet-500 px-5 py-2 text-sm font-medium text-white transition hover:bg-violet-400 disabled:opacity-50"
+              >
+                {trialBusy ? t('studio.generating') : t('studio.trial.tryOnce')}
+              </button>
             )}
           </div>
 
@@ -1070,20 +1077,7 @@ export default function Studio() {
 
           {!bizId && isGuest && (
             <div className="mx-auto max-w-md space-y-3 text-center">
-              <p className="text-sm text-zinc-400">{t('studio.trial.intro')}</p>
-              <textarea
-                value={trialPrompt}
-                onChange={(e) => setTrialPrompt(e.target.value)}
-                rows={2}
-                className="w-full resize-none rounded-lg border border-zinc-800 bg-zinc-950 p-2 text-sm outline-none focus:border-violet-500"
-              />
-              <button
-                onClick={runTrial}
-                disabled={trialBusy || !trialPrompt.trim()}
-                className="w-full rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800 disabled:opacity-50"
-              >
-                {trialBusy ? t('studio.generating') : t('studio.trial.tryOnce')}
-              </button>
+              {!trialImageUrl && !trialError && <p className="text-sm text-zinc-400">{t('studio.trial.intro')}</p>}
               {trialError && <p className="text-sm text-red-400">{trialError}</p>}
               {trialImageUrl && (
                 <div className="pt-2">
