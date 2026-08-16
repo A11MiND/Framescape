@@ -15,11 +15,16 @@ const LINKS = [
   { to: '/presets', labelKey: 'rail.presets', icon: '◈' },
 ]
 
-// Left icon rail replacing the old top bar — six tab labels plus balance
-// plus logout couldn't fit one horizontal row without crowding out the
-// creation surface itself. 作业's own badge lands below (batch 2 added
-// GET /jobs, finally giving this entry something real to point at instead
-// of a fabricated count).
+// Left icon rail replacing the old top bar on desktop — six tab labels plus
+// balance plus logout couldn't fit one horizontal row without crowding out
+// the creation surface itself. Below `lg` (1024px) it flips back into a
+// horizontal bar (AppShell's own doc covers why the outer flex direction
+// has to flip in step) — narrower than the sidebar was ever meant to be, so
+// this one scrolls horizontally (`overflow-x-auto`) rather than trying to
+// cram all nine items (brand, six nav links, lang toggle, credits, logout)
+// into a fixed width. 作业's own badge lands below (batch 2 added GET
+// /jobs, finally giving this entry something real to point at instead of a
+// fabricated count).
 export default function Rail() {
   const { t, i18n } = useTranslation()
   const accessToken = useAuthStore((s) => s.accessToken)
@@ -44,19 +49,19 @@ export default function Rail() {
   const toggleLang = () => setStoredLang(lang === 'zh' ? 'en' : 'zh')
 
   return (
-    <aside className="flex w-[76px] shrink-0 flex-col items-center gap-1 border-r border-zinc-800 bg-zinc-950 py-5">
-      <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 text-base text-white shadow-lg shadow-violet-950/40">
+    <aside className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-zinc-800 bg-zinc-950 px-3 py-2 lg:h-screen lg:w-[76px] lg:flex-col lg:overflow-visible lg:border-b-0 lg:border-r lg:px-0 lg:py-5">
+      <div className="mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 text-base text-white shadow-lg shadow-violet-950/40 lg:mb-4 lg:mr-0">
         ✦
       </div>
 
-      <nav className="flex flex-1 flex-col items-center gap-1.5">
+      <nav className="flex items-center gap-1 lg:flex-1 lg:flex-col lg:gap-1.5">
         {LINKS.map((l) => (
           <NavLink
             key={l.to}
             to={l.to}
             end={l.end}
             className={({ isActive }) =>
-              `relative flex w-16 flex-col items-center gap-1 rounded-xl py-2 text-[11px] transition ${
+              `relative flex w-14 shrink-0 flex-col items-center gap-0.5 rounded-xl px-1 py-1.5 text-[10px] transition lg:w-16 lg:gap-1 lg:py-2 lg:text-[11px] ${
                 isActive ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300'
               }`
             }
@@ -74,24 +79,24 @@ export default function Rail() {
         ))}
       </nav>
 
-      <div className="flex flex-col items-center gap-3 pt-2">
+      <div className="ml-1 flex shrink-0 items-center gap-2 lg:ml-0 lg:flex-col lg:gap-3 lg:pt-2">
         <button
           onClick={toggleLang}
           title={t('rail.switchLanguage')}
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-800 text-[10px] font-medium text-zinc-500 transition hover:border-zinc-700 hover:text-zinc-300"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-zinc-800 text-[10px] font-medium text-zinc-500 transition hover:border-zinc-700 hover:text-zinc-300"
         >
           {lang === 'zh' ? 'EN' : '中'}
         </button>
         {accessToken ? (
           <>
-            <NavLink to="/credits" className="flex flex-col items-center text-[11px] text-violet-400 hover:text-violet-300">
+            <NavLink to="/credits" className="flex shrink-0 flex-col items-center text-[11px] text-violet-400 hover:text-violet-300">
               <span className="text-sm">✦</span>
               <AnimatedNumber value={me.data?.balance ?? 0} className="font-mono" />
             </NavLink>
             <button
               onClick={logout}
               title={t('rail.logout')}
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-800 text-xs text-zinc-500 transition hover:border-zinc-700 hover:text-zinc-300"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-zinc-800 text-xs text-zinc-500 transition hover:border-zinc-700 hover:text-zinc-300"
             >
               ⏻
             </button>
@@ -99,7 +104,7 @@ export default function Rail() {
         ) : (
           <NavLink
             to="/login"
-            className="flex w-16 flex-col items-center gap-1 rounded-xl py-2 text-[11px] text-zinc-500 transition hover:bg-zinc-900 hover:text-zinc-300"
+            className="flex w-14 shrink-0 flex-col items-center gap-1 rounded-xl py-1.5 text-[10px] text-zinc-500 transition hover:bg-zinc-900 hover:text-zinc-300 lg:w-16 lg:py-2 lg:text-[11px]"
           >
             <span className="text-base leading-none">◍</span>
             {t('login.signIn')}
