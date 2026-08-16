@@ -227,6 +227,10 @@ export default function Studio() {
   const [vsRatio, setVsRatio] = useState<(typeof RATIO_VALUES)[number]>('16:9')
   const [vsRecalibrateEvery, setVsRecalibrateEvery] = useState(3)
   const [vsSkipPreview, setVsSkipPreview] = useState(false)
+  // video.sequence's r2va anchor when it's a video rather than an image
+  // (Spec.SourceVideoAssetID's own doc) — mutually exclusive with
+  // sourceImageId, which video.sequence's own anchor block below also uses.
+  const [sourceVideoId, setSourceVideoId] = useState('')
 
   // F2.5's "以此再生成": AssetDetail navigates here with the source job's
   // exact workflow_name/spec in router state — buildSpec()'s inverse,
@@ -292,6 +296,8 @@ export default function Studio() {
       if (spec.ratio) setVsRatio(spec.ratio as (typeof RATIO_VALUES)[number])
       if (spec.recalibrate_every) setVsRecalibrateEvery(spec.recalibrate_every)
       setVsSkipPreview(!!spec.skip_preview)
+      setSourceImageId(spec.source_image_asset_id ?? '')
+      setSourceVideoId(spec.source_video_asset_id ?? '')
     }
 
     // Clear the router state so refreshing or navigating back here later
@@ -450,6 +456,7 @@ export default function Studio() {
       spec.recalibrate_every = vsRecalibrateEvery
       if (vsSkipPreview) spec.skip_preview = true
       if (sourceImageId) spec.source_image_asset_id = sourceImageId
+      else if (sourceVideoId) spec.source_video_asset_id = sourceVideoId
     }
     return spec
   }
@@ -642,7 +649,7 @@ export default function Studio() {
               low-risk: minimax.image's subject_reference (and
               video.sequence's r2va anchor) are already per-call, not tied
               to any one workflow shape. */}
-          {tab !== 'video.single' && (
+          {tab !== 'video.single' && tab !== 'video.sequence' && (
             <div>
               <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">{t('studio.image2imageRef')}</p>
               <AssetPicker
@@ -854,6 +861,38 @@ export default function Studio() {
               {vsShots.length > 4 && (
                 <p className="text-xs text-amber-500">{t('studio.driftWarning', { n: vsRecalibrateEvery })}</p>
               )}
+
+              <div className="pt-2">
+                <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500" title={t('studio.videoSequence.anchorRefTooltip')}>
+                  {t('studio.videoSequence.anchorRef')}
+                </p>
+                <div className="space-y-2">
+                  <div>
+                    <p className="mb-1 text-xs text-zinc-600">{t('studio.refImages')}</p>
+                    <AssetPicker
+                      type="image"
+                      selected={sourceImageId ? [sourceImageId] : []}
+                      onToggle={(id) => {
+                        setSourceImageId((cur) => (cur === id ? '' : id))
+                        setSourceVideoId('')
+                      }}
+                      max={1}
+                    />
+                  </div>
+                  <div>
+                    <p className="mb-1 text-xs text-zinc-600">{t('studio.refVideos')}</p>
+                    <AssetPicker
+                      type="video"
+                      selected={sourceVideoId ? [sourceVideoId] : []}
+                      onToggle={(id) => {
+                        setSourceVideoId((cur) => (cur === id ? '' : id))
+                        setSourceImageId('')
+                      }}
+                      max={1}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

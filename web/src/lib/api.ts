@@ -226,6 +226,7 @@ export interface Spec {
   reference_audio_asset_ids?: string[]
   recalibrate_every?: number
   skip_preview?: boolean // video.sequence only — draft runs directly at 2K, no 768P preview gate
+  source_video_asset_id?: string // video.sequence only — r2va anchor when the reference is a video, not an image
   prompt_enhance?: boolean // F6.10, video.single only
 }
 

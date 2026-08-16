@@ -103,6 +103,17 @@ type Spec struct {
 	// it's opt-in, not a default.
 	SkipPreview bool `json:"skip_preview,omitempty"` // video.sequence only
 
+	// SourceVideoAssetID is video.sequence's r2va anchor when the reference
+	// is a video rather than an image — MiniMax's r2va mode accepts either
+	// (internal/infra/executor/minimax/video.go's videoRefs already threads
+	// a video_url content item through unchanged, same as video.single's own
+	// ReferenceVideoAssetIDs). §07 gap: the anchor picker only ever offered
+	// images even though the provider itself doesn't require that. Mutually
+	// exclusive with SourceImageAssetID in practice (the frontend picker
+	// clears one when the other is chosen); if a caller somehow sets both,
+	// SourceImageAssetID wins — see video_sequence.go's characterRefAssetID
+	// resolution.
+	SourceVideoAssetID string `json:"source_video_asset_id,omitempty"` // video.sequence only
 }
 
 type Service struct {

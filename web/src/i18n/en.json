@@ -340,7 +340,9 @@
       "shotPlaceholder": "Image {{n}}"
     },
     "videoSequence": {
-      "shotPlaceholder": "Segment {{n}} shot description"
+      "shotPlaceholder": "Segment {{n}} shot description",
+      "anchorRef": "Anchor reference (for character anchoring — image or video)",
+      "anchorRefTooltip": "Reference material for r2va anchor shots — can be an image or a video; if none is picked, the bound character's own reference image is used"
     },
     "capsule": {
       "refMode": "Reference mode",

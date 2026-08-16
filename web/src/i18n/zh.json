@@ -340,7 +340,9 @@
       "shotPlaceholder": "第 {{n}} 张"
     },
     "videoSequence": {
-      "shotPlaceholder": "第 {{n}} 段镜头描述"
+      "shotPlaceholder": "第 {{n}} 段镜头描述",
+      "anchorRef": "锚点参考（角色锚定用，图片或视频）",
+      "anchorRefTooltip": "作为 r2va 锚定段的参考素材，可以是图片或视频；未选择时默认用绑定角色自己的参考图"
     },
     "capsule": {
       "refMode": "参考模式",

@@ -51,7 +51,8 @@ type shotPlan struct {
 	Index                 int // 1-based
 	Prompt                string
 	Mode                  string // "r2va" | "i2va" | "t2va" (t2va = i==1 with no character bound to anchor r2va)
-	ReferenceImageAssetID string // set only for r2va
+	ReferenceImageAssetID string // set only for r2va, mutually exclusive with ReferenceVideoAssetID
+	ReferenceVideoAssetID string // set only for r2va when the anchor is a video asset (Spec.SourceVideoAssetID)
 }
 
 // planShots implements §5.4's mixed continuity strategy: shot 1 (and every
@@ -59,7 +60,7 @@ type shotPlan struct {
 // image (r2va); every other shot continues from the previous shot's tail
 // frame (i2va). If no character is bound, r2va has nothing to anchor on, so
 // those shots fall back to t2va (plain text, requires an explicit ratio).
-func planShots(shots []string, characters []prompt.Character, presets []prompt.Preset, characterRefAssetID string, recalibrateEvery int) []shotPlan {
+func planShots(shots []string, characters []prompt.Character, presets []prompt.Preset, characterRefAssetID string, characterRefIsVideo bool, recalibrateEvery int) []shotPlan {
 	if recalibrateEvery <= 0 {
 		recalibrateEvery = defaultRecalibrateEvery
 	}
@@ -70,6 +71,9 @@ func planShots(shots []string, characters []prompt.Character, presets []prompt.P
 		compiled := prompt.Compile(prompt.Input{Text: text, Characters: characters, Presets: presets, MaxChars: 7000})
 		p := shotPlan{Index: idx, Prompt: compiled.Prompt}
 		switch {
+		case isAnchor && characterRefAssetID != "" && characterRefIsVideo:
+			p.Mode = "r2va"
+			p.ReferenceVideoAssetID = characterRefAssetID
 		case isAnchor && characterRefAssetID != "":
 			p.Mode = "r2va"
 			p.ReferenceImageAssetID = characterRefAssetID
@@ -120,10 +124,19 @@ func (s *Service) createVideoSequence(ctx context.Context, userID uint64, spec S
 	// Explicit reference wins over a bound character's own ref image, same
 	// "explicit override, else a bound character's own value wins"
 	// precedence as prompt.Compile's seed resolution (jobsvc.go's own
-	// doc). Recomputed identically here and in createVideoSequence — both
-	// must derive the same plan from the same persisted Spec.
+	// doc). SourceImageAssetID takes precedence over SourceVideoAssetID when
+	// a caller somehow sets both (Spec.SourceVideoAssetID's own doc).
+	// Recomputed identically here and in Resume — both must derive the same
+	// plan from the same persisted Spec.
 	characterRefAssetID := spec.SourceImageAssetID
-	if characterRefAssetID == "" {
+	characterRefIsVideo := false
+	switch {
+	case characterRefAssetID != "":
+		// image wins, nothing to do
+	case spec.SourceVideoAssetID != "":
+		characterRefAssetID = spec.SourceVideoAssetID
+		characterRefIsVideo = true
+	default:
 		characterRefAssetID = s.characterRefAsset(ctx, userID, spec.Characters)
 	}
 
@@ -139,7 +152,7 @@ func (s *Service) createVideoSequence(ctx context.Context, userID uint64, spec S
 		ratio = "16:9" // only consumed by t2va-fallback shots (buildVideoSequenceWorkflow)
 	}
 
-	plans := planShots(spec.Shots, characters, presets, characterRefAssetID, spec.RecalibrateEvery)
+	plans := planShots(spec.Shots, characters, presets, characterRefAssetID, characterRefIsVideo, spec.RecalibrateEvery)
 	// §12.3's "预览门只预扣 768P 部分积分" — the draft phase is normally
 	// always 768P regardless of what gets upgraded later at Resume time.
 	// SkipPreview (Spec's own doc) trades that cost protection away
@@ -223,6 +236,7 @@ func genShotInputDecl() []map[string]any {
 		{"name": "reference-image-asset-ids", "type": "array"},
 		{"name": "user-id", "type": "string"},
 		{"name": "shot-index", "type": "string"},
+		{"name": "reference-video-asset-ids", "type": "array"},
 	}
 }
 
@@ -260,10 +274,15 @@ func buildVideoSequenceWorkflow(plans []shotPlan, duration int, ratio string, dr
 			// workflow.parameters rather than baked in as a literal.
 			fromWorkflow("user-id", "user-id"),
 			literal("shot-index", strconv.Itoa(p.Index)),
+			literal("reference-video-asset-ids", []string{}),
 		}
 		switch p.Mode {
 		case "r2va":
-			args[5] = literal("reference-image-asset-ids", []string{p.ReferenceImageAssetID})
+			if p.ReferenceVideoAssetID != "" {
+				args[8] = literal("reference-video-asset-ids", []string{p.ReferenceVideoAssetID})
+			} else {
+				args[5] = literal("reference-image-asset-ids", []string{p.ReferenceImageAssetID})
+			}
 		case "t2va":
 			args[3] = literal("ratio", ratio)
 		case "i2va":
@@ -389,6 +408,7 @@ func buildVideoSequenceWorkflow(plans []shotPlan, duration int, ratio string, dr
 				map[string]any{"name": "base-video-asset-id", "type": "string"},
 				map[string]any{"name": "user-id", "type": "string"},
 				map[string]any{"name": "shot-index", "type": "string"},
+				map[string]any{"name": "reference-video-asset-ids", "type": "array"},
 			}},
 			"retry": map[string]any{"limit": 1}, "timeout": "30m",
 		}},
@@ -478,10 +498,17 @@ func (s *Service) Resume(ctx context.Context, userID uint64, bizID string, req R
 	// doc). Recomputed identically here and in createVideoSequence — both
 	// must derive the same plan from the same persisted Spec.
 	characterRefAssetID := spec.SourceImageAssetID
-	if characterRefAssetID == "" {
+	characterRefIsVideo := false
+	switch {
+	case characterRefAssetID != "":
+		// image wins, nothing to do
+	case spec.SourceVideoAssetID != "":
+		characterRefAssetID = spec.SourceVideoAssetID
+		characterRefIsVideo = true
+	default:
 		characterRefAssetID = s.characterRefAsset(ctx, userID, spec.Characters)
 	}
-	plans := planShots(spec.Shots, characters, presets, characterRefAssetID, spec.RecalibrateEvery)
+	plans := planShots(spec.Shots, characters, presets, characterRefAssetID, characterRefIsVideo, spec.RecalibrateEvery)
 
 	duration := spec.DurationSeconds
 	if duration <= 0 {
@@ -527,8 +554,13 @@ func (s *Service) Resume(ctx context.Context, userID uint64, bizID string, req R
 			firstFrame = strOut(extractName, "last-frame-asset-id")
 		}
 		refImages := []string{}
+		refVideos := []string{}
 		if p.Mode == "r2va" {
-			refImages = []string{p.ReferenceImageAssetID}
+			if p.ReferenceVideoAssetID != "" {
+				refVideos = []string{p.ReferenceVideoAssetID}
+			} else {
+				refImages = []string{p.ReferenceImageAssetID}
+			}
 		}
 		originalAssetID := strOut(shotName, "asset-id")
 
@@ -542,6 +574,7 @@ func (s *Service) Resume(ctx context.Context, userID uint64, bizID string, req R
 				"prompt": promptText, "duration": durationStr, "resolution": "768P", "ratio": ratio,
 				"first-frame-asset-id": firstFrame, "reference-image-asset-ids": refImages,
 				"user-id": userIDStr, "shot-index": strconv.Itoa(p.Index),
+				"reference-video-asset-ids": refVideos,
 			})
 		case upgradeSet[p.Index]:
 			upgradeItems = append(upgradeItems, map[string]any{
@@ -549,6 +582,7 @@ func (s *Service) Resume(ctx context.Context, userID uint64, bizID string, req R
 				"first-frame-asset-id": firstFrame, "reference-image-asset-ids": refImages,
 				"base-video-asset-id": originalAssetID,
 				"user-id":             userIDStr, "shot-index": strconv.Itoa(p.Index),
+				"reference-video-asset-ids": refVideos,
 			})
 		default:
 			keepShotIndex = append(keepShotIndex, strconv.Itoa(p.Index))
