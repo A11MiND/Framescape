@@ -67,18 +67,18 @@ export default function PresetCarousel({
                     }
                   }}
                   title={p.prompt_fragment}
-                  className={`group relative h-[336px] w-[336px] shrink-0 cursor-pointer overflow-hidden rounded-2xl border-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+                  className={`group relative h-36 w-36 shrink-0 cursor-pointer overflow-hidden rounded-xl border-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
                     active ? 'border-violet-500' : 'border-zinc-800 hover:border-zinc-700'
                   }`}
                 >
                   {p.cover_url ? (
                     <img src={p.cover_url} alt="" className="h-full w-full object-cover" />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-zinc-900 text-sm text-zinc-600">
+                    <div className="flex h-full w-full items-center justify-center bg-zinc-900 text-xs text-zinc-600">
                       {t('presetCarousel.noCover')}
                     </div>
                   )}
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-4 pb-3 pt-12 text-left">
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-2 pb-1.5 pt-5 text-left">
                     {/* Same badge treatment as /presets' library cards (F4.4's
                         style_type pill) — the two pages read as different design
                         systems otherwise, even though they show the same data.
@@ -87,14 +87,14 @@ export default function PresetCarousel({
                         where that ever diverges is exactly when this earns
                         its space back. */}
                     {p.style_type && p.style_type !== p.name && (
-                      <span className="mb-1.5 inline-block rounded-full border border-white/30 px-2 py-0.5 text-xs text-zinc-200">
+                      <span className="mb-1 inline-block rounded-full border border-white/30 px-1.5 py-0.5 text-[10px] text-zinc-200">
                         {p.style_type}
                       </span>
                     )}
-                    <p className={`truncate text-lg font-semibold ${active ? 'text-violet-300' : 'text-zinc-100'}`}>{p.name}</p>
+                    <p className={`truncate text-xs font-medium ${active ? 'text-violet-300' : 'text-zinc-100'}`}>{p.name}</p>
                   </div>
                   {active && (
-                    <span className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-violet-500 text-base text-white">
+                    <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-violet-500 text-xs text-white">
                       ✓
                     </span>
                   )}
@@ -112,7 +112,7 @@ export default function PresetCarousel({
                       // touch-only devices (no persistent :hover), also
                       // caught in code review. group-focus-within covers
                       // keyboard users tabbing onto the button itself.
-                      className="absolute left-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-sm text-zinc-300 opacity-60 transition hover:text-red-400 hover:opacity-100 focus:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400 group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-50"
+                      className="absolute left-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-xs text-zinc-300 opacity-60 transition hover:text-red-400 hover:opacity-100 focus:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400 group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-50"
                     >
                       ✕
                     </button>

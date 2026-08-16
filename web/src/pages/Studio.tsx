@@ -531,6 +531,25 @@ export default function Studio() {
           {isGuest && <p className="mt-2 text-sm text-zinc-500">{t('studio.guestHint')}</p>}
         </header>
 
+        {/* ── Format quick-switch cards ──────────────────────────── */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          {TABS.map((tb) => (
+            <button
+              key={tb}
+              onClick={() => setTab(tb)}
+              className={`rounded-xl border p-3 text-left transition ${
+                tab === tb ? 'border-violet-500 bg-violet-500/10' : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700'
+              }`}
+            >
+              <p className="text-lg leading-none">{TAB_META_KEY[tb].icon}</p>
+              <p className={`mt-1.5 text-sm font-medium ${tab === tb ? 'text-violet-300' : 'text-zinc-200'}`}>
+                {t(WORKFLOW_LABEL_KEY[tb])}
+              </p>
+              <p className="mt-0.5 text-xs text-zinc-500">{t(TAB_META_KEY[tb].blurbKey)}</p>
+            </button>
+          ))}
+        </div>
+
         {/* ── Composer ─────────────────────────────────────────── */}
         <div className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
           {(tab === 'image.single' || tab === 'image.batch') && (
@@ -1037,25 +1056,6 @@ export default function Studio() {
               />
             </div>
           )}
-        </div>
-
-        {/* ── Format quick-switch cards ──────────────────────────── */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          {TABS.map((tb) => (
-            <button
-              key={tb}
-              onClick={() => setTab(tb)}
-              className={`rounded-xl border p-3 text-left transition ${
-                tab === tb ? 'border-violet-500 bg-violet-500/10' : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700'
-              }`}
-            >
-              <p className="text-lg leading-none">{TAB_META_KEY[tb].icon}</p>
-              <p className={`mt-1.5 text-sm font-medium ${tab === tb ? 'text-violet-300' : 'text-zinc-200'}`}>
-                {t(WORKFLOW_LABEL_KEY[tb])}
-              </p>
-              <p className="mt-0.5 text-xs text-zinc-500">{t(TAB_META_KEY[tb].blurbKey)}</p>
-            </button>
-          ))}
         </div>
 
         {bizId && (
