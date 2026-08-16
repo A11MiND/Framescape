@@ -92,6 +92,17 @@ type Spec struct {
 	// field image.sequence already uses (N shot descriptions); the only
 	// video.sequence-specific addition is RecalibrateEvery.
 	RecalibrateEvery int `json:"recalibrate_every,omitempty"` // §5.4: every N shots, re-anchor with r2va instead of i2va tail-frame continuity. 0/negative means "never" (only shot 1 uses r2va).
+	// SkipPreview opts out of §12.3's 768P preview gate — the draft
+	// generates directly at 2K (full cost held upfront) and the gate is
+	// auto-resumed server-side (upkeep.Runner's autoResumeSkipPreview
+	// duty) the moment it suspends, keeping every shot as-is with nothing
+	// to redo/upgrade. §07 gap: a user found the always-preview-first flow
+	// unnecessarily slow once they already trust a prompt/style combo —
+	// this trades away the cost protection PreviewGate exists for
+	// (catching a bad multi-shot run before paying 2K on every shot), so
+	// it's opt-in, not a default.
+	SkipPreview bool `json:"skip_preview,omitempty"` // video.sequence only
+
 }
 
 type Service struct {
@@ -415,8 +426,13 @@ func EstimateCredits(workflowName string, spec Spec) (int, error) {
 		}
 		// §12.3's "预览门只预扣 768P 部分积分" — matches createVideoSequence's
 		// own estimatedCredits line exactly (the 2K upgrade delta is only ever
-		// held later, at Resume).
-		return creditsvc.EstimateVideoCredits(duration, "768P") * len(spec.Shots), nil
+		// held later, at Resume) — unless SkipPreview (Spec's own doc) is
+		// generating the draft directly at 2K instead.
+		draftResolution := "768P"
+		if spec.SkipPreview {
+			draftResolution = "2K"
+		}
+		return creditsvc.EstimateVideoCredits(duration, draftResolution) * len(spec.Shots), nil
 	default:
 		return 0, fmt.Errorf("unknown workflow_name %q", workflowName)
 	}
@@ -445,6 +461,7 @@ const (
 	ItemKindVideoGeneration = "video_generation"
 	ItemKindPromptEnhance   = "prompt_enhance"
 	ItemKindSequencePreview = "video_sequence_preview"
+	ItemKindSequenceDirect  = "video_sequence_direct" // SkipPreview: draft already runs at 2K, "preview" would mislabel it
 )
 
 // EstimateBreakdown is EstimateCredits' itemized twin (§19.4.1's "成本估算
@@ -508,8 +525,14 @@ func EstimateBreakdown(workflowName string, spec Spec) ([]EstimateItem, int, err
 		if duration > capability.VideoDurationMax {
 			duration = 15
 		}
-		perShot := creditsvc.EstimateVideoCredits(duration, "768P")
-		return []EstimateItem{{Kind: ItemKindSequencePreview, Count: n, Credits: perShot * n}}, total, nil
+		kind := ItemKindSequencePreview
+		resolution := "768P"
+		if spec.SkipPreview {
+			kind = ItemKindSequenceDirect
+			resolution = "2K"
+		}
+		perShot := creditsvc.EstimateVideoCredits(duration, resolution)
+		return []EstimateItem{{Kind: kind, Count: n, Credits: perShot * n}}, total, nil
 	default:
 		return nil, 0, fmt.Errorf("unknown workflow_name %q", workflowName)
 	}

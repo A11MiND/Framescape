@@ -140,16 +140,24 @@ func (s *Service) createVideoSequence(ctx context.Context, userID uint64, spec S
 	}
 
 	plans := planShots(spec.Shots, characters, presets, characterRefAssetID, spec.RecalibrateEvery)
-	wfJSON := buildVideoSequenceWorkflow(plans, duration, ratio)
+	// §12.3's "预览门只预扣 768P 部分积分" — the draft phase is normally
+	// always 768P regardless of what gets upgraded later at Resume time.
+	// SkipPreview (Spec's own doc) trades that cost protection away
+	// deliberately: the draft generates directly at 2K, and the full 2K
+	// cost is held upfront to match — there's no cheaper "preview" step
+	// to under-hold against.
+	draftResolution := "768P"
+	if spec.SkipPreview {
+		draftResolution = "2K"
+	}
+	wfJSON := buildVideoSequenceWorkflow(plans, duration, ratio, draftResolution)
 
 	specJSON, err := json.Marshal(spec)
 	if err != nil {
 		return nil, fmt.Errorf("marshal spec: %w", err)
 	}
 
-	// §12.3's "预览门只预扣 768P 部分积分" — the draft phase is always 768P
-	// regardless of what gets upgraded later at Resume time.
-	estimatedCredits := creditsvc.EstimateVideoCredits(duration, "768P") * len(plans)
+	estimatedCredits := creditsvc.EstimateVideoCredits(duration, draftResolution) * len(plans)
 	bizID := id.New()
 	if err := s.credits.Hold(ctx, userID, "job:"+bizID+":hold", "job", bizID, estimatedCredits, "draft", "video.sequence"); err != nil {
 		return nil, fmt.Errorf("hold credits: %w", err)
@@ -218,7 +226,7 @@ func genShotInputDecl() []map[string]any {
 	}
 }
 
-func buildVideoSequenceWorkflow(plans []shotPlan, duration int, ratio string) []byte {
+func buildVideoSequenceWorkflow(plans []shotPlan, duration int, ratio string, draftResolution string) []byte {
 	n := len(plans)
 	durationStr := strconv.Itoa(duration)
 
@@ -243,7 +251,7 @@ func buildVideoSequenceWorkflow(plans []shotPlan, duration int, ratio string) []
 		args := []any{
 			literal("prompt", p.Prompt),
 			literal("duration", durationStr),
-			literal("resolution", "768P"),
+			literal("resolution", draftResolution),
 			literal("ratio", ""),
 			literal("first-frame-asset-id", ""),
 			literal("reference-image-asset-ids", []string{}),

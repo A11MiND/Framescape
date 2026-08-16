@@ -19,6 +19,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"aigc-platform/internal/application/jobsvc"
 	"aigc-platform/internal/domain/workflow"
 	"aigc-platform/internal/pkg/logger"
 )
@@ -29,11 +30,17 @@ const SuspendedTimeout = 7 * 24 * time.Hour
 const (
 	suspendedCheckInterval      = 1 * time.Hour
 	reconciliationCheckInterval = 6 * time.Hour
+	// skipPreviewCheckInterval is much shorter than suspendedCheckInterval
+	// on purpose — Spec.SkipPreview's whole point is generation that feels
+	// automatic, not a decision sitting Suspended for up to an hour before
+	// anyone/anything looks at it.
+	skipPreviewCheckInterval = 15 * time.Second
 )
 
 type Runner struct {
-	db  *sql.DB
-	eng workflow.Engine
+	db   *sql.DB
+	eng  workflow.Engine
+	jobs *jobsvc.Service
 
 	// suspendedTimeout is a field (not the SuspendedTimeout constant
 	// directly) so tests/manual verification can inject a short threshold
@@ -41,8 +48,8 @@ type Runner struct {
 	suspendedTimeout time.Duration
 }
 
-func New(db *sql.DB, eng workflow.Engine) *Runner {
-	return &Runner{db: db, eng: eng, suspendedTimeout: SuspendedTimeout}
+func New(db *sql.DB, eng workflow.Engine, jobs *jobsvc.Service) *Runner {
+	return &Runner{db: db, eng: eng, jobs: jobs, suspendedTimeout: SuspendedTimeout}
 }
 
 // WithSuspendedTimeout overrides the default 7-day threshold — used for
@@ -58,6 +65,7 @@ func (r *Runner) WithSuspendedTimeout(d time.Duration) *Runner {
 func (r *Runner) Start(ctx context.Context) {
 	go r.loop(ctx, suspendedCheckInterval, r.cleanupSuspended)
 	go r.loop(ctx, reconciliationCheckInterval, r.checkReconciliation)
+	go r.loop(ctx, skipPreviewCheckInterval, r.autoResumeSkipPreview)
 }
 
 func (r *Runner) loop(ctx context.Context, interval time.Duration, fn func(context.Context)) {
@@ -110,6 +118,58 @@ func (r *Runner) cleanupSuspended(ctx context.Context) {
 			continue
 		}
 		log.Info("upkeep: cancelled workflow suspended past timeout", zap.String("workflow_run_id", runID), zap.Duration("timeout", r.suspendedTimeout))
+	}
+}
+
+// autoResumeSkipPreview implements Spec.SkipPreview (jobsvc.go's own doc):
+// a video.sequence job that opted out of the 768P preview gate still goes
+// through the exact same gate/Suspend mechanics as every other one (its
+// draft just already ran at 2K, per video_sequence.go's own doc) — this is
+// what stands in for the human decision an ordinary PreviewGate submission
+// makes, calling Resume with every field empty (no shots picked for redo or
+// upgrade), which jobsvc.Service.Resume's own doc confirms buckets every
+// shot into "keep" and hands that straight to concat.
+func (r *Runner) autoResumeSkipPreview(ctx context.Context) {
+	log := logger.From(ctx)
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT DISTINCT j.biz_id, j.user_id FROM aether_task_runs t
+		JOIN jobs j ON j.workflow_run_id = t.workflow_run_id
+		WHERE t.task_name = 'gate' AND t.status = 'Suspended'
+		  AND j.workflow_name = 'video.sequence'
+		  AND JSON_EXTRACT(j.spec, '$.skip_preview') = true`)
+	if err != nil {
+		log.Error("upkeep: query skip-preview suspended gates failed", zap.Error(err))
+		return
+	}
+	defer rows.Close()
+
+	type pending struct {
+		bizID  string
+		userID uint64
+	}
+	var jobs []pending
+	for rows.Next() {
+		var p pending
+		if err := rows.Scan(&p.bizID, &p.userID); err != nil {
+			log.Error("upkeep: scan skip-preview job failed", zap.Error(err))
+			continue
+		}
+		jobs = append(jobs, p)
+	}
+
+	for _, p := range jobs {
+		if err := r.jobs.Resume(ctx, p.userID, p.bizID, jobsvc.ResumeVideoSequenceRequest{}); err != nil {
+			// Not necessarily a real failure — a slower prior tick's Resume
+			// call can still be landing in the engine when this one fires,
+			// so "gate already resumed" is an expected, harmless race here,
+			// same as cleanupSuspended's own error handling below: log and
+			// let the next tick's query (which won't find this row anymore
+			// once the resume actually lands) settle it.
+			log.Warn("upkeep: auto-resume skip-preview gate failed", zap.String("biz_id", p.bizID), zap.Error(err))
+			continue
+		}
+		log.Info("upkeep: auto-resumed skip-preview gate", zap.String("biz_id", p.bizID))
 	}
 }
 

@@ -195,6 +195,7 @@ export interface Spec {
   reference_video_asset_ids?: string[]
   reference_audio_asset_ids?: string[]
   recalibrate_every?: number
+  skip_preview?: boolean // video.sequence only — draft runs directly at 2K, no 768P preview gate
   prompt_enhance?: boolean // F6.10, video.single only
 }
 

@@ -336,6 +336,8 @@
       "ratioDisabledTooltip": "Aspect ratio is determined by the reference asset in first/last-frame or reference mode",
       "anchorInterval": "Anchor interval",
       "anchorIntervalTooltip": "Every N segments, re-anchor to the character reference image (r2va); other segments continue from the previous segment's last frame (i2va)",
+      "skipPreview": "Skip preview, go straight to 2K",
+      "skipPreviewTooltip": "By default the whole sequence previews at 768P first, so you only pay to upgrade the segments you actually like. Turning this on skips the preview — every segment generates directly at 2K and finishes automatically, with the full 2K cost held upfront.",
       "everyNSegments": "Every {{n}} segments",
       "characterSlot": "Character {{letter}}",
       "addCharacter": "+ Add character",
@@ -388,7 +390,8 @@
       "video": "video{{n}}",
       "image": "image{{n}}",
       "pickHint": "Pick an asset to reference",
-      "empty": "No assets yet"
+      "empty": "No assets yet",
+      "typeHint": "Tip: type # to reference an existing asset"
     },
     "rewrite": {
       "button": "AI rewrite prompt",
@@ -407,7 +410,8 @@
         "sequence_shots": "Sequence shots",
         "video_generation": "Video generation",
         "prompt_enhance": "Prompt enhancement",
-        "video_sequence_preview": "Sequence preview (768P)"
+        "video_sequence_preview": "Sequence preview (768P)",
+        "video_sequence_direct": "Sequence direct generation (2K)"
       }
     },
     "estimatedWait": "About {{minutes}} min remaining",

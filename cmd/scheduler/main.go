@@ -20,6 +20,7 @@ import (
 	"go.uber.org/zap"
 
 	"aigc-platform/internal/application/creditsvc"
+	"aigc-platform/internal/application/jobsvc"
 	"aigc-platform/internal/application/projection"
 	"aigc-platform/internal/application/upkeep"
 	"aigc-platform/internal/infra/cache"
@@ -104,10 +105,16 @@ func main() {
 	}
 	defer eng.Stop()
 
+	// jobsvc.Service here backs only upkeep's autoResumeSkipPreview duty
+	// (Resume's own doc) — the scheduler otherwise never touches jobsvc,
+	// same "one instance, narrow exception" reasoning as this file's own
+	// minimaxClient (F8.3's post-hoc review).
+	jobs := jobsvc.New(gormDB, eng, credits)
+
 	// §11.4's Scheduler duties: suspended-timeout cleanup + credit
 	// reconciliation (see upkeep's package doc for which of the five listed
 	// duties are and aren't implemented yet).
-	upkeepRunner := upkeep.New(sqlDB, eng)
+	upkeepRunner := upkeep.New(sqlDB, eng, jobs)
 	if d := config.SuspendedTimeout(); d > 0 {
 		upkeepRunner = upkeepRunner.WithSuspendedTimeout(d)
 	}

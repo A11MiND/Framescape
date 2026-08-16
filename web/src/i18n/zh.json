@@ -336,6 +336,8 @@
       "ratioDisabledTooltip": "首尾帧/参考素材模式下画面比例由素材决定",
       "anchorInterval": "锚定间隔",
       "anchorIntervalTooltip": "每 N 段重新锚定一次角色参考图（r2va），其余段落用前一段尾帧续接（i2va）",
+      "skipPreview": "跳过预览，直接 2K",
+      "skipPreviewTooltip": "默认先以 768P 预览整段效果，确认后再选择要升级的分段，避免为不满意的效果多花钱。开启此项会跳过预览，直接以 2K 生成每一段并自动完成，费用也会按 2K 全额预扣。",
       "everyNSegments": "每 {{n}} 段",
       "characterSlot": "角色 {{letter}}",
       "addCharacter": "+ 添加角色",
@@ -388,7 +390,8 @@
       "video": "视频{{n}}",
       "image": "图片{{n}}",
       "pickHint": "选择要引用的素材",
-      "empty": "还没有素材"
+      "empty": "还没有素材",
+      "typeHint": "小技巧：输入 # 可以引用已有素材"
     },
     "rewrite": {
       "button": "AI 改写提示词",
@@ -407,7 +410,8 @@
         "sequence_shots": "连续图",
         "video_generation": "视频生成",
         "prompt_enhance": "提示词增强",
-        "video_sequence_preview": "连续影片预览（768P）"
+        "video_sequence_preview": "连续影片预览（768P）",
+        "video_sequence_direct": "连续影片直接生成（2K）"
       }
     },
     "estimatedWait": "预计还需 {{minutes}} 分钟",

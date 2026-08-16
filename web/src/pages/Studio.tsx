@@ -226,6 +226,7 @@ export default function Studio() {
   const [vsDuration, setVsDuration] = useState(5)
   const [vsRatio, setVsRatio] = useState<(typeof RATIO_VALUES)[number]>('16:9')
   const [vsRecalibrateEvery, setVsRecalibrateEvery] = useState(3)
+  const [vsSkipPreview, setVsSkipPreview] = useState(false)
 
   // F2.5's "以此再生成": AssetDetail navigates here with the source job's
   // exact workflow_name/spec in router state — buildSpec()'s inverse,
@@ -290,6 +291,7 @@ export default function Studio() {
       if (spec.duration_seconds) setVsDuration(spec.duration_seconds)
       if (spec.ratio) setVsRatio(spec.ratio as (typeof RATIO_VALUES)[number])
       if (spec.recalibrate_every) setVsRecalibrateEvery(spec.recalibrate_every)
+      setVsSkipPreview(!!spec.skip_preview)
     }
 
     // Clear the router state so refreshing or navigating back here later
@@ -446,6 +448,7 @@ export default function Studio() {
       spec.duration_seconds = vsDuration
       spec.ratio = vsRatio
       spec.recalibrate_every = vsRecalibrateEvery
+      if (vsSkipPreview) spec.skip_preview = true
       if (sourceImageId) spec.source_image_asset_id = sourceImageId
     }
     return spec
@@ -470,7 +473,7 @@ export default function Studio() {
             : tab === 'video.single'
               ? estimateVideoCredits(duration, resolution) +
                 (promptEnhance ? estimatePromptEnhanceCredits() : 0)
-              : estimateVideoCredits(vsDuration, '768P') * (vsShots.filter((s) => s.text.trim()).length || 1)
+              : estimateVideoCredits(vsDuration, vsSkipPreview ? '2K' : '768P') * (vsShots.filter((s) => s.text.trim()).length || 1)
 
   const debouncedSpecKey = useDebouncedValue(JSON.stringify({ tab, spec: buildSpec() }), 300)
   const estimateQuery = useQuery({
@@ -950,6 +953,17 @@ export default function Studio() {
                       </option>
                     ))}
                   </select>
+                </Capsule>
+                <Capsule title={t('studio.capsule.skipPreviewTooltip')}>
+                  <label className="flex cursor-pointer items-center gap-1.5 text-zinc-300">
+                    <input
+                      type="checkbox"
+                      checked={vsSkipPreview}
+                      onChange={(e) => setVsSkipPreview(e.target.checked)}
+                      className="accent-violet-500"
+                    />
+                    {t('studio.capsule.skipPreview')}
+                  </label>
                 </Capsule>
               </>
             )}
