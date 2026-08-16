@@ -15,6 +15,7 @@ import (
 type createJobRequest struct {
 	WorkflowName string      `json:"workflow_name" binding:"required"`
 	Spec         jobsvc.Spec `json:"spec" binding:"required"`
+	ProjectID    string      `json:"project_id,omitempty"`
 }
 
 func (s *Server) handleCreateJob(c *gin.Context) {
@@ -24,6 +25,16 @@ func (s *Server) handleCreateJob(c *gin.Context) {
 		return
 	}
 
+	var projectID *uint64
+	if req.ProjectID != "" {
+		resolved, ok := s.resolveProjectID(c.Request.Context(), userID(c), req.ProjectID)
+		if !ok {
+			c.JSON(http.StatusNotFound, errBody("not_found", "project not found"))
+			return
+		}
+		projectID = &resolved
+	}
+
 	// §11.5's HTTP Idempotency-Key defense: optional — a client that omits
 	// it gets the old no-dedup behavior, but a retried request (network
 	// timeout, double-click) that includes the same key gets back the
@@ -31,7 +42,7 @@ func (s *Server) handleCreateJob(c *gin.Context) {
 	// jobsvc.Service.Create's doc for the full mechanism.
 	idemKey := c.GetHeader("Idempotency-Key")
 
-	job, err := s.jobs.Create(c.Request.Context(), userID(c), req.WorkflowName, req.Spec, idemKey)
+	job, err := s.jobs.Create(c.Request.Context(), userID(c), req.WorkflowName, req.Spec, idemKey, projectID)
 	if err != nil {
 		c.JSON(http.StatusUnprocessableEntity, errBody("submit_failed", err.Error()))
 		return
@@ -68,7 +79,17 @@ func (s *Server) handleListJobs(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	cursor, _ := strconv.ParseUint(c.DefaultQuery("cursor", "0"), 10, 64)
 
-	rows, next, err := s.jobs.List(c.Request.Context(), userID(c), c.Query("status"), cursor, limit)
+	var projectID *uint64
+	if pid := c.Query("project_id"); pid != "" {
+		resolved, ok := s.resolveProjectID(c.Request.Context(), userID(c), pid)
+		if !ok {
+			c.JSON(http.StatusNotFound, errBody("not_found", "project not found"))
+			return
+		}
+		projectID = &resolved
+	}
+
+	rows, next, err := s.jobs.List(c.Request.Context(), userID(c), c.Query("status"), cursor, limit, projectID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errBody("internal", "list jobs"))
 		return
@@ -134,12 +155,12 @@ func (s *Server) handleEstimateJob(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
 		return
 	}
-	credits, err := jobsvc.EstimateCredits(req.WorkflowName, req.Spec)
+	items, credits, err := jobsvc.EstimateBreakdown(req.WorkflowName, req.Spec)
 	if err != nil {
 		c.JSON(http.StatusUnprocessableEntity, errBody("estimate_failed", err.Error()))
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"credits_total": credits})
+	c.JSON(http.StatusOK, gin.H{"credits_total": credits, "items": items})
 }
 
 // handleCancelJob is POST /api/v1/jobs/{bizID}/cancel (F7.4).
@@ -237,6 +258,12 @@ func (s *Server) handleGetJob(c *gin.Context) {
 			Select("biz_id").Where("id = ?", *job.RetryOfJobID).Scan(&retryOfBizID).Error
 	}
 
+	projectBizID := ""
+	if job.ProjectID != nil {
+		_ = s.db.WithContext(c.Request.Context()).Model(&persistence.Project{}).
+			Select("biz_id").Where("id = ?", *job.ProjectID).Scan(&projectBizID).Error
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"biz_id":          job.BizID,
 		"workflow_name":   job.WorkflowName,
@@ -244,7 +271,15 @@ func (s *Server) handleGetJob(c *gin.Context) {
 		"status":          job.Status,
 		"workflow_run_id": job.WorkflowRunID,
 		"retry_of_job_id": retryOfBizID,
-		"nodes":           nodes,
+		"project_id":      projectBizID,
+		// credit_estimated/held/settled were already tracked on this row
+		// (W7) but never echoed to the detail response — the job detail
+		// page's "已消耗 / 預估" comparison bar (§19.4.3) needs both numbers
+		// at once rather than requiring a second trip to /credits/ledger.
+		"credit_estimated": job.CreditEstimated,
+		"credit_held":      job.CreditHeld,
+		"credit_settled":   job.CreditSettled,
+		"nodes":            nodes,
 		// json.RawMessage so job.Spec's already-valid JSON bytes embed
 		// directly rather than being marshaled as a base64 string. Needed so
 		// /jobs/{bizID} (F7.2's DAG view) is fully reconstructible from the

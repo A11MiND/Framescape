@@ -18,6 +18,7 @@ type createCharacterRequest struct {
 	Description string   `json:"description"`
 	RefAssetIDs []string `json:"ref_asset_ids" binding:"required,min=1,max=3"`
 	Seed        int64    `json:"seed" binding:"required"`
+	ProjectID   string   `json:"project_id,omitempty"`
 }
 
 func (s *Server) handleCreateCharacter(c *gin.Context) {
@@ -31,9 +32,19 @@ func (s *Server) handleCreateCharacter(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, errBody("internal", "marshal ref_asset_ids"))
 		return
 	}
+	var projectID *uint64
+	if req.ProjectID != "" {
+		resolved, ok := s.resolveProjectID(c.Request.Context(), userID(c), req.ProjectID)
+		if !ok {
+			c.JSON(http.StatusNotFound, errBody("not_found", "project not found"))
+			return
+		}
+		projectID = &resolved
+	}
 	row := persistence.Character{
 		BizID:       id.New(),
 		UserID:      userID(c),
+		ProjectID:   projectID,
 		Name:        req.Name,
 		Description: req.Description,
 		RefAssetIDs: refJSON,
@@ -43,21 +54,54 @@ func (s *Server) handleCreateCharacter(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, errBody("internal", "insert character"))
 		return
 	}
-	c.JSON(http.StatusOK, characterToJSON(row))
+	j := characterToJSON(row)
+	j["project_id"] = req.ProjectID
+	c.JSON(http.StatusOK, j)
 }
 
 func (s *Server) handleListCharacters(c *gin.Context) {
+	q := s.db.WithContext(c.Request.Context()).
+		Where("user_id = ? AND deleted_at IS NULL", userID(c))
+	if pid := c.Query("project_id"); pid != "" {
+		projectID, ok := s.resolveProjectID(c.Request.Context(), userID(c), pid)
+		if !ok {
+			c.JSON(http.StatusNotFound, errBody("not_found", "project not found"))
+			return
+		}
+		q = q.Where("project_id = ?", projectID)
+	}
 	var rows []persistence.Character
-	err := s.db.WithContext(c.Request.Context()).
-		Where("user_id = ? AND deleted_at IS NULL", userID(c)).
-		Order("id DESC").Find(&rows).Error
-	if err != nil {
+	if err := q.Order("id DESC").Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, errBody("internal", "list characters"))
 		return
 	}
+
+	projectIDs := make([]uint64, 0)
+	seen := map[uint64]bool{}
+	for _, r := range rows {
+		if r.ProjectID != nil && !seen[*r.ProjectID] {
+			seen[*r.ProjectID] = true
+			projectIDs = append(projectIDs, *r.ProjectID)
+		}
+	}
+	projectBizByID := make(map[uint64]string, len(projectIDs))
+	if len(projectIDs) > 0 {
+		var projects []persistence.Project
+		_ = s.db.WithContext(c.Request.Context()).Where("id IN ?", projectIDs).Find(&projects).Error
+		for _, p := range projects {
+			projectBizByID[p.ID] = p.BizID
+		}
+	}
+
 	out := make([]gin.H, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, characterToJSON(r))
+		projectBizID := ""
+		if r.ProjectID != nil {
+			projectBizID = projectBizByID[*r.ProjectID]
+		}
+		j := characterToJSON(r)
+		j["project_id"] = projectBizID
+		out = append(out, j)
 	}
 	c.JSON(http.StatusOK, gin.H{"characters": out})
 }
@@ -66,10 +110,12 @@ func (s *Server) handleListCharacters(c *gin.Context) {
 // what the caller actually sent — a request that omits `seed` must leave
 // the stored seed untouched, not zero it out.
 type updateCharacterRequest struct {
-	Name        *string   `json:"name"`
-	Description *string   `json:"description"`
-	RefAssetIDs *[]string `json:"ref_asset_ids"`
-	Seed        *int64    `json:"seed"`
+	Name         *string   `json:"name"`
+	Description  *string   `json:"description"`
+	RefAssetIDs  *[]string `json:"ref_asset_ids"`
+	Seed         *int64    `json:"seed"`
+	ProjectID    *string   `json:"project_id"`
+	ClearProject bool      `json:"clear_project"`
 }
 
 func (s *Server) handleUpdateCharacter(c *gin.Context) {
@@ -101,6 +147,16 @@ func (s *Server) handleUpdateCharacter(c *gin.Context) {
 	if req.Seed != nil {
 		updates["seed"] = *req.Seed
 	}
+	if req.ClearProject {
+		updates["project_id"] = nil
+	} else if req.ProjectID != nil {
+		resolved, ok := s.resolveProjectID(c.Request.Context(), userID(c), *req.ProjectID)
+		if !ok {
+			c.JSON(http.StatusNotFound, errBody("not_found", "project not found"))
+			return
+		}
+		updates["project_id"] = resolved
+	}
 	if len(updates) == 0 {
 		c.JSON(http.StatusBadRequest, errBody("bad_request", "no fields to update"))
 		return
@@ -127,7 +183,14 @@ func (s *Server) handleUpdateCharacter(c *gin.Context) {
 		c.JSON(http.StatusNotFound, errBody("not_found", "character not found"))
 		return
 	}
-	c.JSON(http.StatusOK, characterToJSON(row))
+	j := characterToJSON(row)
+	if row.ProjectID != nil {
+		var projectBizID string
+		_ = s.db.WithContext(c.Request.Context()).Model(&persistence.Project{}).
+			Select("biz_id").Where("id = ?", *row.ProjectID).Scan(&projectBizID).Error
+		j["project_id"] = projectBizID
+	}
+	c.JSON(http.StatusOK, j)
 }
 
 // handleDeleteCharacter soft-deletes, same shape as handleDeleteAsset (a

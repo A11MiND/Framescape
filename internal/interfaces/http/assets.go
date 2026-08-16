@@ -56,6 +56,13 @@ func (s *Server) handleListAssets(c *gin.Context) {
 		}
 		q = q.Where("project_id = ?", projectID)
 	}
+	// Full-text search (?q=): assets carry no title of their own, so the
+	// only searchable text is the generation prompt every image/video
+	// executor already writes to meta.prompt (image.go/video.go — uploaded
+	// assets simply never match, which is correct, they have no prompt).
+	if term := c.Query("q"); term != "" {
+		q = q.Where("JSON_UNQUOTE(JSON_EXTRACT(meta, '$.prompt')) LIKE ?", "%"+term+"%")
+	}
 	var rows []persistence.Asset
 	if err := q.Order("id DESC").Limit(limit).Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, errBody("internal", "list assets"))
@@ -437,5 +444,21 @@ func (s *Server) assetDetailJSON(ctx context.Context, a persistence.Asset) gin.H
 			Scan(&jobBizID).Error
 	}
 	out["job_biz_id"] = jobBizID
+
+	// provider_files (migration 00003) is the MiniMax file_id cache that
+	// avoids re-uploading the same asset on every reference use (§9.2/F3.4)
+	// — it's existed since W4 but never had a read path of its own, so the
+	// UI had no way to show whether a given asset is currently cached. A
+	// missing row just means "never uploaded to MiniMax," not an error.
+	var pf persistence.ProviderFile
+	cached := s.db.WithContext(ctx).
+		Where("asset_id = ? AND provider_code = ?", a.ID, "minimax").
+		Order("id DESC").First(&pf).Error == nil
+	cacheInfo := gin.H{"cached": cached}
+	if cached {
+		cacheInfo["expire_at"] = pf.ExpireAt
+		cacheInfo["expired"] = pf.ExpireAt != nil && pf.ExpireAt.Before(time.Now())
+	}
+	out["provider_cache"] = cacheInfo
 	return out
 }

@@ -68,7 +68,7 @@ func main() {
 		objectStore = nil
 	}
 
-	srv := httpapi.NewServer(db, jobs, redisClient, config.JWTSecret(), minimaxClient, objectStore)
+	srv := httpapi.NewServer(db, jobs, credits, redisClient, config.JWTSecret(), minimaxClient, objectStore)
 
 	httpSrv := &http.Server{Addr: config.APIAddr(), Handler: srv.Router()}
 	go func() {

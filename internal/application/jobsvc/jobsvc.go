@@ -112,7 +112,7 @@ func New(db *gorm.DB, eng workflow.Engine, credits *creditsvc.Service) *Service 
 // enforcement; the SELECT-first check here is just the fast path that skips
 // redundant work for the common case (retry arrives after the original
 // request already finished).
-func (s *Service) Create(ctx context.Context, userID uint64, workflowName string, spec Spec, idemKey string) (*persistence.Job, error) {
+func (s *Service) Create(ctx context.Context, userID uint64, workflowName string, spec Spec, idemKey string, projectID *uint64) (*persistence.Job, error) {
 	if idemKey != "" {
 		existing, err := s.findByIdemKey(ctx, userID, idemKey)
 		if err != nil {
@@ -129,7 +129,7 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 		// §四 for why (shot count N is per-job, and Aether's Loop can't chain
 		// "this shot's first_frame = previous shot's runtime-produced last
 		// frame", so the draft phase must be a code-generated linear DAG).
-		return s.createVideoSequence(ctx, userID, spec, idemKey)
+		return s.createVideoSequence(ctx, userID, spec, idemKey, projectID)
 	}
 
 	defFile, ok := definitions[workflowName]
@@ -314,6 +314,7 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 	job := &persistence.Job{
 		BizID:           bizID,
 		UserID:          userID,
+		ProjectID:       projectID,
 		WorkflowName:    workflowName,
 		WorkflowRunID:   string(runID),
 		Title:           truncate(title, 128),
@@ -407,6 +408,99 @@ func EstimateCredits(workflowName string, spec Spec) (int, error) {
 	}
 }
 
+// EstimateItem is one line of EstimateBreakdown's itemized quote. Kind is a
+// machine-readable constant (see the ItemKind* consts below), not a
+// human-readable label — this endpoint is unauthenticated-adjacent UI
+// plumbing, and jobsvc.RetryNode's own history is the cautionary tale here:
+// an earlier pass hardcoded a Chinese label directly into a persisted job
+// title, which then rendered in whatever language the string happened to
+// be written in regardless of the caller's actual locale. The frontend maps
+// Kind to a translated string via i18n; the backend never renders text.
+type EstimateItem struct {
+	Kind    string `json:"kind"`
+	Count   int    `json:"count"`
+	Credits int    `json:"credits"` // this line's share of the total, not a strict count*unit product (rounding happens per-workflow, see EstimateCredits' own doc)
+}
+
+const (
+	ItemKindImageSingle     = "image_single"
+	ItemKindImageBatch      = "image_batch"
+	ItemKindComic4Panels    = "comic4_panels"
+	ItemKindStorySplit      = "story_split"
+	ItemKindSequenceShots   = "sequence_shots"
+	ItemKindVideoGeneration = "video_generation"
+	ItemKindPromptEnhance   = "prompt_enhance"
+	ItemKindSequencePreview = "video_sequence_preview"
+)
+
+// EstimateBreakdown is EstimateCredits' itemized twin (§19.4.1's "成本估算
+// 逐項展開明細" gap) — same numbers, just split into the lines that make up
+// the total instead of one flat figure. Deliberately calls EstimateCredits
+// for the authoritative total rather than summing these lines itself: the
+// two must never silently drift apart, and re-deriving the same clamps
+// twice would risk exactly that.
+func EstimateBreakdown(workflowName string, spec Spec) ([]EstimateItem, int, error) {
+	total, err := EstimateCredits(workflowName, spec)
+	if err != nil {
+		return nil, 0, err
+	}
+	switch workflowName {
+	case "image.single":
+		return []EstimateItem{{Kind: ItemKindImageSingle, Count: 1, Credits: total}}, total, nil
+	case "image.batch":
+		n := spec.N
+		if n <= 0 {
+			n = 4
+		}
+		if n > capability.ImageMaxN {
+			n = 9
+		}
+		return []EstimateItem{{Kind: ItemKindImageBatch, Count: n, Credits: total}}, total, nil
+	case "image.comic4":
+		perPanel := creditsvc.EstimatePerNodeImageCredits(1)
+		items := []EstimateItem{{Kind: ItemKindComic4Panels, Count: 4, Credits: perPanel * 4}}
+		if spec.Story != "" && len(spec.Panels) != 4 {
+			items = append(items, EstimateItem{Kind: ItemKindStorySplit, Count: 1, Credits: creditsvc.EstimateStorySplitCredits()})
+		}
+		return items, total, nil
+	case "image.sequence":
+		perShot := creditsvc.EstimatePerNodeImageCredits(1)
+		n := len(spec.Shots)
+		return []EstimateItem{{Kind: ItemKindSequenceShots, Count: n, Credits: perShot * n}}, total, nil
+	case "video.single":
+		duration := spec.DurationSeconds
+		if duration <= 0 {
+			duration = 5
+		}
+		if duration > capability.VideoDurationMax {
+			duration = 15
+		}
+		resolution := spec.Resolution
+		if resolution == "" {
+			resolution = "768P"
+		}
+		videoCredits := creditsvc.EstimateVideoCredits(duration, resolution)
+		items := []EstimateItem{{Kind: ItemKindVideoGeneration, Count: 1, Credits: videoCredits}}
+		if spec.PromptEnhance {
+			items = append(items, EstimateItem{Kind: ItemKindPromptEnhance, Count: 1, Credits: creditsvc.EstimatePromptEnhanceCredits()})
+		}
+		return items, total, nil
+	case "video.sequence":
+		n := len(spec.Shots)
+		duration := spec.DurationSeconds
+		if duration <= 0 {
+			duration = 5
+		}
+		if duration > capability.VideoDurationMax {
+			duration = 15
+		}
+		perShot := creditsvc.EstimateVideoCredits(duration, "768P")
+		return []EstimateItem{{Kind: ItemKindSequencePreview, Count: n, Credits: perShot * n}}, total, nil
+	default:
+		return nil, 0, fmt.Errorf("unknown workflow_name %q", workflowName)
+	}
+}
+
 // List is F7.1's job list: newest-first, optionally filtered by status,
 // paged by a strictly-decreasing numeric id cursor (jobs.id is an
 // AUTO_INCREMENT primary key, so "id < cursor" is a stable, index-backed
@@ -414,7 +508,7 @@ func EstimateCredits(workflowName string, spec Spec) (int, error) {
 // user_id/status lookups this filters on). Returns the page plus the
 // cursor a caller should pass to fetch the next one; an empty nextCursor
 // means this was the last page.
-func (s *Service) List(ctx context.Context, userID uint64, status string, cursor uint64, limit int) ([]persistence.Job, uint64, error) {
+func (s *Service) List(ctx context.Context, userID uint64, status string, cursor uint64, limit int, projectID *uint64) ([]persistence.Job, uint64, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
@@ -424,6 +518,9 @@ func (s *Service) List(ctx context.Context, userID uint64, status string, cursor
 	}
 	if cursor > 0 {
 		q = q.Where("id < ?", cursor)
+	}
+	if projectID != nil {
+		q = q.Where("project_id = ?", *projectID)
 	}
 	var rows []persistence.Job
 	if err := q.Order("id DESC").Limit(limit).Find(&rows).Error; err != nil {

@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/BabySid/aether/executor"
@@ -332,6 +335,15 @@ func (b *videoBase) submitWaitMaterialize(ctx context.Context, req *executor.Exe
 		meta["regen_of_asset_id"] = p.RegenOf
 	}
 
+	// width/height were never populated here — unlike local.ffmpeg's
+	// extract/concat outputs, which run ffprobe on their own products, the
+	// raw video.single/video.sequence output straight off MiniMax's URL had
+	// no dimension probe of its own, so every such asset row had width=0
+	// height=0 (DEV_PLAN.md's long-recorded gap). Best-effort: a missing
+	// ffprobe binary or a decode failure degrades to 0/0 exactly as before,
+	// it never fails the job over a cosmetic field.
+	width, height := probeVideoDimensions(ctx, data)
+
 	assetID, err := b.sink.MaterializeBytes(ctx, assetstore.NewAssetBytes{
 		UserID:        parseUserID(p.UserID),
 		Type:          "video",
@@ -341,6 +353,8 @@ func (b *videoBase) submitWaitMaterialize(ctx context.Context, req *executor.Exe
 		SizeBytes:     int64(len(data)),
 		Ext:           "mp4",
 		Mime:          "video/mp4",
+		Width:         width,
+		Height:        height,
 		DurationMs:    outputSeconds * 1000,
 		ResolutionTag: resolutionTag,
 		Meta:          meta,
@@ -499,6 +513,44 @@ func classifyVideoError(err error) *model.ExecOutputs {
 	default:
 		return errOutputs(model.ExecCodeError, fmt.Sprintf("unclassified(%d): %s", httpErr.StatusCode, httpErr.Body))
 	}
+}
+
+// probeVideoDimensions shells out to ffprobe against a temp file — MiniMax's
+// API response never reports pixel dimensions (only the resolution *tag*,
+// "768P"/"2K"), so the only ground truth is the file itself. ffprobe needs a
+// real path, not a byte slice, hence the temp file.
+func probeVideoDimensions(ctx context.Context, data []byte) (width, height int) {
+	tmp, err := os.CreateTemp("", "aigc-video-dim-*.mp4")
+	if err != nil {
+		return 0, 0
+	}
+	defer os.Remove(tmp.Name())
+	defer tmp.Close()
+	if _, err := tmp.Write(data); err != nil {
+		return 0, 0
+	}
+	if err := tmp.Close(); err != nil {
+		return 0, 0
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(probeCtx, "ffprobe", "-v", "error", "-select_streams", "v:0",
+		"-show_entries", "stream=width,height", "-of", "csv=s=x:p=0", tmp.Name())
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, 0
+	}
+	parts := strings.Split(strings.TrimSpace(string(out)), "x")
+	if len(parts) != 2 {
+		return 0, 0
+	}
+	w, err1 := strconv.Atoi(parts[0])
+	h, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil {
+		return 0, 0
+	}
+	return w, h
 }
 
 var _ executor.Plugin = (*VideoPlugin)(nil)

@@ -104,7 +104,7 @@ func (s *Service) characterRefAsset(ctx context.Context, userID uint64, slots []
 	return refIDs[0]
 }
 
-func (s *Service) createVideoSequence(ctx context.Context, userID uint64, spec Spec, idemKey string) (*persistence.Job, error) {
+func (s *Service) createVideoSequence(ctx context.Context, userID uint64, spec Spec, idemKey string, projectID *uint64) (*persistence.Job, error) {
 	if len(spec.Shots) == 0 {
 		return nil, fmt.Errorf("video.sequence requires at least 1 shot")
 	}
@@ -158,6 +158,7 @@ func (s *Service) createVideoSequence(ctx context.Context, userID uint64, spec S
 	job := &persistence.Job{
 		BizID:           bizID,
 		UserID:          userID,
+		ProjectID:       projectID,
 		WorkflowName:    "video.sequence",
 		WorkflowRunID:   string(runID),
 		Title:           truncate(title, 128),

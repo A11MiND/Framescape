@@ -13,7 +13,16 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"aigc-platform/internal/infra/persistence"
+	"aigc-platform/internal/pkg/id"
 )
+
+// demoTopupCredits is F1.3's "充值入口" gap: the POC has no real payment
+// integration (the only funding path before this was cmd/cli grant-credits,
+// operator-only), and building a real payment gateway is out of scope for a
+// POC. This is a self-serve stand-in for the same CLI mechanism — no
+// payment fields are collected, it just credits the account directly, so
+// it never looks like it's handling real money.
+const demoTopupCredits = 200
 
 func (s *Server) handleCreditsBalance(c *gin.Context) {
 	var acct persistence.CreditAccount
@@ -61,4 +70,20 @@ func (s *Server) handleCreditsLedger(c *gin.Context) {
 		resp["next_cursor"] = strconv.FormatUint(rows[len(rows)-1].ID, 10)
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+// handleCreditsTopup is POST /api/v1/credits/topup: see demoTopupCredits'
+// doc for why this exists instead of a real payment flow. idemKey is a
+// fresh ULID every call, not derived from any client input — each click is
+// a deliberate new top-up, not a retry of a previous one, so nothing here
+// should ever get deduplicated the way job submission does.
+func (s *Server) handleCreditsTopup(c *gin.Context) {
+	uid := userID(c)
+	if err := s.credits.Recharge(c.Request.Context(), uid, "topup:"+id.New(), demoTopupCredits, "demo top-up (POC, no real payment)"); err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "topup failed"))
+		return
+	}
+	var acct persistence.CreditAccount
+	_ = s.db.WithContext(c.Request.Context()).First(&acct, "user_id = ?", uid).Error
+	c.JSON(http.StatusOK, gin.H{"balance": acct.Balance, "held": acct.Held, "credited": demoTopupCredits})
 }

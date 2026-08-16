@@ -167,8 +167,12 @@ type Preset struct {
 	CoverURL       string `gorm:"column:cover_url"`
 	PromptFragment string `gorm:"column:prompt_fragment"`
 	Priority       int
-	StyleType      string    `gorm:"column:style_type"`
-	CreatedAt      time.Time `gorm:"column:created_at"`
+	StyleType      string `gorm:"column:style_type"`
+	// OwnerUserID has existed on the table since migration 00003 but was
+	// unused (F4.5 was P2) until now: NULL means a seeded system preset,
+	// non-NULL means a user's own "另存為我的預設" save (handlePresets.go).
+	OwnerUserID *uint64   `gorm:"column:owner_user_id"`
+	CreatedAt   time.Time `gorm:"column:created_at"`
 }
 
 func (Preset) TableName() string { return "presets" }

@@ -14,6 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
+	"aigc-platform/internal/application/creditsvc"
 	"aigc-platform/internal/application/jobsvc"
 	"aigc-platform/internal/infra/executor/minimax"
 	"aigc-platform/internal/infra/storage"
@@ -34,10 +35,16 @@ type Server struct {
 	// every other asset write still goes through an executor's
 	// assetstore.Sink, never through cmd/api.
 	objects *storage.Store
+	// credits backs handleCreditsTopup only — every other credit mutation
+	// (Hold/Commit/Refund) stays inside jobsvc, which already holds its own
+	// *creditsvc.Service. Topup is the one credit-adjacent action that
+	// isn't triggered by a job lifecycle event, so it needs its own handle
+	// on the service rather than going through jobs.
+	credits *creditsvc.Service
 }
 
-func NewServer(db *gorm.DB, jobs *jobsvc.Service, redisClient *redis.Client, jwtSecret string, minimaxClient *minimax.Client, objectStore *storage.Store) *Server {
-	return &Server{db: db, jobs: jobs, redis: redisClient, jwtSecret: jwtSecret, minimax: minimaxClient, objects: objectStore}
+func NewServer(db *gorm.DB, jobs *jobsvc.Service, credits *creditsvc.Service, redisClient *redis.Client, jwtSecret string, minimaxClient *minimax.Client, objectStore *storage.Store) *Server {
+	return &Server{db: db, jobs: jobs, credits: credits, redis: redisClient, jwtSecret: jwtSecret, minimax: minimaxClient, objects: objectStore}
 }
 
 func (s *Server) Router() *gin.Engine {
@@ -81,8 +88,11 @@ func (s *Server) Router() *gin.Engine {
 		authed.PATCH("/characters/:bizID", s.handleUpdateCharacter)
 		authed.DELETE("/characters/:bizID", s.handleDeleteCharacter)
 		authed.GET("/presets", s.handleListPresets)
+		authed.POST("/presets", s.handleCreatePreset)
+		authed.DELETE("/presets/:bizID", s.handleDeletePreset)
 		authed.GET("/credits/balance", s.handleCreditsBalance)
 		authed.GET("/credits/ledger", s.handleCreditsLedger)
+		authed.POST("/credits/topup", s.handleCreditsTopup)
 		authed.POST("/projects", s.handleCreateProject)
 		authed.GET("/projects", s.handleListProjects)
 		authed.PATCH("/projects/:bizID", s.handleUpdateProject)
