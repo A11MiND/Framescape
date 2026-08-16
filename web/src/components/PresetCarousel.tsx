@@ -12,6 +12,7 @@ export default function PresetCarousel({
   selected,
   onToggle,
   onDelete,
+  deletingId,
 }: {
   presets: Preset[]
   selected: string[]
@@ -20,6 +21,13 @@ export default function PresetCarousel({
   // seeded system preset has no delete affordance here at all, matching
   // handleDeletePreset's own ownership check on the backend.
   onDelete?: (id: string) => void
+  // deletingId disables just the one delete button currently in flight —
+  // a code-review pass caught that a fast double-click fired two DELETE
+  // requests, with the second one 404ing (row already gone) and surfacing
+  // a false "failed to delete" toast for a deletion that actually
+  // succeeded. The caller (Studio.tsx) derives this from its mutation's
+  // own isPending/variables.
+  deletingId?: string
 }) {
   const { t } = useTranslation()
   const grouped = presets.reduce<Record<string, Preset[]>>((acc, p) => {
@@ -39,13 +47,27 @@ export default function PresetCarousel({
           <div className="flex gap-2 overflow-x-auto pb-1">
             {items.map((p) => {
               const active = selected.includes(p.biz_id)
+              const deleting = deletingId === p.biz_id
               return (
-                <button
+                // A real <button> can't contain another real <button> (invalid
+                // HTML, and the reason the delete control below used to be a
+                // non-focusable <span role="button"> that keyboard/screen-reader
+                // users could never reach — caught in code review). This is a
+                // <div role="button"> instead specifically so the delete
+                // control can be a genuine nested <button>.
+                <div
                   key={p.biz_id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onToggle(p.biz_id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onToggle(p.biz_id)
+                    }
+                  }}
                   title={p.prompt_fragment}
-                  className={`group relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border-2 transition ${
+                  className={`group relative h-20 w-20 shrink-0 cursor-pointer overflow-hidden rounded-xl border-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
                     active ? 'border-violet-500' : 'border-zinc-800 hover:border-zinc-700'
                   }`}
                 >
@@ -69,19 +91,25 @@ export default function PresetCarousel({
                     </span>
                   )}
                   {p.mine && onDelete && (
-                    <span
-                      role="button"
+                    <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation()
-                        onDelete(p.biz_id)
+                        if (!deleting) onDelete(p.biz_id)
                       }}
+                      disabled={deleting}
                       title={t('common.delete')}
-                      className="absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-black/70 text-[10px] text-zinc-300 opacity-0 transition hover:text-red-400 group-hover:opacity-100"
+                      // opacity-60 (not opacity-0) by default — a hover-only
+                      // reveal leaves this undiscoverable/untappable on
+                      // touch-only devices (no persistent :hover), also
+                      // caught in code review. group-focus-within covers
+                      // keyboard users tabbing onto the button itself.
+                      className="absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-black/70 text-[10px] text-zinc-300 opacity-60 transition hover:text-red-400 hover:opacity-100 focus:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400 group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-50"
                     >
                       ✕
-                    </span>
+                    </button>
                   )}
-                </button>
+                </div>
               )
             })}
           </div>

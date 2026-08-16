@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, keepPreviousData } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -250,6 +250,18 @@ export default function Studio() {
     onError: () => pushToast(t('studio.presetSaveFailed'), () => savePreset.mutate()),
   })
 
+  // A code-review pass caught that guarding re-entrancy off
+  // deletePreset.isPending doesn't actually work: two clicks fired in the
+  // same synchronous burst (a real double-click, or rapid taps) both read
+  // isPending from the same stale render closure — React hasn't re-rendered
+  // between them yet, so both see false and both call .mutate(). Verified
+  // live: three synchronous clicks produced three real DELETE requests
+  // despite that guard. A ref mutates in place and is read synchronously
+  // within the same call, so it can't go stale between two clicks the way
+  // component state can — deletingPresetId is kept alongside purely to
+  // drive the button's visual disabled state, not for the guard itself.
+  const deletingPresetIds = useRef(new Set<string>())
+  const [deletingPresetId, setDeletingPresetId] = useState<string | undefined>()
   const deletePreset = useMutation({
     mutationFn: (bizId: string) => api.deletePreset(bizId),
     onSuccess: (_data, bizId) => {
@@ -257,7 +269,17 @@ export default function Studio() {
       presets.refetch()
     },
     onError: () => pushToast(t('studio.presetDeleteFailed')),
+    onSettled: (_data, _error, bizId) => {
+      deletingPresetIds.current.delete(bizId)
+      setDeletingPresetId((cur) => (cur === bizId ? undefined : cur))
+    },
   })
+  function handleDeletePreset(bizId: string) {
+    if (deletingPresetIds.current.has(bizId)) return
+    deletingPresetIds.current.add(bizId)
+    setDeletingPresetId(bizId)
+    deletePreset.mutate(bizId)
+  }
   // §19.4.4's shot drag-reorder. A small activation distance keeps a plain
   // click on the drag handle from being misread as a drag when the pointer
   // moves a pixel or two before release.
@@ -969,7 +991,8 @@ export default function Studio() {
                 presets={styleFilter ? presets.data.presets.filter((p) => p.style_type === styleFilter) : presets.data.presets}
                 selected={presetIds}
                 onToggle={(id) => setPresetIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))}
-                onDelete={(id) => deletePreset.mutate(id)}
+                onDelete={handleDeletePreset}
+                deletingId={deletingPresetId}
               />
             </div>
           )}
