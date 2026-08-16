@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import AppShell from '../components/AppShell'
 import { useToast } from '../components/Toast'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
+
+const PAGE_SIZE = 60
 
 // F2.4: browse every asset the user has ever generated, filterable by type
 // and by project (Projects.tsx's own "查看资产" link lands here with
@@ -22,18 +25,43 @@ export default function Assets() {
   const [selected, setSelected] = useState<string[]>([])
   const [searchParams, setSearchParams] = useSearchParams()
   const projectId = searchParams.get('project_id') ?? ''
+  const [search, setSearch] = useState('')
+  const debouncedSearch = useDebouncedValue(search, 300)
+  // §07's "資產庫瀑布流／虛擬滾動" gap — this codebase has no windowed-list
+  // library and GET /assets has no cursor pagination (unlike GET /jobs), so
+  // real DOM virtualization is out of scope for this pass. What's real here:
+  // the grid only ever renders `limit` rows client-side, growing by
+  // PAGE_SIZE as an IntersectionObserver sentinel comes into view, instead
+  // of the previous flat "fetch 120, that's the whole library" cap — a
+  // library past 120 assets was simply truncated with no way to see the
+  // rest before this.
+  const [limit, setLimit] = useState(PAGE_SIZE)
+  const sentinelRef = useRef<HTMLDivElement>(null)
   const queryClient = useQueryClient()
   const pushToast = useToast()
   const navigate = useNavigate()
 
+  useEffect(() => setLimit(PAGE_SIZE), [filter, projectId, debouncedSearch])
+
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const obs = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) setLimit((cur) => cur + PAGE_SIZE)
+    })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+
   const projects = useQuery({ queryKey: ['projects'], queryFn: api.listProjects })
   const assets = useQuery({
-    queryKey: ['assets', filter === 'all' ? undefined : filter, projectId || undefined, 'library'],
+    queryKey: ['assets', filter === 'all' ? undefined : filter, projectId || undefined, debouncedSearch || undefined, limit, 'library'],
     queryFn: () =>
       api.listAssets({
         ...(filter === 'all' ? {} : { type: filter }),
         ...(projectId ? { projectId } : {}),
-        limit: 120,
+        ...(debouncedSearch ? { q: debouncedSearch } : {}),
+        limit,
       }),
   })
   const setProjectFilter = (id: string) => setSearchParams(id ? { project_id: id } : {}, { replace: true })
@@ -76,9 +104,15 @@ export default function Assets() {
   return (
     <AppShell>
       <div className="mx-auto max-w-5xl px-6 py-8">
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-lg font-medium">{t('rail.assets')}</h1>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t('assets.searchPlaceholder')}
+              className="w-40 rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-violet-500"
+            />
             {selected.length > 0 && (
               <>
                 <span className="text-sm text-zinc-500">{t('assets.selectedCount', { count: selected.length })}</span>
@@ -131,13 +165,13 @@ export default function Assets() {
           <p className="text-zinc-500">{t('assets.empty')}</p>
         )}
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="columns-2 gap-3 sm:columns-3 lg:columns-4 [&>*]:mb-3">
           {assets.data?.assets.map((a) => (
             <div
               key={a.biz_id}
               title={a.biz_id}
               onClick={() => navigate(`/assets/${a.biz_id}`)}
-              className={`group relative cursor-pointer overflow-hidden rounded-xl border bg-zinc-900 transition ${
+              className={`group relative inline-block w-full cursor-pointer break-inside-avoid overflow-hidden rounded-xl border bg-zinc-900 transition ${
                 selected.includes(a.biz_id) ? 'border-violet-500' : 'border-zinc-800 hover:border-zinc-700'
               }`}
             >
@@ -168,10 +202,10 @@ export default function Assets() {
                   src={a.public_url}
                   controls
                   onClick={(e) => e.stopPropagation()}
-                  className="aspect-square w-full bg-black object-contain"
+                  className="block max-h-96 w-full bg-black object-contain"
                 />
               ) : (
-                <img src={a.public_url} alt="" className="aspect-square w-full object-cover" />
+                <img src={a.public_url} alt="" loading="lazy" className="block max-h-96 w-full object-cover" />
               )}
               <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex gap-1">
                 {a.resolution_tag && (
@@ -204,6 +238,11 @@ export default function Assets() {
             </div>
           ))}
         </div>
+        {assets.data && assets.data.assets.length >= limit && (
+          <div ref={sentinelRef} className="py-6 text-center text-xs text-zinc-600">
+            {assets.isFetching ? t('common.loading') : ''}
+          </div>
+        )}
       </div>
     </AppShell>
   )

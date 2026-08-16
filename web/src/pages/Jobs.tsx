@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { statusToPhase, WORKFLOW_LABEL_KEY, type Tab } from '../lib/jobResult'
@@ -22,15 +22,26 @@ const FILTERS = [
 export default function Jobs() {
   const { t, i18n } = useTranslation()
   const [status, setStatus] = useState('')
+  const [projectId, setProjectId] = useState('')
+  const projects = useQuery({ queryKey: ['projects'], queryFn: api.listProjects })
 
   const query = useInfiniteQuery({
-    queryKey: ['jobs', status],
-    queryFn: ({ pageParam }: { pageParam?: string }) => api.listJobs({ status, cursor: pageParam, limit: 20 }),
+    queryKey: ['jobs', status, projectId],
+    queryFn: ({ pageParam }: { pageParam?: string }) =>
+      api.listJobs({ status, cursor: pageParam, limit: 20, projectId: projectId || undefined }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.next_cursor,
   })
 
-  const jobs = query.data?.pages.flatMap((p) => p.jobs) ?? []
+  // §07's "掛起置頂 + 呼吸黃條" gap — a suspended job (video.sequence's
+  // preview gate, R12) is the one state that genuinely needs the user to
+  // come back and act, so it gets pulled to the top of whatever page is
+  // currently loaded rather than sitting wherever created_at put it. A
+  // stable sort (Array.prototype.sort is stable per spec) keeps every other
+  // ordering exactly as the backend returned it.
+  const jobs = [...(query.data?.pages.flatMap((p) => p.jobs) ?? [])].sort((a, b) =>
+    a.status === 'suspended' && b.status !== 'suspended' ? -1 : b.status === 'suspended' && a.status !== 'suspended' ? 1 : 0,
+  )
 
   function formatTime(iso: string) {
     return new Date(iso).toLocaleString(i18n.language === 'en' ? 'en-US' : 'zh-CN', {
@@ -44,20 +55,36 @@ export default function Jobs() {
   return (
     <AppShell>
       <div className="mx-auto max-w-4xl px-6 py-8">
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-lg font-medium">{t('rail.jobs')}</h1>
-          <div className="flex gap-1">
-            {FILTERS.map((f) => (
-              <button
-                key={f.value}
-                onClick={() => setStatus(f.value)}
-                className={`rounded-lg px-3 py-1.5 text-sm transition ${
-                  status === f.value ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-900'
-                }`}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex gap-1">
+              {FILTERS.map((f) => (
+                <button
+                  key={f.value}
+                  onClick={() => setStatus(f.value)}
+                  className={`rounded-lg px-3 py-1.5 text-sm transition ${
+                    status === f.value ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-900'
+                  }`}
+                >
+                  {t(f.labelKey)}
+                </button>
+              ))}
+            </div>
+            {!!projects.data?.projects.length && (
+              <select
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                className="rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-300 outline-none focus:border-violet-500"
               >
-                {t(f.labelKey)}
-              </button>
-            ))}
+                <option value="">{t('jobs.allProjects')}</option>
+                {projects.data.projects.map((p) => (
+                  <option key={p.biz_id} value={p.biz_id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
 
@@ -70,7 +97,11 @@ export default function Jobs() {
               <Link
                 key={j.biz_id}
                 to={`/jobs/${j.biz_id}`}
-                className="flex items-center gap-4 rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-3 transition hover:border-zinc-700"
+                className={`flex items-center gap-4 rounded-xl border px-4 py-3 transition ${
+                  j.status === 'suspended'
+                    ? 'animate-pulse border-amber-500/60 bg-amber-500/5 hover:border-amber-400'
+                    : 'border-zinc-800 bg-zinc-900/60 hover:border-zinc-700'
+                }`}
               >
                 <PhaseBadge phase={statusToPhase(j.status)} />
                 <div className="min-w-0 flex-1">

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { resultAssetIds, statusToPhase, WORKFLOW_LABEL_KEY, type Tab } from '../lib/jobResult'
 import { displayNodeError, firstSpecificError } from '../lib/errors'
@@ -20,6 +20,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 export default function JobDetail() {
   const { t } = useTranslation()
   const { bizId } = useParams<{ bizId: string }>()
+  const navigate = useNavigate()
   const pushToast = useToast()
 
   const jobQuery = useJobStream(bizId)
@@ -73,6 +74,18 @@ export default function JobDetail() {
               </div>
               <div className="flex items-center gap-3">
                 <PhaseBadge phase={statusToPhase(job.status)} />
+                {/* §07's "「以此再生成」在作業詳情頁本身缺獨立入口" gap —
+                    AssetDetail already has this (regenerate()'s own doc
+                    there); this is the same prefillJob round trip, just
+                    triggered from the job itself rather than one of its
+                    output assets, so it's available even for a job that
+                    partially/fully failed and has no asset to click through. */}
+                <button
+                  onClick={() => navigate('/', { state: { prefillJob: { workflowName: job.workflow_name, spec: job.spec } } })}
+                  className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-violet-500 hover:text-violet-300"
+                >
+                  ✏️ {t('assetDetail.regenerateFromThis')}
+                </button>
                 {running && (
                   <button
                     onClick={() => cancelJob.mutate()}
@@ -84,6 +97,32 @@ export default function JobDetail() {
                 )}
               </div>
             </div>
+
+            {/* §07's "已消耗 / 預估 對比條" gap — job.credit_held is what's
+                currently reserved, credit_settled is what's actually been
+                spent so far (both already tracked since W7, just not
+                echoed on this endpoint until now — handleGetJob's own
+                doc). Only worth showing once something has actually been
+                held; a job that hasn't started yet has nothing to compare. */}
+            {job.credit_held > 0 && (
+              <div className="flex items-center gap-4 rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-2.5 font-mono text-xs text-zinc-400">
+                <span>
+                  {t('jobDetail.creditSettled')} <span className="text-zinc-200">✦{job.credit_settled}</span>
+                </span>
+                <span className="text-zinc-700">/</span>
+                <span>
+                  {t('jobDetail.creditHeld')} <span className="text-zinc-200">✦{job.credit_held}</span>
+                </span>
+                {job.credit_estimated > 0 && (
+                  <>
+                    <span className="text-zinc-700">/</span>
+                    <span>
+                      {t('jobDetail.creditEstimated')} <span className="text-zinc-200">✦{job.credit_estimated}</span>
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
 
             <WorkflowGraph job={job} />
 
@@ -125,11 +164,31 @@ export default function JobDetail() {
   )
 }
 
+// §07's "下載已完成功能仍缺" gap — AssetDetail already has this exact
+// `<a download>` pattern for a single asset viewed on its own page; this is
+// the same thing inline on the result grid so downloading doesn't require
+// an extra click through to /assets/:id first.
 function ResultAsset({ assetId }: { assetId: string }) {
+  const { t } = useTranslation()
   const { data } = useQuery({ queryKey: ['asset', assetId], queryFn: () => api.getAsset(assetId) })
   if (!data) return <div className="h-48 w-48 animate-pulse rounded-lg bg-zinc-800" />
-  if (data.type === 'video') {
-    return <video src={data.public_url} controls className="h-48 w-48 rounded-lg bg-black object-contain" />
-  }
-  return <img src={data.public_url} alt="" className="h-48 w-48 rounded-lg object-cover" />
+  return (
+    <div className="group relative">
+      {data.type === 'video' ? (
+        <video src={data.public_url} controls className="h-48 w-48 rounded-lg bg-black object-contain" />
+      ) : (
+        <img src={data.public_url} alt="" className="h-48 w-48 rounded-lg object-cover" />
+      )}
+      <a
+        href={data.public_url}
+        download
+        target="_blank"
+        rel="noreferrer"
+        title={t('assetDetail.download')}
+        className="absolute right-1.5 top-1.5 rounded-lg bg-black/60 px-2 py-1 text-xs text-zinc-100 opacity-0 backdrop-blur transition group-hover:opacity-100"
+      >
+        ⬇
+      </a>
+    </div>
+  )
 }

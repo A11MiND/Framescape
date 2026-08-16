@@ -49,6 +49,17 @@ export default function AssetDetail() {
     navigate('/', { state: { prefillJob: { workflowName: job.data.workflow_name, spec: job.data.spec } } })
   }
 
+  // §07's "「抽幀存角色」在資產詳情頁本身缺獨立入口" gap — the suggestion
+  // bar in Studio only ever shows this right after a fresh video.single
+  // generation (suggestions.ts's own save-frame-character logic); coming
+  // back to the same asset later via /assets had no equivalent entry
+  // point. Same underlying data both places: video.single's DAG always
+  // runs an "extract" node producing a first-frame image asset as a
+  // byproduct, so this only needs the already-fetched job's nodes, no new
+  // fetch or executor call.
+  const extractNode = job.data?.nodes.find((n) => n.name === 'extract')
+  const frameAssetId = extractNode?.outputs?.['first-frame-asset-id'] as string | undefined
+
   const a = asset.data
   const metaEntries = a?.meta ? Object.entries(a.meta).filter(([k]) => k !== 'index') : []
 
@@ -82,6 +93,22 @@ export default function AssetDetail() {
                   {a.width}×{a.height}
                 </span>
                 <span className="rounded-full border border-zinc-700 px-2.5 py-0.5 text-xs text-zinc-400">{a.mime}</span>
+                {a.provider_cache && (
+                  <span
+                    title={t('assetDetail.providerCacheTooltip')}
+                    className={`rounded-full border px-2.5 py-0.5 text-xs ${
+                      a.provider_cache.cached && !a.provider_cache.expired
+                        ? 'border-emerald-700 text-emerald-400'
+                        : 'border-zinc-700 text-zinc-500'
+                    }`}
+                  >
+                    {a.provider_cache.cached && !a.provider_cache.expired
+                      ? t('assetDetail.cached')
+                      : a.provider_cache.cached
+                        ? t('assetDetail.cacheExpired')
+                        : t('assetDetail.notCached')}
+                  </span>
+                )}
                 <span className="text-xs text-zinc-600">
                   {new Date(a.created_at).toLocaleString(i18n.language === 'en' ? 'en-US' : 'zh-CN', {
                     dateStyle: 'medium',
@@ -125,6 +152,14 @@ export default function AssetDetail() {
                   className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800"
                 >
                   {t('assetDetail.saveAsCharacter')}
+                </button>
+              )}
+              {a.type === 'video' && frameAssetId && (
+                <button
+                  onClick={() => navigate('/characters', { state: { prefillAssetId: frameAssetId } })}
+                  className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800"
+                >
+                  {t('assetDetail.saveFrameAsCharacter')}
                 </button>
               )}
               <a

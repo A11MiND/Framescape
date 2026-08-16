@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api, type Character } from '../lib/api'
@@ -16,7 +16,8 @@ export default function Characters() {
   const location = useLocation()
   const prefillAssetId = (location.state as { prefillAssetId?: string } | null)?.prefillAssetId
   const [creating, setCreating] = useState(!!prefillAssetId)
-  const characters = useQuery({ queryKey: ['characters'], queryFn: api.listCharacters })
+  const characters = useQuery({ queryKey: ['characters'], queryFn: () => api.listCharacters() })
+  const projects = useQuery({ queryKey: ['projects'], queryFn: api.listProjects })
 
   // Studio's "存为角色" / "抽帧存为角色" suggestions (§19.4.2) land here with
   // the just-generated asset preselected — opens the form instead of making
@@ -41,6 +42,7 @@ export default function Characters() {
         {creating && (
           <CharacterForm
             initialSelected={prefillAssetId ? [prefillAssetId] : []}
+            projects={projects.data?.projects ?? []}
             onDone={() => {
               setCreating(false)
               characters.refetch()
@@ -53,15 +55,18 @@ export default function Characters() {
         )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {characters.data?.characters.map((c) => <CharacterCard key={c.biz_id} character={c} />)}
+          {characters.data?.characters.map((c) => (
+            <CharacterCard key={c.biz_id} character={c} projects={projects.data?.projects ?? []} />
+          ))}
         </div>
       </div>
     </AppShell>
   )
 }
 
-function CharacterCard({ character }: { character: Character }) {
+function CharacterCard({ character, projects }: { character: Character; projects: { biz_id: string; name: string }[] }) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
   const qc = useQueryClient()
   const pushToast = useToast()
@@ -73,8 +78,17 @@ function CharacterCard({ character }: { character: Character }) {
   })
 
   if (editing) {
-    return <CharacterForm character={character} onDone={() => setEditing(false)} onCancel={() => setEditing(false)} />
+    return (
+      <CharacterForm
+        character={character}
+        projects={projects}
+        onDone={() => setEditing(false)}
+        onCancel={() => setEditing(false)}
+      />
+    )
   }
+
+  const projectName = projects.find((p) => p.biz_id === character.project_id)?.name
 
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
@@ -106,7 +120,21 @@ function CharacterCard({ character }: { character: Character }) {
       {character.description && (
         <p className="mt-1 line-clamp-2 text-sm text-zinc-400">{character.description}</p>
       )}
-      <p className="mt-2 font-mono text-xs text-zinc-600">seed {character.seed}</p>
+      <div className="mt-2 flex items-center justify-between">
+        <p className="font-mono text-xs text-zinc-600">seed {character.seed}</p>
+        {projectName && <p className="truncate text-xs text-zinc-500">{projectName}</p>}
+      </div>
+      {/* §07's "用這個角色創作直達 Composer 的捷徑" gap — mirrors
+          suggestActions' save-character round trip in the other direction:
+          drops slotA prefilled via router state (Studio's own useEffect
+          handles this the same lightweight way it handles prefillAssetId
+          on this page). */}
+      <button
+        onClick={() => navigate('/', { state: { prefillCharacterId: character.biz_id } })}
+        className="mt-3 w-full rounded-lg border border-zinc-800 py-1.5 text-xs text-violet-400 transition hover:border-violet-500 hover:text-violet-300"
+      >
+        {t('characters.createWithThis')}
+      </button>
     </div>
   )
 }
@@ -124,11 +152,13 @@ function RefThumb({ assetId }: { assetId: string }) {
 function CharacterForm({
   character,
   initialSelected,
+  projects,
   onDone,
   onCancel,
 }: {
   character?: Character
   initialSelected?: string[]
+  projects: { biz_id: string; name: string }[]
   onDone: () => void
   onCancel?: () => void
 }) {
@@ -137,13 +167,21 @@ function CharacterForm({
   const [description, setDescription] = useState(character?.description ?? '')
   const [seed, setSeed] = useState(() => character?.seed ?? Math.floor(Math.random() * 1_000_000))
   const [selected, setSelected] = useState<string[]>(character?.ref_asset_ids ?? initialSelected ?? [])
+  const [projectId, setProjectId] = useState(character?.project_id ?? '')
   const qc = useQueryClient()
 
   const save = useMutation({
     mutationFn: () =>
       character
-        ? api.updateCharacter(character.biz_id, { name, description, ref_asset_ids: selected, seed })
-        : api.createCharacter(name, description, selected, seed),
+        ? api.updateCharacter(character.biz_id, {
+            name,
+            description,
+            ref_asset_ids: selected,
+            seed,
+            project_id: projectId || undefined,
+            clear_project: !projectId,
+          })
+        : api.createCharacter(name, description, selected, seed, projectId || undefined),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['characters'] })
       onDone()
@@ -183,6 +221,21 @@ function CharacterForm({
         placeholder={t('characters.descriptionPlaceholder')}
         className="w-full resize-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-violet-500"
       />
+
+      {projects.length > 0 && (
+        <select
+          value={projectId}
+          onChange={(e) => setProjectId(e.target.value)}
+          className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 outline-none focus:border-violet-500"
+        >
+          <option value="">{t('characters.noProject')}</option>
+          {projects.map((p) => (
+            <option key={p.biz_id} value={p.biz_id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      )}
 
       <div>
         <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">
