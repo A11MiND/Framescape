@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import type { Preset } from '../lib/api'
+import { presetDisplayName, type Preset } from '../lib/api'
 
 // §19.4.1's right-rail "预设卡片横滑区" — the previous build only ever
 // rendered Preset.name as a text pill, leaving Preset.cover_url and
@@ -29,7 +29,7 @@ export default function PresetCarousel({
   // own isPending/variables.
   deletingId?: string
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const grouped = presets.reduce<Record<string, Preset[]>>((acc, p) => {
     ;(acc[p.category] ??= []).push(p)
     return acc
@@ -91,7 +91,9 @@ export default function PresetCarousel({
                         {p.style_type}
                       </span>
                     )}
-                    <p className={`truncate text-xs font-medium ${active ? 'text-violet-300' : 'text-zinc-100'}`}>{p.name}</p>
+                    <p className={`truncate text-xs font-medium ${active ? 'text-violet-300' : 'text-zinc-100'}`}>
+                      {presetDisplayName(p, i18n.language)}
+                    </p>
                   </div>
                   {active && (
                     <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-violet-500 text-xs text-white">

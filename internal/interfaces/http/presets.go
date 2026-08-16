@@ -93,6 +93,7 @@ func presetToJSON(r persistence.Preset) gin.H {
 		"biz_id":          r.BizID,
 		"category":        r.Category,
 		"name":            r.Name,
+		"name_en":         r.NameEn,
 		"cover_url":       r.CoverURL,
 		"prompt_fragment": r.PromptFragment,
 		"priority":        r.Priority,

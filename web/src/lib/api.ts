@@ -219,6 +219,11 @@ export interface Preset {
   biz_id: string
   category: string
   name: string
+  // name_en is '' for every user-saved "mine" preset (free text, never
+  // auto-translated) — presetDisplayName() is what actually falls back to
+  // `name` when this is empty, callers should use that instead of reading
+  // name_en directly.
+  name_en: string
   cover_url: string
   prompt_fragment: string
   priority: number
@@ -227,6 +232,10 @@ export interface Preset {
   // false for every seeded system preset. Only presets with mine:true are
   // ever eligible for DELETE (handleDeletePreset's own doc).
   mine: boolean
+}
+
+export function presetDisplayName(preset: Preset, lang: string): string {
+  return lang === 'en' && preset.name_en ? preset.name_en : preset.name
 }
 
 // kind is a machine-readable constant (jobsvc.ItemKind* on the Go side),

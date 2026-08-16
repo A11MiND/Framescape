@@ -164,6 +164,10 @@ type Preset struct {
 	BizID          string `gorm:"column:biz_id"`
 	Category       string
 	Name           string
+	// NameEn is only ever populated for seeded system presets (migration
+	// 00009) — a user's own "另存為我的預設" save has no translation, same
+	// as a Character's name never gets one; '' means "fall back to Name".
+	NameEn         string `gorm:"column:name_en"`
 	CoverURL       string `gorm:"column:cover_url"`
 	PromptFragment string `gorm:"column:prompt_fragment"`
 	Priority       int

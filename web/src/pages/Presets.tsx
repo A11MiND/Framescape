@@ -1,13 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { api, type Preset } from '../lib/api'
+import { api, presetDisplayName, type Preset } from '../lib/api'
 import AppShell from '../components/AppShell'
 
 // F4.3: presets are seed data (style/pose/composition/lighting/camera) — no
 // create endpoint exists, this is a browse/reference view for what the
 // preset chips in the creation studio actually mean.
 export default function Presets() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const presets = useQuery({ queryKey: ['presets'], queryFn: () => api.listPresets() })
 
   const grouped = (presets.data?.presets ?? []).reduce<Record<string, Preset[]>>((acc, p) => {
@@ -38,7 +38,7 @@ export default function Presets() {
                   )}
                   <div className="p-4">
                     <div className="flex items-center gap-2">
-                      <p className="truncate font-medium">{p.name}</p>
+                      <p className="truncate font-medium">{presetDisplayName(p, i18n.language)}</p>
                       {p.style_type && p.style_type !== p.name && (
                         <span className="shrink-0 rounded-full border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-500">
                           {p.style_type}
