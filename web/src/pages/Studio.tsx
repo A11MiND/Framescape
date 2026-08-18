@@ -228,6 +228,13 @@ export default function Studio() {
   // image.comic4-only state (F5.4).
   const [comicMode, setComicMode] = useState<'manual' | 'auto'>('manual')
   const [story, setStory] = useState('')
+  // comic4's 快速/連貫模式 toggle (jobsvc.go's Spec.Comic4Mode doc) —
+  // independent of comicMode above (manual/auto is about *where the text
+  // comes from*, quick/continuity is about *how consistent the 4 images
+  // are*, the two axes are orthogonal).
+  const [comic4Mode, setComic4Mode] = useState<'quick' | 'continuity'>('quick')
+  // image.sequence's own equivalent toggle (Spec.ImageSequenceMode doc).
+  const [imageSequenceMode, setImageSequenceMode] = useState<'quick' | 'continuity'>('quick')
 
   // video.sequence-only state (F6.7/F6.8).
   const [vsShots, setVsShots] = useState<ShotItem[]>(() => toShotItems(['']))
@@ -235,6 +242,19 @@ export default function Studio() {
   const [vsRatio, setVsRatio] = useState<(typeof RATIO_VALUES)[number]>('16:9')
   const [vsRecalibrateEvery, setVsRecalibrateEvery] = useState(3)
   const [vsSkipPreview, setVsSkipPreview] = useState(false)
+  // Narrative-continuity feature (Spec.NarrativeContinuity doc): off by
+  // default, matches every existing job's behavior exactly. refMode picks
+  // how an anchor's bundle gets built once narrativeContinuity is on —
+  // mirrors video.single's own refMode selector's binary-choice UX
+  // (Seedance's own pattern the user pointed at), just three options
+  // instead of two.
+  const [narrativeContinuity, setNarrativeContinuity] = useState(false)
+  const [vsReferenceSelectionMode, setVsReferenceSelectionMode] = useState<'window' | 'manual' | 'smart'>('window')
+  // video.sequence's own #-mention override (Spec.ShotReferenceOverrides
+  // doc) — same shape and same UI pattern as image.sequence's
+  // shotSourceRefs, kept as its own state since the two workflows' shots
+  // arrays are otherwise unrelated.
+  const [vsShotReferenceOverrides, setVsShotReferenceOverrides] = useState<(number | null)[]>([null])
   // video.sequence's r2va anchor when it's a video rather than an image
   // (Spec.SourceVideoAssetID's own doc) — mutually exclusive with
   // sourceImageId, which video.sequence's own anchor block below also uses.
@@ -279,12 +299,14 @@ export default function Studio() {
         setComicMode('auto')
         setStory(spec.story)
       }
+      setComic4Mode(spec.comic4_mode === 'continuity' ? 'continuity' : 'quick')
     } else if (workflowName === 'image.sequence') {
       const restoredShots = spec.shots?.length ? spec.shots : ['']
       setShots(restoredShots)
       const restoredRefs = spec.shot_source_refs ?? []
       setShotSourceRefs(restoredShots.map((_, i) => restoredRefs[i] || null))
       setSourceImageId(spec.source_image_asset_id ?? '')
+      setImageSequenceMode(spec.image_sequence_mode === 'continuity' ? 'continuity' : 'quick')
     } else if (workflowName === 'video.single') {
       setVText(spec.text ?? '')
       if (spec.duration_seconds) setDuration(spec.duration_seconds)
@@ -303,13 +325,18 @@ export default function Studio() {
       }
       setPromptEnhance(!!spec.prompt_enhance)
     } else if (workflowName === 'video.sequence') {
-      setVsShots(toShotItems(spec.shots ?? []))
+      const restoredVsShots = spec.shots?.length ? spec.shots : ['']
+      setVsShots(toShotItems(restoredVsShots))
       if (spec.duration_seconds) setVsDuration(spec.duration_seconds)
       if (spec.ratio) setVsRatio(spec.ratio as (typeof RATIO_VALUES)[number])
       if (spec.recalibrate_every) setVsRecalibrateEvery(spec.recalibrate_every)
       setVsSkipPreview(!!spec.skip_preview)
       setSourceImageId(spec.source_image_asset_id ?? '')
       setSourceVideoId(spec.source_video_asset_id ?? '')
+      setNarrativeContinuity(!!spec.narrative_continuity)
+      setVsReferenceSelectionMode(spec.reference_selection_mode ?? 'window')
+      const restoredVsRefs = spec.shot_reference_overrides ?? []
+      setVsShotReferenceOverrides(restoredVsShots.map((_, i) => restoredVsRefs[i] || null))
     }
 
     // Clear the router state so refreshing or navigating back here later
@@ -448,6 +475,7 @@ export default function Studio() {
         spec.panels = panels
       }
       if (sourceImageId) spec.source_image_asset_id = sourceImageId
+      if (comic4Mode === 'continuity') spec.comic4_mode = 'continuity'
     } else if (tab === 'image.sequence') {
       // Blank shots get dropped, which shifts every later shot's position —
       // filterShotsWithRefs renumbers shotSourceRefs' 1-based indices (and
@@ -458,6 +486,7 @@ export default function Studio() {
       spec.shots = filteredShots
       if (refs.some((r) => r > 0)) spec.shot_source_refs = refs
       if (sourceImageId) spec.source_image_asset_id = sourceImageId
+      if (imageSequenceMode === 'continuity') spec.image_sequence_mode = 'continuity'
     } else if (tab === 'video.single') {
       spec.text = vText
       spec.duration_seconds = duration
@@ -469,13 +498,25 @@ export default function Studio() {
       if (refVideoIds.length) spec.reference_video_asset_ids = refVideoIds
       if (promptEnhance) spec.prompt_enhance = true
     } else {
-      spec.shots = vsShots.map((s) => s.text).filter((t) => t.trim())
+      // Same blank-shot renumbering concern as image.sequence above —
+      // filterShotsWithRefs is generic over any (string[], (number|null)[])
+      // pair, not image.sequence-specific, so it's reused unchanged here.
+      const { shots: filteredVsShots, refs: vsRefs } = filterShotsWithRefs(
+        vsShots.map((s) => s.text),
+        vsShotReferenceOverrides,
+      )
+      spec.shots = filteredVsShots
       spec.duration_seconds = vsDuration
       spec.ratio = vsRatio
       spec.recalibrate_every = vsRecalibrateEvery
       if (vsSkipPreview) spec.skip_preview = true
       if (sourceImageId) spec.source_image_asset_id = sourceImageId
       else if (sourceVideoId) spec.source_video_asset_id = sourceVideoId
+      if (narrativeContinuity) {
+        spec.narrative_continuity = true
+        spec.reference_selection_mode = vsReferenceSelectionMode
+      }
+      if (vsRefs.some((r) => r > 0)) spec.shot_reference_overrides = vsRefs
     }
     return spec
   }
@@ -698,6 +739,24 @@ export default function Studio() {
                 </button>
               </div>
 
+              {/* Orthogonal to manual/auto above: that picks where the text
+                  comes from, this picks how consistent the 4 resulting
+                  images look (jobsvc.go's Spec.Comic4Mode doc). */}
+              <div className="flex gap-2 text-sm">
+                {(['quick', 'continuity'] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setComic4Mode(m)}
+                    title={t(`studio.consistencyMode.${m}Tooltip`)}
+                    className={`rounded-lg border px-3 py-1.5 ${
+                      comic4Mode === m ? 'border-violet-500 bg-violet-500/10 text-violet-300' : 'border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                    }`}
+                  >
+                    {t(`studio.consistencyMode.${m}`)}
+                  </button>
+                ))}
+              </div>
+
               {comicMode === 'manual' ? (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {panels.map((p, i) => (
@@ -726,14 +785,30 @@ export default function Studio() {
           )}
 
           {tab === 'image.sequence' && (
-            <ShotList
-              shots={shots}
-              setShots={setShots}
-              sourceRefs={shotSourceRefs}
-              setSourceRefs={setShotSourceRefs}
-              placeholder={(i) => t('studio.imageSequence.shotPlaceholder', { n: i + 1 })}
-              addLabel={t('studio.imageSequence.addLabel')}
-            />
+            <div className="space-y-3">
+              <div className="flex gap-2 text-sm">
+                {(['quick', 'continuity'] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setImageSequenceMode(m)}
+                    title={t(`studio.consistencyMode.${m}Tooltip`)}
+                    className={`rounded-lg border px-3 py-1.5 ${
+                      imageSequenceMode === m ? 'border-violet-500 bg-violet-500/10 text-violet-300' : 'border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                    }`}
+                  >
+                    {t(`studio.consistencyMode.${m}`)}
+                  </button>
+                ))}
+              </div>
+              <ShotList
+                shots={shots}
+                setShots={setShots}
+                sourceRefs={shotSourceRefs}
+                setSourceRefs={setShotSourceRefs}
+                placeholder={(i) => t('studio.imageSequence.shotPlaceholder', { n: i + 1 })}
+                addLabel={t('studio.imageSequence.addLabel')}
+              />
+            </div>
           )}
 
           {tab === 'video.single' && (
@@ -857,6 +932,11 @@ export default function Studio() {
                     const newIndex = cur.findIndex((s) => s.id === over.id)
                     return oldIndex === -1 || newIndex === -1 ? cur : arrayMove(cur, oldIndex, newIndex)
                   })
+                  // Manual #-overrides reference shots by position — a
+                  // reorder would silently point them at the wrong shot, so
+                  // this clears them rather than risk a wrong-but-plausible
+                  // reference surviving the move.
+                  setVsShotReferenceOverrides((cur) => cur.map(() => null))
                 }}
               >
                 <SortableContext items={vsShots.map((s) => s.id)} strategy={verticalListSortingStrategy}>
@@ -867,14 +947,32 @@ export default function Studio() {
                       index={i}
                       mode={shotMode(i + 1, vsRecalibrateEvery, characterSlotIds.some(Boolean))}
                       onChange={(text) => setVsShots((cur) => cur.map((s) => (s.id === shot.id ? { ...s, text } : s)))}
-                      onRemove={() => setVsShots((cur) => cur.filter((s) => s.id !== shot.id))}
+                      onRemove={() => {
+                        setVsShots((cur) => cur.filter((s) => s.id !== shot.id))
+                        setVsShotReferenceOverrides((cur) =>
+                          cur
+                            .filter((_, ci) => ci !== i)
+                            .map((r) => (r == null ? r : r === i + 1 ? null : r > i + 1 ? r - 1 : r)),
+                        )
+                      }}
                       removable={vsShots.length > 1}
+                      earlierShots={vsShots.slice(0, i).map((s, idx) => ({ index: idx + 1, text: s.text }))}
+                      referenceOverride={vsShotReferenceOverrides[i] ?? null}
+                      onSetReferenceOverride={(shotIndex) =>
+                        setVsShotReferenceOverrides((cur) => cur.map((r, ri) => (ri === i ? shotIndex : r)))
+                      }
+                      onClearReferenceOverride={() =>
+                        setVsShotReferenceOverrides((cur) => cur.map((r, ri) => (ri === i ? null : r)))
+                      }
                     />
                   ))}
                 </SortableContext>
               </DndContext>
               <button
-                onClick={() => setVsShots((cur) => [...cur, { id: crypto.randomUUID(), text: '' }])}
+                onClick={() => {
+                  setVsShots((cur) => [...cur, { id: crypto.randomUUID(), text: '' }])
+                  setVsShotReferenceOverrides((cur) => [...cur, null])
+                }}
                 className="text-sm text-violet-400 hover:text-violet-300"
               >
                 {t('studio.addSegment')}
@@ -882,6 +980,33 @@ export default function Studio() {
               {vsShots.length > 4 && (
                 <p className="text-xs text-amber-500">{t('studio.driftWarning', { n: vsRecalibrateEvery })}</p>
               )}
+
+              <div className="pt-2">
+                <Capsule>
+                  <span className="text-zinc-500">{t('studio.narrativeContinuity.label')}</span>
+                  <input
+                    type="checkbox"
+                    checked={narrativeContinuity}
+                    onChange={(e) => setNarrativeContinuity(e.target.checked)}
+                    className="accent-violet-500"
+                  />
+                </Capsule>
+                {narrativeContinuity && (
+                  <div className="mt-2 flex flex-wrap gap-1.5" title={t('studio.narrativeContinuity.modeTooltip')}>
+                    {(['window', 'manual', 'smart'] as const).map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => setVsReferenceSelectionMode(m)}
+                        className={`rounded-lg px-3 py-1.5 text-sm transition ${
+                          vsReferenceSelectionMode === m ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-900'
+                        }`}
+                      >
+                        {t(`studio.narrativeContinuity.mode.${m}`)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <div className="pt-2">
                 <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500" title={t('studio.videoSequence.anchorRefTooltip')}>
@@ -1346,6 +1471,10 @@ function SortableShotRow({
   onChange,
   onRemove,
   removable,
+  earlierShots,
+  referenceOverride,
+  onSetReferenceOverride,
+  onClearReferenceOverride,
 }: {
   shot: ShotItem
   index: number
@@ -1353,6 +1482,14 @@ function SortableShotRow({
   onChange: (text: string) => void
   onRemove: () => void
   removable: boolean
+  // video.sequence's own #-mention override (Spec.ShotReferenceOverrides
+  // doc) — same pattern image.sequence's ShotList already uses, kept here
+  // rather than replaced by narrativeContinuity's automatic modes: "引用#
+  // 這個本身是個值得的功能，需要你保留" was explicit.
+  earlierShots: { index: number; text: string }[]
+  referenceOverride: number | null
+  onSetReferenceOverride: (shotIndex: number) => void
+  onClearReferenceOverride: () => void
 }) {
   const { t } = useTranslation()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: shot.id })
@@ -1375,13 +1512,26 @@ function SortableShotRow({
       >
         {t(SHOT_MODE_LABEL_KEY[mode])}
       </span>
-      <MentionTextarea
-        value={shot.text}
-        onChange={onChange}
-        rows={2}
-        className="text-sm"
-        hintPhrases={[t('studio.videoSequence.shotPlaceholder', { n: index + 1 })]}
-      />
+      <div className="flex-1">
+        <MentionTextarea
+          value={shot.text}
+          onChange={onChange}
+          rows={2}
+          className="text-sm"
+          hintPhrases={[t('studio.videoSequence.shotPlaceholder', { n: index + 1 })]}
+          siblingShots={earlierShots}
+          onMentionShot={onSetReferenceOverride}
+          shotLabelKey="studio.mention.videoShot"
+        />
+        {referenceOverride != null && (
+          <p className="mt-1 flex items-center gap-1 text-xs text-violet-400">
+            {t('studio.videoSequence.linkedToShot', { n: referenceOverride })}
+            <button type="button" onClick={onClearReferenceOverride} className="text-zinc-500 hover:text-red-400">
+              ×
+            </button>
+          </p>
+        )}
+      </div>
       {removable && (
         <button
           onClick={onRemove}

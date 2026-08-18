@@ -43,12 +43,14 @@ func main() {
 	}
 	eng := rpc.NewClient(config.SchedulerURL())
 	credits := creditsvc.New(sqlDB)
-	jobs := jobsvc.New(db, eng, credits)
 	redisClient := cache.NewClient(config.RedisAddr())
 	// F1.2's anonymous trial only — see internal/interfaces/http/trial.go's
 	// doc for why cmd/api holds a MiniMax client despite the package doc's
-	// "never talks to MiniMax directly" rule.
+	// "never talks to MiniMax directly" rule. jobsvc also needs it now, for
+	// video.sequence's "smart" reference-selection mode (see cmd/scheduler/
+	// main.go's own jobsvc.New call for the fuller doc).
 	minimaxClient := minimax.NewClient(config.MiniMaxBaseURL(), config.MiniMaxAPIKey())
+	jobs := jobsvc.New(db, eng, credits, minimaxClient)
 
 	// F2.1's presigned direct-upload endpoints only — see server.go's
 	// `objects` field doc. A MinIO outage here must not take the whole API

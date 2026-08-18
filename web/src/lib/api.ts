@@ -214,6 +214,8 @@ export interface Spec {
   story?: string // image.comic4 only, F5.4: auto-split into 4 panels instead of panels
   shots?: string[]
   shot_source_refs?: number[] // image.sequence only — cross-shot referencing, see jobsvc.go's Spec.ShotSourceRefs doc
+  image_sequence_mode?: 'quick' | 'continuity' // image.sequence only — see jobsvc.go's Spec.ImageSequenceMode doc
+  comic4_mode?: 'quick' | 'continuity' // image.comic4 only — see jobsvc.go's Spec.Comic4Mode doc
   characters?: CharacterSlot[]
   preset_ids?: string[]
   seed?: number
@@ -231,6 +233,12 @@ export interface Spec {
   skip_preview?: boolean // video.sequence only — draft runs directly at 2K, no 768P preview gate
   source_video_asset_id?: string // video.sequence only — r2va anchor when the reference is a video, not an image
   prompt_enhance?: boolean // F6.10, video.single only
+
+  // video.sequence's narrative-continuity feature (see jobsvc.go's
+  // Spec.NarrativeContinuity doc) — off by default, unchanged behavior.
+  narrative_continuity?: boolean
+  reference_selection_mode?: 'window' | 'manual' | 'smart'
+  shot_reference_overrides?: number[] // video.sequence's own #-mention override, same shape as image.sequence's shot_source_refs
 }
 
 export type WorkflowName =

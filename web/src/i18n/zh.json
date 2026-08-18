@@ -343,7 +343,23 @@
     "videoSequence": {
       "shotPlaceholder": "第 {{n}} 段镜头描述",
       "anchorRef": "锚点参考（角色锚定用，图片或视频）",
-      "anchorRefTooltip": "作为 r2va 锚定段的参考素材，可以是图片或视频；未选择时默认用绑定角色自己的参考图"
+      "anchorRefTooltip": "作为 r2va 锚定段的参考素材，可以是图片或视频；未选择时默认用绑定角色自己的参考图",
+      "linkedToShot": "已链接到第{{n}}段"
+    },
+    "narrativeContinuity": {
+      "label": "叙事连贯（多素材参考 + AI 增强提示词）",
+      "modeTooltip": "滑动窗口：自动引用最近 1-2 个锚定段；手动指定：只用你 # 选择的段落；智能分析：AI 判断每段该参考哪些更早的段落",
+      "mode": {
+        "window": "滑动窗口",
+        "manual": "手动指定",
+        "smart": "智能分析"
+      }
+    },
+    "consistencyMode": {
+      "quick": "快速模式",
+      "quickTooltip": "每张/每段独立生成，速度快，成本低",
+      "continuity": "连贯模式",
+      "continuityTooltip": "自动引用上一张/上一段的画面，并用 AI 改写提示词以保持情节连贯，速度较慢，成本较高"
     },
     "capsule": {
       "refMode": "参考模式",
@@ -408,6 +424,7 @@
       "video": "视频{{n}}",
       "image": "图片{{n}}",
       "shot": "第{{n}}张",
+      "videoShot": "第{{n}}段",
       "pickHint": "选择要引用的素材",
       "shotPickHint": "引用本批次镜头",
       "empty": "还没有素材",

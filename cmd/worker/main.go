@@ -66,6 +66,7 @@ func main() {
 	must(registry.Register(local.NewExtractFramesPlugin(sink, sink)), log)
 	must(registry.Register(local.NewGatePlugin()), log)
 	must(registry.Register(local.NewConcatPlugin(sink, sink)), log)
+	must(registry.Register(local.NewCollectRefsPlugin()), log)
 
 	log.Info("worker starting", zap.Int("concurrency", config.WorkerConcurrency()))
 	redisOpt := cache.AsynqRedisOpt(config.RedisAddr())

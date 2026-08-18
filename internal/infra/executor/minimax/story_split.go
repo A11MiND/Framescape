@@ -64,7 +64,37 @@ func (p *StorySplitPlugin) Execute(ctx context.Context, req *executor.ExecuteReq
 		return nil, fmt.Errorf("bind minimax.text.split_story inputs: %w", err)
 	}
 
-	story := cfg.Story
+	panels, costYuan, err := SplitStory(ctx, p.client, cfg.Story)
+	if err != nil {
+		return classifyVideoError(err), nil
+	}
+	if panels == nil {
+		return errOutputs(model.ExecCodeError, "empty choices from chat completion"), nil
+	}
+
+	items := make([]map[string]string, len(panels))
+	for i, panelText := range panels {
+		items[i] = map[string]string{"prompt": panelText, "user-id": cfg.UserID, "source-image-asset-id": cfg.SourceImageAssetID}
+	}
+
+	return executor.OutputFrom(struct {
+		Panels   []map[string]string `json:"panels"`
+		CostYuan float64             `json:"cost-yuan"`
+	}{Panels: items, CostYuan: costYuan})
+}
+
+// SplitStory is StorySplitPlugin.Execute's own MiniMax-M3 call, factored
+// out as a plain function so jobsvc's image.comic4 Continuity Mode
+// (image_comic4.go) can call it synchronously at Create()-time — the same
+// "resolve before building the DAG" reasoning video_sequence.go's own
+// "smart" reference-selection mode already established, needed here
+// because each panel's own dependency chain is static per that file's
+// design, so the 4 panel texts must already be known strings before the
+// DAG can be built, not a Loop-distributed array the way Quick Mode's
+// image-comic4-auto.json still handles it. Returns nil panels (not an
+// error) only when the API call itself returned zero choices — every other
+// shape of a messy response is parsePanels' own job to salvage.
+func SplitStory(ctx context.Context, client *Client, story string) (panels []string, costYuan float64, err error) {
 	if r := []rune(story); len(r) > 2000 {
 		story = string(r[:2000])
 	}
@@ -72,7 +102,7 @@ func (p *StorySplitPlugin) Execute(ctx context.Context, req *executor.ExecuteReq
 	instruction := "请把下面这段剧情拆成恰好 4 个连续的漫画分镜画面描述。" +
 		"只输出 4 行画面描述，每行一格，不要编号、不要多余说明文字、不要空行。\n\n剧情：" + story
 
-	resp, err := p.client.ChatCompletion(ctx, ChatCompletionRequest{
+	resp, err := client.ChatCompletion(ctx, ChatCompletionRequest{
 		Model:               textModel,
 		Messages:            []ChatMessage{{Role: "user", Content: instruction}},
 		Temperature:         0.7,
@@ -84,25 +114,16 @@ func (p *StorySplitPlugin) Execute(ctx context.Context, req *executor.ExecuteReq
 		Thinking: &ThinkingConfig{Type: "disabled"},
 	})
 	if err != nil {
-		return classifyVideoError(err), nil
+		return nil, 0, err
 	}
 	if len(resp.Choices) == 0 {
-		return errOutputs(model.ExecCodeError, "empty choices from chat completion"), nil
+		return nil, 0, nil
 	}
 
-	panels := parsePanels(resp.Choices[0].Message.Content, story)
-	items := make([]map[string]string, len(panels))
-	for i, panelText := range panels {
-		items[i] = map[string]string{"prompt": panelText, "user-id": cfg.UserID, "source-image-asset-id": cfg.SourceImageAssetID}
-	}
-
-	costYuan := float64(resp.Usage.PromptTokens)/1_000_000*textInputYuanPerM +
+	panels = parsePanels(resp.Choices[0].Message.Content, story)
+	costYuan = float64(resp.Usage.PromptTokens)/1_000_000*textInputYuanPerM +
 		float64(resp.Usage.CompletionTokens)/1_000_000*textOutputYuanPerM
-
-	return executor.OutputFrom(struct {
-		Panels   []map[string]string `json:"panels"`
-		CostYuan float64             `json:"cost-yuan"`
-	}{Panels: items, CostYuan: costYuan})
+	return panels, costYuan, nil
 }
 
 // parsePanels defensively extracts exactly 4 non-empty lines from the

@@ -103,6 +103,12 @@ func (s *Service) createImageSequence(ctx context.Context, userID uint64, spec S
 		if i < len(spec.ShotSourceRefs) {
 			refIdx = spec.ShotSourceRefs[i]
 		}
+		if refIdx == 0 && i > 0 && spec.ImageSequenceMode == "continuity" {
+			// No manual override for this shot — Continuity Mode's own
+			// default fills in "the immediately preceding shot" instead of
+			// leaving it unreferenced (Spec.ImageSequenceMode's own doc).
+			refIdx = i // 1-based index of shot i (0-based loop var i == shot i's own 1-based predecessor)
+		}
 		plans[i] = imageShotPlan{
 			Index: i + 1, Prompt: compiled.Prompt, Seed: seedStr,
 			SourceImageAssetID: spec.SourceImageAssetID, RefShotIndex: refIdx,

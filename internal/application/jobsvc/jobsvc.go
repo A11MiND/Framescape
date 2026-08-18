@@ -20,6 +20,7 @@ import (
 	"aigc-platform/internal/domain/capability"
 	"aigc-platform/internal/domain/prompt"
 	"aigc-platform/internal/domain/workflow"
+	"aigc-platform/internal/infra/executor/minimax"
 	"aigc-platform/internal/infra/persistence"
 	"aigc-platform/internal/pkg/id"
 	workflowdefs "aigc-platform/workflows"
@@ -69,6 +70,17 @@ type Spec struct {
 	// server-side too) — a forward or self reference would be a real
 	// dependency cycle, not just tasteless.
 	ShotSourceRefs []int `json:"shot_source_refs,omitempty"`
+	// ImageSequenceMode mirrors Comic4Mode's own two-mode split, applied to
+	// image.sequence for the same reason: "甚至不只是四格漫畫" was explicit
+	// about this not being comic4-only. Empty/"quick" is the default and
+	// unchanged: shots stay fully independent unless a #-mention manually
+	// sets ShotSourceRefs. "continuity" changes only the *default* for a
+	// shot with no explicit override — it becomes the immediately preceding
+	// shot's own output instead of no reference at all — while a manual
+	// #-mention still wins either way (image_sequence.go's own
+	// createImageSequence resolves this, ShotSourceRefs' own "值得保留" ask
+	// applies here unchanged).
+	ImageSequenceMode string `json:"image_sequence_mode,omitempty"` // image.sequence only: "quick" (default) | "continuity"
 	Characters []CharacterSlot `json:"characters,omitempty"` // F3.2
 	PresetIDs  []string        `json:"preset_ids,omitempty"` // F4.3
 	Seed       *int64          `json:"seed,omitempty"`       // explicit override; else a bound character's fixed seed wins
@@ -81,6 +93,23 @@ type Spec struct {
 	// way they already share one seed (F5.5's "同 seed" reasoning extends
 	// unchanged to "同 reference").
 	SourceImageAssetID string `json:"source_image_asset_id,omitempty"`
+
+	// Comic4Mode is image.comic4's own two-mode split (§07 gap: 4 panels
+	// generated fully independently in parallel, sharing only a seed and
+	// character text, never actually looked coherent as one comic) — an
+	// explicit ask to keep both rather than replace one with the other:
+	// "兩套並存，就說兩種模式". Empty/"quick" is the default and is
+	// completely unchanged from before this field existed — still the
+	// static workflows/image-comic4.json / image-comic4-auto.json Loop,
+	// still 4 independent panels. "continuity" routes to a Go-generated DAG
+	// (image_comic4.go) where every panel after the first automatically
+	// references the immediately preceding panel's own output (image_
+	// generation's subject_reference is verified capped at exactly one
+	// image per call — video_sequence.go's package doc covers the same
+	// verification for the unrelated, much higher video r2va cap) and gets
+	// an H3-Context-IR-enriched prompt aware of the story so far, not just
+	// its own isolated text.
+	Comic4Mode string `json:"comic4_mode,omitempty"` // image.comic4 only: "quick" (default) | "continuity"
 
 	// video.single only (F6.1-F6.3; PRD §3.2). Exactly one of
 	// {FirstFrameAssetID, LastFrameAssetID} vs the three Reference*AssetIDs
@@ -128,16 +157,72 @@ type Spec struct {
 	// SourceImageAssetID wins — see video_sequence.go's characterRefAssetID
 	// resolution.
 	SourceVideoAssetID string `json:"source_video_asset_id,omitempty"` // video.sequence only
+
+	// NarrativeContinuity is video.sequence's opt-in upgrade to how r2va
+	// anchor shots get referenced (§07 gap: comic4/image.sequence/
+	// video.sequence's panel-to-panel consistency was too weak — same seed
+	// and character text, no real visual history). Off (default): an
+	// anchor shot still uses exactly one static reference (SourceImageAssetID/
+	// SourceVideoAssetID), identical to today's behavior. On: every anchor
+	// shot's reference becomes a real bundle built from the shots already
+	// generated earlier in this same job — most-recent full clips (as many
+	// as fit MiniMax's real reference_video budget: ≤3 clips, ≤15s combined,
+	// verified directly against the live API) plus their extracted
+	// keyframes plus the protagonist's own reference image — and that
+	// bundle, together with a running story outline, is run through
+	// MiniMax's H3-Context-IR (minimax.prompt_enhance, already wired for
+	// video.single as F6.10, now reused here) before the real r2va call, so
+	// the model is actually shown what happened rather than just told in
+	// one static image. See image_sequence_video.go's package doc for the
+	// full design and why this needed real API verification first.
+	NarrativeContinuity bool `json:"narrative_continuity,omitempty"` // video.sequence only
+
+	// ReferenceSelectionMode picks how an anchor shot's bundle gets built
+	// when NarrativeContinuity is on. Only three values are recognized;
+	// empty defaults to "window":
+	//   - "window": most-recent-first sliding window (the default) — packs
+	//     as many of the immediately preceding shots' clips as fit the
+	//     15s reference_video budget.
+	//   - "manual": ShotReferenceOverrides wins instead of the window —
+	//     the same "#-mention picks a specific earlier shot" UX
+	//     image.sequence's ShotSourceRefs already established, kept here
+	//     rather than replaced by the new automatic modes (an explicit ask:
+	//     "引用# 這個本身是個值得的功能，需要你保留").
+	//   - "smart": one MiniMax-M3 text call (reusing minimax.text.split_story's
+	//     own pattern) reads every shot's text up front and decides, per
+	//     anchor, which earlier shot(s) actually matter narratively —
+	//     instead of assuming "most recent" is always "most relevant".
+	ReferenceSelectionMode string `json:"reference_selection_mode,omitempty"` // video.sequence only
+
+	// ShotReferenceOverrides is video.sequence's own #-mention override,
+	// same shape and same backward-only rule as image.sequence's
+	// Spec.ShotSourceRefs: index i (0-based, matching Shots) holds the
+	// 1-based index of an earlier shot this shot should anchor on instead
+	// of whatever ReferenceSelectionMode would otherwise pick, or 0 for
+	// "no override". Meaningful in every mode, not just "manual" — window
+	// and smart both still let a caller pin one shot by hand without
+	// switching modes; "manual" just means *only* overrides are used, with
+	// no automatic window/smart fallback for shots that don't set one.
+	ShotReferenceOverrides []int `json:"shot_reference_overrides,omitempty"` // video.sequence only
 }
 
 type Service struct {
 	db      *gorm.DB
 	eng     workflow.Engine
 	credits *creditsvc.Service
+	// minimax backs exactly one synchronous call: video.sequence's "smart"
+	// reference-selection mode (Spec.ReferenceSelectionMode's own doc) needs
+	// one MiniMax-M3 chat completion, at Create()/Resume() time, to decide
+	// which earlier shots to reference — before any DAG exists for it to run
+	// as a task node instead. Every other MiniMax call in this codebase
+	// happens inside an executor (the worker process), never here; this is
+	// a narrow, deliberate exception, same class as cmd/api's own trial.go
+	// and cmd/scheduler's F8.3 post-hoc review.
+	minimax *minimax.Client
 }
 
-func New(db *gorm.DB, eng workflow.Engine, credits *creditsvc.Service) *Service {
-	return &Service{db: db, eng: eng, credits: credits}
+func New(db *gorm.DB, eng workflow.Engine, credits *creditsvc.Service, minimaxClient *minimax.Client) *Service {
+	return &Service{db: db, eng: eng, credits: credits, minimax: minimaxClient}
 }
 
 // Create submits a new Job: resolves any bound characters/presets, compiles
@@ -182,6 +267,12 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 		// old workflows/image-sequence.json) has no way to express — see
 		// image_sequence.go's package doc.
 		return s.createImageSequence(ctx, userID, spec, idemKey, projectID)
+	}
+	if workflowName == "image.comic4" && spec.Comic4Mode == "continuity" {
+		// Also dynamically generated, only for this one mode — "quick" (the
+		// default) keeps using the static file below entirely unchanged. See
+		// Spec.Comic4Mode's own doc and image_comic4.go's package doc.
+		return s.createImageComic4Continuity(ctx, userID, spec, idemKey, projectID)
 	}
 
 	defFile, ok := definitions[workflowName]
@@ -394,13 +485,24 @@ func EstimateCredits(workflowName string, spec Spec) (int, error) {
 		return creditsvc.EstimateImageCredits(n), nil
 	case "image.comic4":
 		switch {
-		case len(spec.Panels) == 4:
-			return creditsvc.EstimatePerNodeImageCredits(4), nil
-		case spec.Story != "":
-			return creditsvc.EstimatePerNodeImageCredits(4) + creditsvc.EstimateStorySplitCredits(), nil
+		case len(spec.Panels) == 4, spec.Story != "":
+			// nothing else to validate — the two sub-cases below only
+			// differ in cost, not in which shot count/story check applies.
 		default:
 			return 0, fmt.Errorf("image.comic4 requires exactly 4 panels, or a story to auto-split")
 		}
+		credits := creditsvc.EstimatePerNodeImageCredits(4)
+		if len(spec.Panels) != 4 && spec.Story != "" {
+			credits += creditsvc.EstimateStorySplitCredits()
+		}
+		if spec.Comic4Mode == "continuity" {
+			// Continuity Mode's own createImageComic4Continuity holds the
+			// same +4*EstimatePromptEnhanceCredits() — every panel gets
+			// enhanced (image_comic4.go's own doc), regardless of whether
+			// it's a static or chained reference.
+			credits += 4 * creditsvc.EstimatePromptEnhanceCredits()
+		}
+		return credits, nil
 	case "image.sequence":
 		if len(spec.Shots) == 0 {
 			return 0, fmt.Errorf("image.sequence requires at least 1 shot")
@@ -445,7 +547,11 @@ func EstimateCredits(workflowName string, spec Spec) (int, error) {
 		if spec.SkipPreview {
 			draftResolution = "2K"
 		}
-		return creditsvc.EstimateVideoCredits(duration, draftResolution) * len(spec.Shots), nil
+		credits := creditsvc.EstimateVideoCredits(duration, draftResolution) * len(spec.Shots)
+		if spec.NarrativeContinuity {
+			credits += countAnchorShots(len(spec.Shots), spec.RecalibrateEvery) * creditsvc.EstimatePromptEnhanceCredits()
+		}
+		return credits, nil
 	default:
 		return 0, fmt.Errorf("unknown workflow_name %q", workflowName)
 	}
@@ -506,6 +612,9 @@ func EstimateBreakdown(workflowName string, spec Spec) ([]EstimateItem, int, err
 		if spec.Story != "" && len(spec.Panels) != 4 {
 			items = append(items, EstimateItem{Kind: ItemKindStorySplit, Count: 1, Credits: creditsvc.EstimateStorySplitCredits()})
 		}
+		if spec.Comic4Mode == "continuity" {
+			items = append(items, EstimateItem{Kind: ItemKindPromptEnhance, Count: 4, Credits: 4 * creditsvc.EstimatePromptEnhanceCredits()})
+		}
 		return items, total, nil
 	case "image.sequence":
 		perShot := creditsvc.EstimatePerNodeImageCredits(1)
@@ -545,7 +654,12 @@ func EstimateBreakdown(workflowName string, spec Spec) ([]EstimateItem, int, err
 			resolution = "2K"
 		}
 		perShot := creditsvc.EstimateVideoCredits(duration, resolution)
-		return []EstimateItem{{Kind: kind, Count: n, Credits: perShot * n}}, total, nil
+		items := []EstimateItem{{Kind: kind, Count: n, Credits: perShot * n}}
+		if spec.NarrativeContinuity {
+			anchors := countAnchorShots(n, spec.RecalibrateEvery)
+			items = append(items, EstimateItem{Kind: ItemKindPromptEnhance, Count: anchors, Credits: anchors * creditsvc.EstimatePromptEnhanceCredits()})
+		}
+		return items, total, nil
 	default:
 		return nil, 0, fmt.Errorf("unknown workflow_name %q", workflowName)
 	}

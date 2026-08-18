@@ -91,6 +91,7 @@ func main() {
 	must(registry.Register(local.NewExtractFramesPlugin(sink, sink)), log)
 	must(registry.Register(local.NewGatePlugin()), log)
 	must(registry.Register(local.NewConcatPlugin(sink, sink)), log)
+	must(registry.Register(local.NewCollectRefsPlugin()), log)
 
 	redisOpt := cache.AsynqRedisOpt(config.RedisAddr())
 	asynqBroker := aetherengine.NewAsynqBroker(redisOpt)
@@ -108,8 +109,12 @@ func main() {
 	// jobsvc.Service here backs only upkeep's autoResumeSkipPreview duty
 	// (Resume's own doc) — the scheduler otherwise never touches jobsvc,
 	// same "one instance, narrow exception" reasoning as this file's own
-	// minimaxClient (F8.3's post-hoc review).
-	jobs := jobsvc.New(gormDB, eng, credits)
+	// minimaxClient (F8.3's post-hoc review). minimaxClient itself is passed
+	// through unchanged — jobsvc needs it for video.sequence's "smart"
+	// reference-selection mode (Spec.ReferenceSelectionMode's own doc), one
+	// synchronous MiniMax-M3 call at Create()/Resume() time, before any DAG
+	// exists to run it as a task node.
+	jobs := jobsvc.New(gormDB, eng, credits, minimaxClient)
 
 	// §11.4's Scheduler duties: suspended-timeout cleanup + credit
 	// reconciliation (see upkeep's package doc for which of the five listed

@@ -343,7 +343,23 @@
     "videoSequence": {
       "shotPlaceholder": "Segment {{n}} shot description",
       "anchorRef": "Anchor reference (for character anchoring — image or video)",
-      "anchorRefTooltip": "Reference material for r2va anchor shots — can be an image or a video; if none is picked, the bound character's own reference image is used"
+      "anchorRefTooltip": "Reference material for r2va anchor shots — can be an image or a video; if none is picked, the bound character's own reference image is used",
+      "linkedToShot": "Linked to segment {{n}}"
+    },
+    "narrativeContinuity": {
+      "label": "Narrative continuity (multi-reference + AI-enhanced prompts)",
+      "modeTooltip": "Window: auto-reference the last 1-2 anchor segments; Manual: only use the segments you # picked; Smart: AI decides which earlier segments each anchor should reference",
+      "mode": {
+        "window": "Window",
+        "manual": "Manual",
+        "smart": "Smart"
+      }
+    },
+    "consistencyMode": {
+      "quick": "Quick mode",
+      "quickTooltip": "Each image/segment generates independently — fast and cheap",
+      "continuity": "Continuity mode",
+      "continuityTooltip": "Automatically references the previous image/segment and rewrites the prompt with AI to keep the story coherent — slower and costs more"
     },
     "capsule": {
       "refMode": "Reference mode",
@@ -408,6 +424,7 @@
       "video": "video{{n}}",
       "image": "image{{n}}",
       "shot": "Image {{n}}",
+      "videoShot": "Segment {{n}}",
       "pickHint": "Pick an asset to reference",
       "shotPickHint": "Reference a shot in this batch",
       "empty": "No assets yet",

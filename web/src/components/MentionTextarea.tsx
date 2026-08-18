@@ -106,6 +106,7 @@ export function MentionTextarea({
   onMentionAsset,
   onMentionShot,
   siblingShots,
+  shotLabelKey = 'studio.mention.shot',
   rows = 3,
   placeholder,
   hintPhrases,
@@ -126,6 +127,12 @@ export function MentionTextarea({
   // that come before the one being edited — see ShotList, which is the only
   // caller that ever sets this.
   siblingShots?: { index: number; text: string }[]
+  // i18n key for a sibling shot's inserted token/button label — different
+  // callers use different vocabulary for "one unit of this batch"
+  // (image.sequence's own "张"/sheet vs video.sequence's "段"/segment), so
+  // this can't be a single hardcoded key. Defaults to image.sequence's own
+  // key since it was the first caller.
+  shotLabelKey?: string
   rows?: number
   // Static fallback placeholder (used as-is if hintPhrases isn't given).
   placeholder?: string
@@ -206,7 +213,7 @@ export function MentionTextarea({
 
   function pickShot(shotIndex: number) {
     const el = ref.current
-    const label = t('studio.mention.shot', { n: shotIndex })
+    const label = t(shotLabelKey, { n: shotIndex })
     if (el) {
       const pos = el.selectionStart
       const before = value.slice(0, pos)
@@ -279,7 +286,7 @@ export function MentionTextarea({
                     title={shot.text}
                     className="rounded-lg border border-zinc-800 px-2 py-1 text-xs text-zinc-300 transition hover:border-violet-500 hover:text-violet-300"
                   >
-                    {t('studio.mention.shot', { n: shot.index })}
+                    {t(shotLabelKey, { n: shot.index })}
                   </button>
                 ))}
               </div>
