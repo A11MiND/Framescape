@@ -68,8 +68,21 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/auth/register", s.handleRegister)
 		v1.POST("/auth/login", s.handleLogin)
 		v1.POST("/auth/refresh", s.handleRefresh)
+		// auth_oauth.go's own doc covers why these answer "not configured"
+		// (config.GoogleClientID()/SMSAPIKey() empty) rather than working.
+		v1.POST("/auth/google", s.handleGoogleLogin)
+		v1.POST("/auth/phone/send-code", s.handlePhoneSendCode)
+		v1.POST("/auth/phone/verify", s.handlePhoneVerify)
+		v1.POST("/auth/email/send-code", s.handleEmailSendCode)
 		v1.POST("/trial/image", s.handleTrialImage)
 		v1.GET("/capabilities", s.handleGetCapabilities)
+		// Public like every other unauthed route above — handleCommunityFeed's
+		// own doc already covers why this is the one asset list not scoped to
+		// a caller at all (never reads userID(c)), so requiring a token here
+		// was never protecting anything; it only blocked the login page's
+		// "browse the community first" link from working for a visitor who
+		// hasn't signed up yet.
+		v1.GET("/community/feed", s.handleCommunityFeed)
 
 		authed := v1.Group("")
 		authed.Use(s.requireAuth())
@@ -88,7 +101,6 @@ func (s *Server) Router() *gin.Engine {
 		authed.POST("/assets/upload-url", s.handleAssetUploadURL)
 		authed.POST("/assets/:bizID/complete", s.handleCompleteAsset)
 		authed.GET("/assets", s.handleListAssets)
-		authed.GET("/community/feed", s.handleCommunityFeed)
 		authed.GET("/community/streak", s.handleCommunityStreak)
 		authed.GET("/assets/:bizID", s.handleGetAsset)
 		authed.PATCH("/assets/:bizID", s.handleUpdateAsset)

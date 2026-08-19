@@ -1,26 +1,54 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { api, type CommunityAsset, type CommunityStreak } from '../lib/api'
+import { api, type AssetResponse, type CommunityAsset, type CommunityStreak } from '../lib/api'
+import { useAuthStore } from '../lib/authStore'
 import AppShell from '../components/AppShell'
+
+type Tab = 'feed' | 'mine'
 
 // §07's "社區功能：看別人做的作品，也可以發佈出去" ask — a masonry feed of
 // every published asset across every account (handleCommunityFeed's own
 // doc), same visual language as Assets.tsx's library grid but deliberately
 // its own page rather than a mode of that one: nothing here is the current
 // user's own to delete/reassign/download-in-bulk, so none of that surface
-// belongs on these cards. Clicking a card opens an inline lightbox instead
-// of navigating to /assets/:id — that route is strictly "WHERE user_id =
-// caller" (handleGetAsset's own doc, kept that way on purpose), so a
-// community item, owned by someone else, was never going to be viewable
-// there without either weakening that check or teaching the page to hide
-// owner-only actions for a stranger's asset. A local lightbox sidesteps
-// the question entirely instead of touching that boundary.
+// belongs on the "全部作品" cards. Clicking one of those opens an inline
+// lightbox instead of navigating to /assets/:id — that route is strictly
+// "WHERE user_id = caller" (handleGetAsset's own doc, kept that way on
+// purpose), so a community item, owned by someone else, was never going to
+// be viewable there. The "我发布的" tab is the opposite case — every card
+// there IS the caller's own asset, so it links straight to /assets/:id
+// (full management already lives there) and additionally gets its own
+// inline "撤销发布" button for the common one-off action, found missing
+// live: there was no way to see or manage your own published set without
+// remembering which individual assets you'd published and visiting each
+// one's own detail page.
 export default function Community() {
   const { t } = useTranslation()
-  const feed = useQuery({ queryKey: ['community', 'feed'], queryFn: () => api.listCommunityFeed(90) })
-  const streak = useQuery({ queryKey: ['community', 'streak'], queryFn: () => api.getCommunityStreak() })
+  const qc = useQueryClient()
+  const isGuest = !useAuthStore((s) => s.accessToken)
+  const [tab, setTab] = useState<Tab>('feed')
+  const feed = useQuery({ queryKey: ['community', 'feed'], queryFn: () => api.listCommunityFeed(90), enabled: tab === 'feed' })
+  const mine = useQuery({
+    queryKey: ['community', 'mine'],
+    queryFn: () => api.listAssets({ isPublic: true, limit: 90 }),
+    enabled: !isGuest && tab === 'mine',
+  })
+  // Both account-scoped, so neither means anything for a guest browsing
+  // in off the login page's link — handleCommunityStreak/handleListAssets
+  // (with is_public) both still sit behind requireAuth() server-side too,
+  // this is just the frontend not firing a call that would 401 anyway.
+  const streak = useQuery({ queryKey: ['community', 'streak'], queryFn: () => api.getCommunityStreak(), enabled: !isGuest })
   const [active, setActive] = useState<CommunityAsset | null>(null)
+
+  const unpublish = useMutation({
+    mutationFn: (bizId: string) => api.setAssetPublic(bizId, false),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['community', 'mine'] })
+      qc.invalidateQueries({ queryKey: ['community', 'feed'] })
+    },
+  })
 
   return (
     <AppShell>
@@ -32,28 +60,58 @@ export default function Community() {
 
         {streak.data && <StreakPanel streak={streak.data} />}
 
-        {feed.isSuccess && feed.data.assets.length === 0 && <p className="mt-6 text-zinc-500">{t('community.empty')}</p>}
+        {!isGuest && (
+          <div className="mb-4 flex gap-1 rounded-lg border border-zinc-800 bg-zinc-900 p-1 text-sm w-fit">
+            {(['feed', 'mine'] as const).map((tb) => (
+              <button
+                key={tb}
+                onClick={() => setTab(tb)}
+                className={`rounded-md px-3 py-1.5 transition ${
+                  tab === tb ? 'bg-violet-500 text-white' : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                {t(`community.tabs.${tb}`)}
+              </button>
+            ))}
+          </div>
+        )}
 
-        <div className="mt-6 columns-2 gap-3 sm:columns-3 lg:columns-4 [&>*]:mb-3">
-          {feed.data?.assets.map((a) => (
-            <button
-              key={a.biz_id}
-              onClick={() => setActive(a)}
-              className="group relative block w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 text-left transition hover:border-zinc-700"
-            >
-              {a.type === 'video' ? (
-                <video src={a.public_url} muted className="block max-h-96 w-full bg-black object-contain" />
-              ) : (
-                <img src={a.public_url} alt="" loading="lazy" className="block max-h-96 w-full object-cover" />
-              )}
-              {a.resolution_tag && (
-                <span className="absolute bottom-1.5 left-1.5 rounded bg-violet-500/80 px-1.5 py-0.5 font-mono text-[10px] font-medium text-white">
-                  {a.resolution_tag}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
+        {(isGuest || tab === 'feed') && (
+          <>
+            {feed.isSuccess && feed.data.assets.length === 0 && <p className="mt-6 text-zinc-500">{t('community.empty')}</p>}
+            <div className="columns-2 gap-3 sm:columns-3 lg:columns-4 [&>*]:mb-3">
+              {feed.data?.assets.map((a) => (
+                <button
+                  key={a.biz_id}
+                  onClick={() => setActive(a)}
+                  className="group relative block w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 text-left transition hover:border-zinc-700"
+                >
+                  {a.type === 'video' ? (
+                    <video src={a.public_url} muted className="block max-h-96 w-full bg-black object-contain" />
+                  ) : (
+                    <img src={a.public_url} alt="" loading="lazy" className="block max-h-96 w-full object-cover" />
+                  )}
+                  {a.resolution_tag && (
+                    <span className="absolute bottom-1.5 left-1.5 rounded bg-violet-500/80 px-1.5 py-0.5 font-mono text-[10px] font-medium text-white">
+                      {a.resolution_tag}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {tab === 'mine' && (
+          <>
+            {mine.isSuccess && mine.data.assets.length === 0 && <p className="mt-6 text-zinc-500">{t('community.mineEmpty')}</p>}
+            <div className="columns-2 gap-3 sm:columns-3 lg:columns-4 [&>*]:mb-3">
+              {mine.data?.assets.map((a) => (
+                <MineCard key={a.biz_id} asset={a} onUnpublish={() => unpublish.mutate(a.biz_id)} unpublishing={unpublish.isPending} />
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {active && (
@@ -84,7 +142,10 @@ export default function Community() {
 // StreakPanel surfaces handleCommunityStreak's read model — GetStatus's own
 // doc covers the milestone/cap rules this just renders. A milestone with
 // monthly_cap: 0 (currently only the 30-day one) never shows a used/cap
-// line since there's no cap to report.
+// line since there's no cap to report. (A full calendar view was tried
+// here and reverted — `grid-cols-7` + `aspect-square` cells stretched to
+// fill this page's max-w-5xl width, making every day cell enormous; product
+// call was to drop the calendar rather than fix its sizing.)
 function StreakPanel({ streak }: { streak: CommunityStreak }) {
   const { t } = useTranslation()
   return (
@@ -112,6 +173,33 @@ function StreakPanel({ streak }: { streak: CommunityStreak }) {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+function MineCard({ asset, onUnpublish, unpublishing }: { asset: AssetResponse; onUnpublish: () => void; unpublishing: boolean }) {
+  const { t } = useTranslation()
+  return (
+    <div className="group relative block w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
+      <Link to={`/assets/${asset.biz_id}`}>
+        {asset.type === 'video' ? (
+          <video src={asset.public_url} muted className="block max-h-96 w-full bg-black object-contain" />
+        ) : (
+          <img src={asset.public_url} alt="" loading="lazy" className="block max-h-96 w-full object-cover" />
+        )}
+      </Link>
+      {asset.resolution_tag && (
+        <span className="absolute bottom-1.5 left-1.5 rounded bg-violet-500/80 px-1.5 py-0.5 font-mono text-[10px] font-medium text-white">
+          {asset.resolution_tag}
+        </span>
+      )}
+      <button
+        onClick={onUnpublish}
+        disabled={unpublishing}
+        className="absolute right-1.5 top-1.5 rounded-lg bg-black/60 px-2 py-1 text-xs text-white opacity-0 backdrop-blur transition hover:bg-black/80 group-hover:opacity-100 disabled:opacity-100"
+      >
+        {t('community.unpublish')}
+      </button>
     </div>
   )
 }

@@ -65,6 +65,15 @@ func (s *Server) handleListAssets(c *gin.Context) {
 		}
 		q = q.Where("project_id = ?", projectID)
 	}
+	// ?is_public=true backs the community page's "我发布的" tab — the
+	// caller's own published assets, same ownership scope as every other
+	// filter here, just narrowed to the ones already flagged via
+	// handleUpdateAsset. Anything other than the literal "true" is ignored
+	// rather than treated as false, since "no filter" is this endpoint's
+	// existing default for every other query param too.
+	if c.Query("is_public") == "true" {
+		q = q.Where("is_public = ?", true)
+	}
 	// Full-text search (?q=): assets carry no title of their own, so the
 	// only searchable text is the generation prompt every image/video
 	// executor already writes to meta.prompt (image.go/video.go — uploaded
@@ -639,21 +648,5 @@ func (s *Server) assetDetailJSON(ctx context.Context, a persistence.Asset) gin.H
 			Scan(&jobBizID).Error
 	}
 	out["job_biz_id"] = jobBizID
-
-	// provider_files (migration 00003) is the MiniMax file_id cache that
-	// avoids re-uploading the same asset on every reference use (§9.2/F3.4)
-	// — it's existed since W4 but never had a read path of its own, so the
-	// UI had no way to show whether a given asset is currently cached. A
-	// missing row just means "never uploaded to MiniMax," not an error.
-	var pf persistence.ProviderFile
-	cached := s.db.WithContext(ctx).
-		Where("asset_id = ? AND provider_code = ?", a.ID, "minimax").
-		Order("id DESC").First(&pf).Error == nil
-	cacheInfo := gin.H{"cached": cached}
-	if cached {
-		cacheInfo["expire_at"] = pf.ExpireAt
-		cacheInfo["expired"] = pf.ExpireAt != nil && pf.ExpireAt.Before(time.Now())
-	}
-	out["provider_cache"] = cacheInfo
 	return out
 }

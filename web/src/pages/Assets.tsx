@@ -133,29 +133,29 @@ export default function Assets() {
     <AppShell>
       <div className="mx-auto max-w-5xl px-6 py-8">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-lg font-medium">{t('rail.assets')}</h1>
+          <h1 className="text-xl font-medium">{t('rail.assets')}</h1>
           <div className="flex flex-wrap items-center gap-3">
             {!showTrash && (
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={t('assets.searchPlaceholder')}
-                className="w-40 rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-violet-500"
+                className="w-44 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-[15px] text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-violet-500"
               />
             )}
             {!showTrash && selected.length > 0 && (
               <>
-                <span className="text-sm text-zinc-500">{t('assets.selectedCount', { count: selected.length })}</span>
+                <span className="text-[15px] text-zinc-500">{t('assets.selectedCount', { count: selected.length })}</span>
                 <button
                   onClick={() => batchDownload.mutate()}
                   disabled={batchDownload.isPending}
-                  className="rounded-lg bg-violet-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-violet-400 disabled:opacity-50"
+                  className="rounded-lg bg-violet-500 px-3.5 py-2 text-[15px] font-medium text-white transition hover:bg-violet-400 disabled:opacity-50"
                 >
                   {batchDownload.isPending ? t('assets.zipping') : t('assets.batchDownload')}
                 </button>
                 <button
                   onClick={() => setSelected([])}
-                  className="rounded-lg px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-900"
+                  className="rounded-lg px-3.5 py-2 text-[15px] text-zinc-400 hover:bg-zinc-900"
                 >
                   {t('assets.deselect')}
                 </button>
@@ -165,7 +165,7 @@ export default function Assets() {
               <select
                 value={projectId}
                 onChange={(e) => setProjectFilter(e.target.value)}
-                className="rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-300 outline-none focus:border-violet-500"
+                className="rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-2 text-[15px] text-zinc-300 outline-none focus:border-violet-500"
               >
                 <option value="">{t('assets.allProjects')}</option>
                 {projects.data?.projects.map((p) => (
@@ -181,7 +181,7 @@ export default function Assets() {
                   <button
                     key={f}
                     onClick={() => setFilter(f)}
-                    className={`rounded-lg px-3 py-1.5 text-sm transition ${
+                    className={`rounded-lg px-3.5 py-2 text-[15px] transition ${
                       filter === f
                         ? 'bg-violet-500/20 text-violet-300'
                         : 'text-zinc-400 hover:bg-zinc-900'
@@ -200,14 +200,14 @@ export default function Assets() {
                   }
                 }}
                 disabled={emptyTrash.isPending}
-                className="rounded-lg border border-red-900/50 px-3 py-1.5 text-sm text-red-400 transition hover:border-red-500 hover:bg-red-500/10 disabled:opacity-50"
+                className="rounded-lg border border-red-900/50 px-3.5 py-2 text-[15px] text-red-400 transition hover:border-red-500 hover:bg-red-500/10 disabled:opacity-50"
               >
                 {emptyTrash.isPending ? t('assets.emptyingTrash') : t('assets.emptyTrash')}
               </button>
             )}
             <button
               onClick={() => setShowTrash((cur) => !cur)}
-              className={`rounded-lg px-3 py-1.5 text-sm transition ${
+              className={`rounded-lg px-3.5 py-2 text-[15px] transition ${
                 showTrash ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-900'
               }`}
             >
@@ -231,7 +231,7 @@ export default function Assets() {
                   <button
                     onClick={() => restoreAsset.mutate(a.biz_id)}
                     disabled={restoreAsset.isPending}
-                    className="absolute right-2 top-2 z-10 rounded-full bg-violet-500 px-2.5 py-1 text-xs font-medium text-white opacity-0 transition hover:bg-violet-400 disabled:opacity-50 group-hover:opacity-100"
+                    className="absolute right-2 top-2 z-10 rounded-full bg-violet-500 px-3 py-1.5 text-sm font-medium text-white opacity-0 transition hover:bg-violet-400 disabled:opacity-50 group-hover:opacity-100"
                   >
                     {t('assets.restore')}
                   </button>
@@ -246,7 +246,7 @@ export default function Assets() {
                         {a.resolution_tag}
                       </span>
                     )}
-                    <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-zinc-300">
+                    <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-white">
                       {t('assets.daysLeft', { count: a.days_until_purge })}
                     </span>
                   </div>
@@ -288,7 +288,7 @@ export default function Assets() {
                   deleteAsset.mutate(a.biz_id)
                 }}
                 title={t('common.delete')}
-                className="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-xs text-zinc-300 opacity-0 transition hover:text-red-400 group-hover:opacity-100"
+                className="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-xs text-white opacity-0 transition hover:text-red-400 group-hover:opacity-100"
               >
                 ✕
               </button>
@@ -309,7 +309,7 @@ export default function Assets() {
                   </span>
                 )}
                 {a.width > 0 && a.height > 0 && (
-                  <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-zinc-300">
+                  <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-white">
                     {a.width}×{a.height}
                   </span>
                 )}
@@ -321,7 +321,7 @@ export default function Assets() {
                   setAssetProject.mutate({ bizId: a.biz_id, projectId: e.target.value || undefined })
                 }}
                 title={t('assets.assignToProject')}
-                className="absolute bottom-1.5 right-1.5 z-10 max-w-[92px] truncate rounded bg-black/60 px-1 py-0.5 text-[10px] text-zinc-300 opacity-0 outline-none transition group-hover:opacity-100"
+                className="absolute bottom-1.5 right-1.5 z-10 max-w-[92px] truncate rounded bg-black/60 px-1 py-0.5 text-[10px] text-white opacity-0 outline-none transition group-hover:opacity-100"
               >
                 <option value="">{t('assets.unassigned')}</option>
                 {projects.data?.projects.map((p) => (

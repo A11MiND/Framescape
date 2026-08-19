@@ -63,14 +63,14 @@ export default function App() {
           </RequireAuth>
         }
       />
-      <Route
-        path="/community"
-        element={
-          <RequireAuth>
-            <Community />
-          </RequireAuth>
-        }
-      />
+      {/* Guest-accessible like `/` — the login page's "browse the community
+          first" link (Login.tsx) needs somewhere to send a visitor who
+          hasn't signed up yet, and handleCommunityFeed's own read is
+          already caller-independent (see server.go's public-route doc).
+          Community.tsx itself degrades for guests the same way Studio.tsx
+          does: the streak panel and "我发布的" tab, both inherently
+          account-scoped, only render once there's an accessToken. */}
+      <Route path="/community" element={<Community />} />
       <Route
         path="/jobs"
         element={
