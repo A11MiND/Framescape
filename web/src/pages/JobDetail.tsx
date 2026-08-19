@@ -226,7 +226,7 @@ function ResultAsset({ assetId }: { assetId: string }) {
         target="_blank"
         rel="noreferrer"
         title={t('assetDetail.download')}
-        className="absolute right-1.5 top-1.5 rounded-lg bg-black/60 px-2 py-1 text-xs text-zinc-100 opacity-0 backdrop-blur transition group-hover:opacity-100"
+        className="absolute right-1.5 top-1.5 rounded-lg bg-black/60 px-2 py-1 text-xs text-white opacity-0 backdrop-blur transition group-hover:opacity-100"
       >
         ⬇
       </a>

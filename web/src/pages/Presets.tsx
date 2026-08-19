@@ -132,7 +132,7 @@ export default function Presets() {
                       onClick={() => del.mutate(p.biz_id)}
                       disabled={del.isPending && del.variables === p.biz_id}
                       title={t('common.delete')}
-                      className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-sm text-zinc-300 opacity-60 transition hover:text-red-400 hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-50"
+                      className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-sm text-white opacity-60 transition hover:text-red-400 hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-50"
                     >
                       ✕
                     </button>

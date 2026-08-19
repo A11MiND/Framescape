@@ -20,7 +20,6 @@ const META_LABEL_KEY: Record<string, string> = {
   seed: 'assetDetail.meta.seed',
   mode: 'assetDetail.meta.mode',
   layout: 'assetDetail.meta.layout',
-  minimax_task_id: 'assetDetail.meta.providerTaskId',
 }
 
 // F2.5's full asset detail: generation params (assets.meta, already written
@@ -77,13 +76,19 @@ export default function AssetDetail() {
   const frameAssetId = extractNode?.outputs?.['first-frame-asset-id'] as string | undefined
 
   const a = asset.data
-  // index/composed_from/mock are internal provenance (composed_from is the
-  // raw source-panel biz_id list local.compose writes for its own
-  // debugging, per compose.go's own Meta doc) — a user has no use for a
-  // comma-joined list of opaque IDs, so this stays a filter rather than
-  // finding it a label like every other field here already has.
-  const HIDDEN_META_KEYS = new Set(['index', 'composed_from', 'mock'])
-  const metaEntries = a?.meta ? Object.entries(a.meta).filter(([k]) => !HIDDEN_META_KEYS.has(k)) : []
+  // index/composed_from/mock/minimax_task_id are internal provenance
+  // (composed_from is the raw source-panel biz_id list local.compose
+  // writes for its own debugging, per compose.go's own Meta doc;
+  // minimax_task_id is the provider's own opaque request id) — a user has
+  // no use for any of these, so this stays a filter rather than finding
+  // them a label like every other field here already has. Entries with an
+  // empty value are dropped too — an executor writing `seed: ""` for a
+  // generation that had none rendered a "Seed" row with nothing after it,
+  // found live on a real asset.
+  const HIDDEN_META_KEYS = new Set(['index', 'composed_from', 'mock', 'minimax_task_id'])
+  const metaEntries = a?.meta
+    ? Object.entries(a.meta).filter(([k, v]) => !HIDDEN_META_KEYS.has(k) && v !== '' && v != null)
+    : []
 
   return (
     <AppShell>
@@ -120,22 +125,6 @@ export default function AssetDetail() {
                   {a.width}×{a.height}
                 </span>
                 <span className="rounded-full border border-zinc-700 px-2.5 py-0.5 text-xs text-zinc-400">{a.mime}</span>
-                {a.provider_cache && (
-                  <span
-                    title={t('assetDetail.providerCacheTooltip')}
-                    className={`rounded-full border px-2.5 py-0.5 text-xs ${
-                      a.provider_cache.cached && !a.provider_cache.expired
-                        ? 'border-emerald-700 text-emerald-400'
-                        : 'border-zinc-700 text-zinc-500'
-                    }`}
-                  >
-                    {a.provider_cache.cached && !a.provider_cache.expired
-                      ? t('assetDetail.cached')
-                      : a.provider_cache.cached
-                        ? t('assetDetail.cacheExpired')
-                        : t('assetDetail.notCached')}
-                  </span>
-                )}
                 <span className="text-xs text-zinc-600">
                   {new Date(a.created_at).toLocaleString(i18n.language === 'en' ? 'en-US' : 'zh-CN', {
                     dateStyle: 'medium',

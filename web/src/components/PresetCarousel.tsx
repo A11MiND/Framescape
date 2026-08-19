@@ -114,7 +114,7 @@ export default function PresetCarousel({
                       // touch-only devices (no persistent :hover), also
                       // caught in code review. group-focus-within covers
                       // keyboard users tabbing onto the button itself.
-                      className="absolute left-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-xs text-zinc-300 opacity-60 transition hover:text-red-400 hover:opacity-100 focus:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400 group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-50"
+                      className="absolute left-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-xs text-white opacity-60 transition hover:text-red-400 hover:opacity-100 focus:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400 group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-50"
                     >
                       ✕
                     </button>
