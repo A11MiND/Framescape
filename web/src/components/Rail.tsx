@@ -7,12 +7,43 @@ import { setStoredLang, type Lang } from '../i18n'
 import AnimatedNumber from './AnimatedNumber'
 import NotificationCenter from './NotificationCenter'
 
+// ☺/⚙/⏻ used to sit here as bare Unicode characters — all three have a
+// default *emoji* presentation on common platforms (a yellow smiley face, a
+// colorful gear, a colored power glyph), unlike the rest of this rail's
+// icons (◷▤▧◈⬡◍✦ are plain Geometric Shapes/Symbols with no emoji
+// rendering). Plain stroke SVGs instead, same convention Studio.tsx's own
+// TabIcon already uses for exactly this reason.
+function UserIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <circle cx="10" cy="6.5" r="3.25" />
+      <path d="M3.5 17c0-3.5 2.9-6 6.5-6s6.5 2.5 6.5 6" />
+    </svg>
+  )
+}
+function GearIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <circle cx="10" cy="10" r="2.75" />
+      <path d="M10 2.5v2M10 15.5v2M17.5 10h-2M4.5 10h-2M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4M15.3 15.3l-1.4-1.4M6.1 6.1L4.7 4.7" />
+    </svg>
+  )
+}
+function PowerIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M10 3v6" />
+      <path d="M5.5 5.8a6.2 6.2 0 1 0 9 0" />
+    </svg>
+  )
+}
+
 const LINKS = [
   { to: '/', labelKey: 'rail.generate', icon: '✦', end: true },
   { to: '/jobs', labelKey: 'rail.jobs', icon: '◷' },
   { to: '/assets', labelKey: 'rail.assets', icon: '▤' },
   { to: '/projects', labelKey: 'rail.projects', icon: '▧' },
-  { to: '/characters', labelKey: 'rail.characters', icon: '☺' },
+  { to: '/characters', labelKey: 'rail.characters', icon: null },
   { to: '/presets', labelKey: 'rail.presets', icon: '◈' },
   { to: '/community', labelKey: 'rail.community', icon: '⬡' },
 ]
@@ -69,7 +100,7 @@ export default function Rail() {
             }
           >
             <span className="relative text-base leading-none">
-              {l.icon}
+              {l.icon ?? <UserIcon className="mx-auto h-[15px] w-[15px]" />}
               {l.to === '/jobs' && runningBadge && (
                 <span className="absolute -right-2.5 -top-1.5 rounded-full bg-amber-500 px-1 text-[9px] font-medium leading-[14px] text-black">
                   {runningBadge}
@@ -105,14 +136,14 @@ export default function Rail() {
                 }`
               }
             >
-              ⚙
+              <GearIcon className="h-4 w-4" />
             </NavLink>
             <button
               onClick={logout}
               title={t('rail.logout')}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-zinc-800 text-xs text-zinc-500 transition hover:border-zinc-700 hover:text-zinc-300"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-zinc-800 text-zinc-500 transition hover:border-zinc-700 hover:text-zinc-300"
             >
-              ⏻
+              <PowerIcon className="h-4 w-4" />
             </button>
           </>
         ) : (

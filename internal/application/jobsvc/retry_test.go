@@ -19,7 +19,6 @@ func TestBuildRetryWorkflow(t *testing.T) {
 		callSiteName string
 		values       map[string]any
 	}{
-		{"comic4", "image-comic4", "gen-one-panel", "gen-one-panel", map[string]any{"prompt": "a corrected panel", "user-id": "7", "n": "1"}},
 		{"sequence", "", "gen-one-shot", "gen-one-shot", map[string]any{"prompt": "a corrected shot", "user-id": "7", "n": "1", "seed": "42"}},
 		// video.single is the one case where templateName != callSiteName
 		// (retryTemplateName's own doc) and the one with array-typed
@@ -123,9 +122,9 @@ func TestBuildRetryWorkflow(t *testing.T) {
 }
 
 func TestBuildRetryWorkflowUnknownTemplate(t *testing.T) {
-	raw, err := workflowdefs.FS.ReadFile("image-comic4.json")
+	raw, err := workflowdefs.FS.ReadFile("video-single.json")
 	if err != nil {
-		t.Fatalf("read image-comic4.json: %v", err)
+		t.Fatalf("read video-single.json: %v", err)
 	}
 	if _, err := buildRetryWorkflow(raw, "no-such-task", "no-such-task", nil); err == nil {
 		t.Fatal("expected an error for a template name that isn't a leaf task in the definition, got nil")

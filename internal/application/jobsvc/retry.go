@@ -26,16 +26,16 @@ import (
 // map is workflow_name -> a single node_name, not a pattern) whose inputs
 // are fully reconstructible from the job's own persisted Spec alone.
 // video.sequence's per-shot nodes were never eligible (each is its own
-// nested DAG, not a leaf task). image.sequence (F5.5's cross-shot-
-// referencing extension, image_sequence.go's own doc) isn't eligible either
-// as of that change: every shot is now its own distinctly-named "shot-N"
-// DAG task instead of "gen-one-shot" Loop iterations sharing one name +
-// loop_index, and a shot that references an earlier one needs that shot's
-// already-materialized asset id, not just its own Spec entry — the same
+// nested DAG, not a leaf task). image.sequence and image.comic4 (both their
+// own cross-shot/panel-chaining extensions, image_sequence.go's/
+// image_comic4.go's own package docs) aren't eligible either: every
+// shot/panel is now its own distinctly-named "shot-N"/"panel-N" DAG task
+// instead of Loop iterations sharing one name + loop_index, and one that
+// references an earlier shot/panel needs that shot/panel's already-
+// materialized asset id, not just its own Spec entry — the same
 // "genuinely doesn't fit this package's re-run-one-leaf-task model"
-// reasoning video.sequence's exclusion already documents.
+// reasoning video.sequence's own exclusion already documents.
 var retryableNodes = map[string]string{
-	"image.comic4": "gen-one-panel",
 	"video.single": "gen",
 }
 
@@ -48,7 +48,6 @@ var retryableNodes = map[string]string{
 // failed row — two different identifiers for the same node, so both maps
 // exist rather than conflating them.
 var retryTemplateName = map[string]string{
-	"image.comic4": "gen-one-panel",
 	"video.single": "gen-video",
 }
 
@@ -115,17 +114,6 @@ func (s *Service) RetryNode(ctx context.Context, userID uint64, bizID, nodeName 
 	var text string
 	var estimatedCredits int
 	switch job.WorkflowName {
-	case "image.comic4":
-		if loopIndex < 0 || loopIndex >= len(spec.Panels) {
-			return nil, fmt.Errorf("panel index %d out of range for %d panels", loopIndex, len(spec.Panels))
-		}
-		text = spec.Panels[loopIndex]
-		if promptOverride != "" {
-			text = promptOverride
-		}
-		compiled := prompt.Compile(prompt.Input{Text: text, Characters: characters, Presets: presets, Seed: spec.Seed})
-		values["prompt"] = compiled.Prompt
-		estimatedCredits = creditsvc.EstimatePerNodeImageCredits(1)
 	case "video.single":
 		if loopIndex != -1 {
 			return nil, fmt.Errorf("video.single's %q node is not a loop iteration, loop_index must be -1, got %d", nodeName, loopIndex)
@@ -242,10 +230,9 @@ func (s *Service) RetryNode(ctx context.Context, userID uint64, bizID, nodeName 
 // overwrites that parameter's literal `value` on the template itself; the
 // wrapping DAG's task invocation passes no `arguments` at all, relying on
 // Aether reading a template's own declared `value` as the default when the
-// caller supplies none for that parameter — the exact mechanism
-// image-comic4.json's own compose-grid task already relies on for its
-// literal "layout":"2x2" default. This needs zero {{...}} interpolation
-// anywhere.
+// caller supplies none for that parameter — the same mechanism image_
+// comic4.go's own genOnePanelTaskTemplate relies on for its literal
+// "n":"1" default. This needs zero {{...}} interpolation anywhere.
 func buildRetryWorkflow(defJSON []byte, templateName, callSiteName string, values map[string]any) ([]byte, error) {
 	var doc map[string]any
 	if err := json.Unmarshal(defJSON, &doc); err != nil {

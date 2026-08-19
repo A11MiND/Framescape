@@ -174,6 +174,18 @@ func (s *Server) handleCancelJob(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
+// handleDeleteJob is DELETE /api/v1/jobs/{bizID} — soft-deletes one job
+// record out of the user's own 作业 history. jobsvc.Service.Delete's own
+// doc covers why this is soft (deleted_at) and why only terminal jobs
+// qualify.
+func (s *Server) handleDeleteJob(c *gin.Context) {
+	if err := s.jobs.Delete(c.Request.Context(), userID(c), c.Param("bizID")); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, errBody("delete_failed", err.Error()))
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
 type retryNodeRequest struct {
 	LoopIndex      int    `json:"loop_index"`
 	PromptOverride string `json:"prompt_override,omitempty"`

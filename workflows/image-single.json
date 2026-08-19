@@ -4,7 +4,7 @@
   "metadata": {
     "name": "image-single",
     "annotations": {
-      "description": "F5.1 单图: PromptSpec.text -> workflow.parameters.prompt -> 1 次 minimax.image (n=1)。"
+      "description": "F5.1/F5.2 单图与批量出图已合并: 1 个 Task, n=1..9 (单次 MiniMax 调用出 1..9 张，n=1 时就是原本的单图), 不是 N 个并行 Task — 见 PRD §4.2 划分原则。image.batch 作为独立 workflow_name 已撤除，n 现在是 image.single 自己的可选参数。"
     }
   },
   "spec": {
@@ -13,8 +13,9 @@
       "parameters": [
         { "name": "prompt", "type": "string" },
         { "name": "seed", "type": "string" },
+        { "name": "source-image-asset-id", "type": "string" },
         { "name": "user-id", "type": "string" },
-        { "name": "source-image-asset-id", "type": "string" }
+        { "name": "n", "type": "string", "default": "1" }
       ]
     },
     "templates": [
@@ -29,8 +30,9 @@
                 "parameters": [
                   { "name": "prompt", "valueFrom": { "parameter": "workflow.parameters.prompt" } },
                   { "name": "seed", "valueFrom": { "parameter": "workflow.parameters.seed" } },
+                  { "name": "source-image-asset-id", "valueFrom": { "parameter": "workflow.parameters.source-image-asset-id" } },
                   { "name": "user-id", "valueFrom": { "parameter": "workflow.parameters.user-id" } },
-                  { "name": "source-image-asset-id", "valueFrom": { "parameter": "workflow.parameters.source-image-asset-id" } }
+                  { "name": "n", "valueFrom": { "parameter": "workflow.parameters.n" } }
                 ]
               }
             }
@@ -45,9 +47,9 @@
             "parameters": [
               { "name": "prompt", "type": "string" },
               { "name": "seed", "type": "string" },
+              { "name": "source-image-asset-id", "type": "string" },
               { "name": "user-id", "type": "string" },
-              { "name": "n", "type": "string", "value": "1" },
-              { "name": "source-image-asset-id", "type": "string" }
+              { "name": "n", "type": "string" }
             ]
           },
           "phaseConditions": {

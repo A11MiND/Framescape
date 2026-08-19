@@ -351,8 +351,9 @@ func EstimateImageCredits(n int) int {
 
 // EstimatePerNodeImageCredits is for workflows where each image is its own
 // independently-billed node — image.comic4/image.sequence's Loop issues one
-// minimax.image call per panel/shot, unlike image.batch's single call for
-// n images. Each node pays §12.2's "minimum 1 credit" floor on its own, so
+// minimax.image call per panel/shot, unlike image.single's single call for
+// n images (which also covers what used to be the separate image.batch
+// workflow_name). Each node pays §12.2's "minimum 1 credit" floor on its own, so
 // summing n independent floors is the correct hold estimate; using
 // EstimateImageCredits(n)'s single-combined-cost formula instead
 // undercounts whenever n separate floors exceed one batch floor (4 panels

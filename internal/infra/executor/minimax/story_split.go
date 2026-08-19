@@ -1,12 +1,15 @@
+// story_split.go is F5.4's auto-split: turns one story description into N
+// comic-panel scene descriptions via MiniMax-M3. image.comic4 always chains
+// panels now, so each panel's dependency chain is static and auto-split has
+// to resolve before the DAG is even built — SplitStory is called
+// synchronously from Go instead of running as a task. No DAG task wraps it,
+// so there's no executor.Plugin here, just the plain function.
 package minimax
 
 import (
 	"context"
 	"fmt"
 	"strings"
-
-	"github.com/BabySid/aether/executor"
-	"github.com/BabySid/aether/model"
 )
 
 // PRD doesn't price F5.4's text model (added after §12.1's pricing table was
@@ -18,95 +21,30 @@ const (
 	textOutputYuanPerM = 8.40
 )
 
-// StorySplitConfig is minimax.text.split_story's input contract (F5.4): one
-// story description in, exactly 4 panel prompts out.
-type StorySplitConfig struct {
-	Story  string `json:"story"`
-	UserID string `json:"user-id"`
-	// SourceImageAssetID rides along unchanged into every generated panel's
-	// item map (same "carries no meaning to this executor, just needs to
-	// reach minimax.image" reasoning as UserID above) — jobsvc.go's own doc
-	// on Spec.SourceImageAssetID covers why every image.* mode now accepts
-	// this the same way.
-	SourceImageAssetID string `json:"source-image-asset-id"`
-}
-
-// StorySplitPlugin is minimax.text.split_story: asks MiniMax-M3 to turn one
-// story description into 4 comic-panel scene descriptions, shaped as the
-// same [{prompt,user-id}, ...] object array image-comic4.json's Loop already
-// expects (jobsvc.go builds this identically for the manual-4-panels path;
-// see image-comic4-auto.json's annotation for why the object-array shape is
-// required). Deliberately does NOT run character/preset compilation on the
-// output — prompt.Compile() is a Go-side synchronous step this executor has
-// no access to, so the auto-split path trades character-consistency for not
-// having to hand-write 4 panels; combining both is a further enhancement
-// beyond F5.4's P1 scope.
-type StorySplitPlugin struct {
-	client *Client
-}
-
-func NewStorySplitPlugin(client *Client) *StorySplitPlugin {
-	return &StorySplitPlugin{client: client}
-}
-
-func (p *StorySplitPlugin) Type() string { return "minimax.text.split_story" }
-
-func (p *StorySplitPlugin) Schema() model.ExecutorSchema {
-	return executor.SchemaOf[StorySplitConfig, executor.DynamicOutputs](
-		"minimax.text.split_story", "1.0",
-		"F5.4: MiniMax-M3 splits one story description into exactly 4 comic-panel prompts",
-	)
-}
-
-func (p *StorySplitPlugin) Execute(ctx context.Context, req *executor.ExecuteRequest) (*model.ExecOutputs, error) {
-	var cfg StorySplitConfig
-	if err := executor.BindInputs(req.Inputs, &cfg); err != nil {
-		return nil, fmt.Errorf("bind minimax.text.split_story inputs: %w", err)
+// SplitStory asks MiniMax-M3 to turn one story description into exactly
+// count comic-panel scene descriptions. count is image.comic4's own
+// user-chosen panel count (§07 gap: "漫畫可以自己選數量" — no longer fixed
+// at 4). Returns nil panels (not an error) only when the API call itself
+// returned zero choices; every other shape of a messy response is
+// parsePanels' own job to salvage.
+func SplitStory(ctx context.Context, client *Client, story string, count int) (panels []string, costYuan float64, err error) {
+	if count < 1 {
+		count = 4
 	}
-
-	panels, costYuan, err := SplitStory(ctx, p.client, cfg.Story)
-	if err != nil {
-		return classifyVideoError(err), nil
-	}
-	if panels == nil {
-		return errOutputs(model.ExecCodeError, "empty choices from chat completion"), nil
-	}
-
-	items := make([]map[string]string, len(panels))
-	for i, panelText := range panels {
-		items[i] = map[string]string{"prompt": panelText, "user-id": cfg.UserID, "source-image-asset-id": cfg.SourceImageAssetID}
-	}
-
-	return executor.OutputFrom(struct {
-		Panels   []map[string]string `json:"panels"`
-		CostYuan float64             `json:"cost-yuan"`
-	}{Panels: items, CostYuan: costYuan})
-}
-
-// SplitStory is StorySplitPlugin.Execute's own MiniMax-M3 call, factored
-// out as a plain function so jobsvc's image.comic4 Continuity Mode
-// (image_comic4.go) can call it synchronously at Create()-time — the same
-// "resolve before building the DAG" reasoning video_sequence.go's own
-// "smart" reference-selection mode already established, needed here
-// because each panel's own dependency chain is static per that file's
-// design, so the 4 panel texts must already be known strings before the
-// DAG can be built, not a Loop-distributed array the way Quick Mode's
-// image-comic4-auto.json still handles it. Returns nil panels (not an
-// error) only when the API call itself returned zero choices — every other
-// shape of a messy response is parsePanels' own job to salvage.
-func SplitStory(ctx context.Context, client *Client, story string) (panels []string, costYuan float64, err error) {
 	if r := []rune(story); len(r) > 2000 {
 		story = string(r[:2000])
 	}
 
-	instruction := "请把下面这段剧情拆成恰好 4 个连续的漫画分镜画面描述。" +
-		"只输出 4 行画面描述，每行一格，不要编号、不要多余说明文字、不要空行。\n\n剧情：" + story
+	instruction := fmt.Sprintf(
+		"请把下面这段剧情拆成恰好 %d 个连续的漫画分镜画面描述。"+
+			"只输出 %d 行画面描述，每行一格，不要编号、不要多余说明文字、不要空行。\n\n剧情：%s",
+		count, count, story)
 
 	resp, err := client.ChatCompletion(ctx, ChatCompletionRequest{
 		Model:               textModel,
 		Messages:            []ChatMessage{{Role: "user", Content: instruction}},
 		Temperature:         0.7,
-		MaxCompletionTokens: 800,
+		MaxCompletionTokens: 200 * count,
 		// This task wants a short structured list, not chain-of-thought — see
 		// ThinkingConfig's doc for why this is required, not just an
 		// optimization (without it, reasoning text leaks into the parsed
@@ -120,20 +58,20 @@ func SplitStory(ctx context.Context, client *Client, story string) (panels []str
 		return nil, 0, nil
 	}
 
-	panels = parsePanels(resp.Choices[0].Message.Content, story)
+	panels = parsePanels(resp.Choices[0].Message.Content, story, count)
 	costYuan = float64(resp.Usage.PromptTokens)/1_000_000*textInputYuanPerM +
 		float64(resp.Usage.CompletionTokens)/1_000_000*textOutputYuanPerM
 	return panels, costYuan, nil
 }
 
-// parsePanels defensively extracts exactly 4 non-empty lines from the
+// parsePanels defensively extracts exactly count non-empty lines from the
 // model's free-text response — this endpoint has no JSON-mode guarantee, so
 // the model may still add numbering/bullets despite being asked not to.
 // Strips common leading markers, pads with the original story text if fewer
-// than 4 lines come back, and truncates if more do: a formatting slip should
-// never fail the task when 4 non-empty prompts is all image-comic4's Loop
-// actually needs.
-func parsePanels(content, fallback string) []string {
+// than count lines come back, and truncates if more do: a formatting slip
+// should never fail the job when count non-empty prompts is all image.
+// comic4 actually needs.
+func parsePanels(content, fallback string, count int) []string {
 	// Backstop for Thinking{Type:"disabled"}: strip any <think>...</think>
 	// block that still comes through (e.g. truncated by max_completion_tokens
 	// before the closing tag), same belt-and-braces pattern as this
@@ -154,10 +92,8 @@ func parsePanels(content, fallback string) []string {
 			lines = append(lines, line)
 		}
 	}
-	for len(lines) < 4 {
+	for len(lines) < count {
 		lines = append(lines, fallback)
 	}
-	return lines[:4]
+	return lines[:count]
 }
-
-var _ executor.Plugin = (*StorySplitPlugin)(nil)

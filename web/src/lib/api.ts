@@ -6,9 +6,11 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8080/api/v1'
 
 export class ApiError extends Error {
   code: string
-  constructor(code: string, message: string) {
+  status: number
+  constructor(code: string, message: string, status: number) {
     super(message)
     this.code = code
+    this.status = status
   }
 }
 
@@ -71,7 +73,7 @@ async function request<T>(
   }
   if (!resp.ok) {
     const data = await resp.json().catch(() => ({ code: 'unknown', message: resp.statusText }))
-    throw new ApiError(data.code ?? 'unknown', data.message ?? resp.statusText)
+    throw new ApiError(data.code ?? 'unknown', data.message ?? resp.statusText, resp.status)
   }
   if (resp.status === 204) return undefined as T
   return (await resp.json()) as T
@@ -209,13 +211,12 @@ export interface CharacterSlot {
 
 export interface Spec {
   text?: string
-  n?: number
-  panels?: string[]
-  story?: string // image.comic4 only, F5.4: auto-split into 4 panels instead of panels
+  n?: number // image.single only: also image.comic4's own auto-split panel count when no explicit panels are given (default 4)
+  panels?: string[] // image.comic4 only: 2..9 panel prompts, always chained panel-to-panel — no independent "quick" mode anymore
+  story?: string // image.comic4 only, F5.4: auto-split into n panels (default 4) instead of panels
   shots?: string[]
   shot_source_refs?: number[] // image.sequence only — cross-shot referencing, see jobsvc.go's Spec.ShotSourceRefs doc
   image_sequence_mode?: 'quick' | 'continuity' // image.sequence only — see jobsvc.go's Spec.ImageSequenceMode doc
-  comic4_mode?: 'quick' | 'continuity' // image.comic4 only — see jobsvc.go's Spec.Comic4Mode doc
   characters?: CharacterSlot[]
   preset_ids?: string[]
   seed?: number
@@ -242,8 +243,7 @@ export interface Spec {
 }
 
 export type WorkflowName =
-  | 'image.single'
-  | 'image.batch'
+  | 'image.single' // covers what used to be the separate image.batch workflow — n is just an optional field now
   | 'image.comic4'
   | 'image.sequence'
   | 'video.single'
@@ -381,6 +381,9 @@ export const api = {
   resumeJob: (bizId: string, body: ResumeVideoSequenceRequest) =>
     request<void>('POST', `/jobs/${bizId}/resume`, body),
   cancelJob: (bizId: string) => request<void>('POST', `/jobs/${bizId}/cancel`),
+  // Only terminal jobs (succeeded/failed/cancelled) can be deleted — the
+  // backend soft-deletes (jobsvc.Service.Delete's own doc).
+  deleteJob: (bizId: string) => request<void>('DELETE', `/jobs/${bizId}`),
   // Node-retry: supported for image.comic4's gen-one-panel and video.single's
   // gen (loopIndex -1 for that last one — it's not a loop iteration) —
   // jobsvc.RetryNode's own doc covers why video.sequence's and
@@ -430,6 +433,10 @@ export const api = {
   deleteAsset: (bizId: string) => request<void>('DELETE', `/assets/${bizId}`),
   listTrash: () => request<{ assets: TrashAsset[] }>('GET', '/assets/trash'),
   restoreAsset: (bizId: string) => request<void>('POST', `/assets/${bizId}/restore`),
+  // Permanent, unrecoverable — handleEmptyTrash's own doc. The one place in
+  // this app that should ask for confirmation before firing, since every
+  // other delete here is a reversible soft-delete.
+  emptyTrash: () => request<{ purged: number }>('POST', '/assets/trash/empty'),
   // projectId omitted (undefined) clears the assignment (clear_project:true) —
   // there's no "leave unchanged" case here since this call always means
   // "the user picked something in the project selector".
@@ -460,7 +467,7 @@ export const api = {
     }),
   uploadToPresignedURL: async (url: string, file: File): Promise<void> => {
     const resp = await fetch(url, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
-    if (!resp.ok) throw new ApiError('upload_failed', i18n.t('api.uploadFailed', { status: resp.status }))
+    if (!resp.ok) throw new ApiError('upload_failed', i18n.t('api.uploadFailed', { status: resp.status }), resp.status)
   },
   completeAsset: (bizId: string, body: { storage_key: string; width?: number; height?: number; duration_ms?: number }) =>
     request<AssetResponse>('POST', `/assets/${bizId}/complete`, body),
@@ -477,7 +484,7 @@ export const api = {
     })
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({ code: 'unknown', message: resp.statusText }))
-      throw new ApiError(data.code ?? 'unknown', data.message ?? resp.statusText)
+      throw new ApiError(data.code ?? 'unknown', data.message ?? resp.statusText, resp.status)
     }
     return resp.blob()
   },

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { statusToPhase, WORKFLOW_LABEL_KEY, type Tab } from '../lib/jobResult'
@@ -24,6 +24,7 @@ export default function Jobs() {
   const [status, setStatus] = useState('')
   const [projectId, setProjectId] = useState('')
   const projects = useQuery({ queryKey: ['projects'], queryFn: api.listProjects })
+  const qc = useQueryClient()
 
   const query = useInfiniteQuery({
     queryKey: ['jobs', status, projectId],
@@ -31,6 +32,14 @@ export default function Jobs() {
       api.listJobs({ status, cursor: pageParam, limit: 20, projectId: projectId || undefined }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.next_cursor,
+  })
+
+  // Soft-delete only (jobsvc.Service.Delete's own doc) — same "no confirm
+  // dialog, the row just disappears" pattern deleteAsset already uses,
+  // since it's reversible at the DB level even without a restore UI yet.
+  const deleteJob = useMutation({
+    mutationFn: (bizId: string) => api.deleteJob(bizId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
   })
 
   // §07's "掛起置頂 + 呼吸黃條" gap — a suspended job (video.sequence's
@@ -54,7 +63,7 @@ export default function Jobs() {
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-4xl px-6 py-8">
+      <div className="mx-auto max-w-5xl px-6 py-8">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-lg font-medium">{t('rail.jobs')}</h1>
           <div className="flex flex-wrap items-center gap-2">
@@ -97,7 +106,7 @@ export default function Jobs() {
               <Link
                 key={j.biz_id}
                 to={`/jobs/${j.biz_id}`}
-                className={`flex items-center gap-4 rounded-xl border px-4 py-3 transition ${
+                className={`group flex items-center gap-4 rounded-xl border px-4 py-3 transition ${
                   j.status === 'suspended'
                     ? 'animate-pulse border-amber-500/60 bg-amber-500/5 hover:border-amber-400'
                     : 'border-zinc-800 bg-zinc-900/60 hover:border-zinc-700'
@@ -128,6 +137,20 @@ export default function Jobs() {
                     <p className="text-zinc-600">{t('jobs.held', { count: j.credit_held - j.credit_settled })}</p>
                   )}
                 </div>
+                {(j.status === 'succeeded' || j.status === 'failed' || j.status === 'cancelled') && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      deleteJob.mutate(j.biz_id)
+                    }}
+                    title={t('common.delete')}
+                    className="shrink-0 rounded-full p-1 text-zinc-600 opacity-0 transition hover:text-red-400 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 group-hover:opacity-100"
+                  >
+                    ×
+                  </button>
+                )}
               </Link>
             )
           })}

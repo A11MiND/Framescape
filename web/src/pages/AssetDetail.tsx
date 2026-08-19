@@ -5,6 +5,15 @@ import { api } from '../lib/api'
 import AppShell from '../components/AppShell'
 import { useToast } from '../components/Toast'
 
+// Was ✏️ — plain stroke SVG instead, same reasoning as Studio.tsx's TabIcon.
+function EditIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M12.5 3.5l4 4-9 9H3.5v-4z" />
+    </svg>
+  )
+}
+
 const META_LABEL_KEY: Record<string, string> = {
   model: 'assetDetail.meta.model',
   prompt: 'assetDetail.meta.prompt',
@@ -68,7 +77,13 @@ export default function AssetDetail() {
   const frameAssetId = extractNode?.outputs?.['first-frame-asset-id'] as string | undefined
 
   const a = asset.data
-  const metaEntries = a?.meta ? Object.entries(a.meta).filter(([k]) => k !== 'index') : []
+  // index/composed_from/mock are internal provenance (composed_from is the
+  // raw source-panel biz_id list local.compose writes for its own
+  // debugging, per compose.go's own Meta doc) — a user has no use for a
+  // comma-joined list of opaque IDs, so this stays a filter rather than
+  // finding it a label like every other field here already has.
+  const HIDDEN_META_KEYS = new Set(['index', 'composed_from', 'mock'])
+  const metaEntries = a?.meta ? Object.entries(a.meta).filter(([k]) => !HIDDEN_META_KEYS.has(k)) : []
 
   return (
     <AppShell>
@@ -153,9 +168,10 @@ export default function AssetDetail() {
               {job.data && (
                 <button
                   onClick={regenerate}
-                  className="rounded-lg bg-violet-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-violet-400"
+                  className="flex items-center gap-1.5 rounded-lg bg-violet-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-violet-400"
                 >
-                  ✏️ {t('assetDetail.regenerateFromThis')}
+                  <EditIcon className="h-4 w-4" />
+                  {t('assetDetail.regenerateFromThis')}
                 </button>
               )}
               {a.type === 'image' && (

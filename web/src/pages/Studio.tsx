@@ -49,15 +49,16 @@ import { estimateWaitSeconds, formatWaitMinutes } from '../lib/durationEstimate'
 // six sidebar tabs. Every Spec field the old build could set, this one
 // still can — see the blueprint's capsule → Spec field table.
 
-const TAB_META_KEY: Record<Tab, { blurbKey: string }> = {
+// image.sequence has no top-level card of its own — it's reached through
+// image.single's own "单句/连续多段" sub-toggle below (still a distinct Tab
+// value everywhere else: job history, credit estimates, breakdown labels).
+const TAB_META_KEY: Record<Exclude<Tab, 'image.sequence'>, { blurbKey: string }> = {
   'image.single': { blurbKey: 'studio.tabMeta.imageSingle' },
-  'image.batch': { blurbKey: 'studio.tabMeta.imageBatch' },
   'image.comic4': { blurbKey: 'studio.tabMeta.imageComic4' },
-  'image.sequence': { blurbKey: 'studio.tabMeta.imageSequence' },
   'video.single': { blurbKey: 'studio.tabMeta.videoSingle' },
   'video.sequence': { blurbKey: 'studio.tabMeta.videoSequence' },
 }
-const TABS = Object.keys(TAB_META_KEY) as Tab[]
+const TABS = Object.keys(TAB_META_KEY) as Exclude<Tab, 'image.sequence'>[]
 const SLOT_LETTERS = 'ABCDEF'
 
 // Line-icon set for the format cards (§07's "不要用emoji" gap — same
@@ -73,13 +74,6 @@ function TabIcon({ tab, className }: { tab: Tab; className?: string }) {
           <rect x="2.5" y="3.5" width="15" height="13" rx="2" />
           <circle cx="7" cy="8" r="1.3" />
           <path d="M3.5 14.5l4-4 3 3 3.5-4.5 4.5 5.5" />
-        </svg>
-      )
-    case 'image.batch':
-      return (
-        <svg {...common}>
-          <rect x="6.5" y="2.5" width="11" height="11" rx="1.8" />
-          <rect x="2.5" y="6.5" width="11" height="11" rx="1.8" />
         </svg>
       )
     case 'image.comic4':
@@ -111,6 +105,52 @@ function TabIcon({ tab, className }: { tab: Tab; className?: string }) {
           <rect x="2.5" y="3" width="15" height="14" rx="1.5" />
           <path d="M2.5 6.7h15M2.5 13.3h15" />
           <path d="M8 8.7l4 1.8-4 1.8z" />
+        </svg>
+      )
+  }
+}
+
+// suggestActions' own SuggestedAction used to carry an emoji glyph per
+// action (🎬🔁☺✨⬆) — moved here as plain stroke SVGs, same reasoning as
+// TabIcon just above.
+function SuggestionIcon({ kind, className }: { kind: SuggestedAction['kind']; className?: string }) {
+  const common = { viewBox: '0 0 20 20', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, className }
+  switch (kind) {
+    case 'to-video':
+      return (
+        <svg {...common}>
+          <rect x="2.5" y="5" width="10.5" height="10" rx="1.5" />
+          <path d="M13 8.3l4.5-2.3v8l-4.5-2.3" />
+        </svg>
+      )
+    case 'more-batch':
+      return (
+        <svg {...common}>
+          <path d="M4 8a6 6 0 0 1 10.5-3.5M16 12a6 6 0 0 1-10.5 3.5" />
+          <path d="M14.5 4.5v3.5H11M5.5 15.5V12H9" />
+        </svg>
+      )
+    case 'save-character':
+    case 'save-frame-character':
+      return (
+        <svg {...common}>
+          <circle cx="10" cy="6.5" r="3" />
+          <path d="M4 17c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" />
+        </svg>
+      )
+    case 'to-sequence':
+      return (
+        <svg {...common}>
+          <rect x="1.75" y="8.25" width="3.5" height="3.5" rx="0.8" />
+          <rect x="8.25" y="8.25" width="3.5" height="3.5" rx="0.8" />
+          <rect x="14.75" y="8.25" width="3.5" height="3.5" rx="0.8" />
+          <path d="M5.25 10h3M11.75 10h3" />
+        </svg>
+      )
+    case 'upgrade-2k':
+      return (
+        <svg {...common}>
+          <path d="M10 16V4M5.5 8.5L10 4l4.5 4.5" />
         </svg>
       )
   }
@@ -153,9 +193,25 @@ function useProjects(enabled: boolean) {
 // ever fails) — kept identical to the backend's own capability package so
 // there's no visible flash of different options, just a source-of-truth
 // swap once the fetch lands. See lib/api.ts's getCapabilities doc.
-const FALLBACK_BATCH_N = [2, 4, 6, 9]
+const FALLBACK_IMAGE_N = [1, 2, 4, 6, 9]
 const FALLBACK_DURATIONS = [4, 5, 6, 8, 10, 12, 15]
 const FALLBACK_RESOLUTIONS = ['768P', '2K']
+// image.comic4's panel-count lower bound — mirrors the backend's own
+// minComic4Panels (image_comic4.go's comic4PanelCount). The upper bound
+// reuses capabilities.image.max_n (same cap image.single's own n uses),
+// see comic4MaxPanels below.
+const minComic4Panels = 2
+// Manual comic4 panels are one continuous textarea split by a line of 3+
+// dashes, rather than N separate boxes with add/remove buttons — one
+// textarea to write and read top-to-bottom, splitting where you choose,
+// beats jumping between N little disconnected fields.
+const PANEL_SEPARATOR_RE = /-{3,}/
+function splitPanels(text: string): string[] {
+  return text
+    .split(PANEL_SEPARATOR_RE)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
 
 export default function Studio() {
   const { t } = useTranslation()
@@ -165,9 +221,10 @@ export default function Studio() {
   const location = useLocation()
 
   const capabilities = useQuery({ queryKey: ['capabilities'], queryFn: api.getCapabilities, staleTime: Infinity })
-  const batchNOptions = capabilities.data
-    ? FALLBACK_BATCH_N.filter((v) => v <= capabilities.data.image.max_n)
-    : FALLBACK_BATCH_N
+  const imageNOptions = capabilities.data
+    ? FALLBACK_IMAGE_N.filter((v) => v <= capabilities.data.image.max_n)
+    : FALLBACK_IMAGE_N
+  const comic4MaxPanels = capabilities.data?.image.max_n ?? 9
   const durationOptions = capabilities.data
     ? FALLBACK_DURATIONS.filter((v) => v >= capabilities.data.video.duration_min && v <= capabilities.data.video.duration_max)
     : FALLBACK_DURATIONS
@@ -180,8 +237,10 @@ export default function Studio() {
   // time (§07 gap: found live during review). studio.examples.rooftop
   // already covers the same job as a real placeholder below.
   const [text, setText] = useState('')
-  const [n, setN] = useState(4)
-  const [panels, setPanels] = useState(['', '', '', ''])
+  const [n, setN] = useState(1)
+  const [panelsText, setPanelsText] = useState('')
+  const manualPanelCount = splitPanels(panelsText).length
+  const panelsTextareaRef = useRef<HTMLTextAreaElement>(null)
   const [shots, setShots] = useState([''])
   // image.sequence's cross-shot referencing (Spec.ShotSourceRefs' own doc):
   // parallel array to shots, null/0 = no reference, else the 1-based index
@@ -203,7 +262,7 @@ export default function Studio() {
   // 1500-char image prompt budget, so an unbounded list would just start
   // silently losing characters to the compiler's own trim step.
   const MAX_CHARACTER_SLOTS = 6
-  const [characterSlotIds, setCharacterSlotIds] = useState<string[]>(['', ''])
+  const [characterSlotIds, setCharacterSlotIds] = useState<string[]>([])
   const [presetIds, setPresetIds] = useState<string[]>([])
   const [bizId, setBizId] = useState<string | null>(null)
   const [projectId, setProjectId] = useState('')
@@ -225,15 +284,15 @@ export default function Studio() {
   const [promptEnhance, setPromptEnhance] = useState(false)
   // image.single-only state (F5.8): optional image-to-image source.
   const [sourceImageId, setSourceImageId] = useState('')
-  // image.comic4-only state (F5.4).
+  // image.comic4-only state (F5.4). Every panel always chains to the one
+  // before it (jobsvc.go's Spec.Comic4Mode doc: the old quick/continuity
+  // toggle was removed along with Quick Mode itself — there's only one
+  // mode now).
   const [comicMode, setComicMode] = useState<'manual' | 'auto'>('manual')
   const [story, setStory] = useState('')
-  // comic4's 快速/連貫模式 toggle (jobsvc.go's Spec.Comic4Mode doc) —
-  // independent of comicMode above (manual/auto is about *where the text
-  // comes from*, quick/continuity is about *how consistent the 4 images
-  // are*, the two axes are orthogonal).
-  const [comic4Mode, setComic4Mode] = useState<'quick' | 'continuity'>('quick')
-  // image.sequence's own equivalent toggle (Spec.ImageSequenceMode doc).
+  // image.sequence's own quick/continuity toggle (Spec.ImageSequenceMode
+  // doc) — unlike comic4, image.sequence keeps both modes since its
+  // #-mention override needs a real "off" state to fall back to.
   const [imageSequenceMode, setImageSequenceMode] = useState<'quick' | 'continuity'>('quick')
 
   // video.sequence-only state (F6.7/F6.8).
@@ -241,13 +300,17 @@ export default function Studio() {
   const [vsDuration, setVsDuration] = useState(5)
   const [vsRatio, setVsRatio] = useState<(typeof RATIO_VALUES)[number]>('16:9')
   const [vsRecalibrateEvery, setVsRecalibrateEvery] = useState(3)
-  const [vsSkipPreview, setVsSkipPreview] = useState(false)
+  // Defaults to skipping the 768P preview stage — direct-to-2K is now the
+  // expected result, not an opt-in trade of cost protection for speed
+  // (video_sequence.go's own doc on what SkipPreview actually changes).
+  // The checkbox below inverts this to read as "preview first" (opt-in,
+  // unchecked by default) rather than "skip preview" (opt-out, which would
+  // have to default checked — a checked-by-default checkbox reads as an
+  // unusual state and is easy to miss).
+  const [vsSkipPreview, setVsSkipPreview] = useState(true)
   // Narrative-continuity feature (Spec.NarrativeContinuity doc): off by
   // default, matches every existing job's behavior exactly. refMode picks
-  // how an anchor's bundle gets built once narrativeContinuity is on —
-  // mirrors video.single's own refMode selector's binary-choice UX
-  // (Seedance's own pattern the user pointed at), just three options
-  // instead of two.
+  // how an anchor's bundle gets built once narrativeContinuity is on.
   const [narrativeContinuity, setNarrativeContinuity] = useState(false)
   const [vsReferenceSelectionMode, setVsReferenceSelectionMode] = useState<'window' | 'manual' | 'smart'>('window')
   // video.sequence's own #-mention override (Spec.ShotReferenceOverrides
@@ -284,22 +347,22 @@ export default function Studio() {
     setBizId(null)
 
     const boundIds = (spec.characters ?? []).map((c) => c.character_id)
-    setCharacterSlotIds(boundIds.length ? boundIds : ['', ''])
+    setCharacterSlotIds(boundIds)
     setPresetIds(spec.preset_ids ?? [])
 
-    if (workflowName === 'image.single' || workflowName === 'image.batch') {
+    if (workflowName === 'image.single') {
       setText(spec.text ?? '')
-      if (spec.n) setN(spec.n)
+      setN(spec.n ?? 1)
       setSourceImageId(spec.source_image_asset_id ?? '')
     } else if (workflowName === 'image.comic4') {
-      if (spec.panels?.length === 4) {
+      if (spec.panels && spec.panels.length >= minComic4Panels) {
         setComicMode('manual')
-        setPanels(spec.panels)
+        setPanelsText(spec.panels.join('\n---\n'))
       } else if (spec.story) {
         setComicMode('auto')
         setStory(spec.story)
+        setN(spec.n ?? 4)
       }
-      setComic4Mode(spec.comic4_mode === 'continuity' ? 'continuity' : 'quick')
     } else if (workflowName === 'image.sequence') {
       const restoredShots = spec.shots?.length ? spec.shots : ['']
       setShots(restoredShots)
@@ -345,6 +408,17 @@ export default function Studio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state])
 
+  // n is shared with image.single's own batch-count selector, whose
+  // default (1) sits below comic4's minComic4Panels floor — keep the
+  // auto-split panel-count selector's underlying value in sync with what
+  // it actually renders (imageNOptions filtered to >= minComic4Panels)
+  // whenever the user switches into comic4's auto mode.
+  useEffect(() => {
+    if (tab === 'image.comic4' && comicMode === 'auto' && n < minComic4Panels) {
+      setN(4)
+    }
+  }, [tab, comicMode, n])
+
   const me = useMe(!isGuest)
   const characters = useCharacters(!isGuest)
   const presets = usePresets(!isGuest)
@@ -358,7 +432,8 @@ export default function Studio() {
   // which the disabled save button below already prevents from being hit).
   const savePreset = useMutation({
     mutationFn: () => {
-      const fragment = tab === 'video.single' ? vText : tab === 'image.comic4' ? (comicMode === 'auto' ? story : panels[0]) : text
+      const fragment =
+        tab === 'video.single' ? vText : tab === 'image.comic4' ? (comicMode === 'auto' ? story : (splitPanels(panelsText)[0] ?? '')) : text
       return api.createPreset({ name: newPresetName, prompt_fragment: fragment, style_type: styleFilter || undefined })
     },
     onSuccess: () => {
@@ -464,18 +539,18 @@ export default function Studio() {
       characters: characterSlots?.length ? characterSlots : undefined,
       preset_ids: presetIds.length ? presetIds : undefined,
     }
-    if (tab === 'image.single' || tab === 'image.batch') {
+    if (tab === 'image.single') {
       spec.text = text
-      if (tab === 'image.batch') spec.n = n
+      if (n > 1) spec.n = n
       if (sourceImageId) spec.source_image_asset_id = sourceImageId
     } else if (tab === 'image.comic4') {
       if (comicMode === 'auto') {
         spec.story = story
+        spec.n = n
       } else {
-        spec.panels = panels
+        spec.panels = splitPanels(panelsText)
       }
       if (sourceImageId) spec.source_image_asset_id = sourceImageId
-      if (comic4Mode === 'continuity') spec.comic4_mode = 'continuity'
     } else if (tab === 'image.sequence') {
       // Blank shots get dropped, which shifts every later shot's position —
       // filterShotsWithRefs renumbers shotSourceRefs' 1-based indices (and
@@ -530,10 +605,8 @@ export default function Studio() {
   // pricing ever changes server-side.
   const localEstimateGuess =
     tab === 'image.single'
-      ? estimateImageCredits(1)
-      : tab === 'image.batch'
-        ? estimateImageCredits(n)
-        : tab === 'image.comic4'
+      ? estimateImageCredits(n)
+      : tab === 'image.comic4'
           ? estimateImageCredits(4) + (comicMode === 'auto' ? estimateStorySplitCredits() : 0)
           : tab === 'image.sequence'
             ? estimateImageCredits(shots.filter((s) => s.trim()).length || 1)
@@ -663,27 +736,52 @@ export default function Studio() {
         </header>
 
         {/* ── Format quick-switch cards ──────────────────────────── */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          {TABS.map((tb) => (
-            <button
-              key={tb}
-              onClick={() => setTab(tb)}
-              className={`rounded-xl border p-3 text-left transition ${
-                tab === tb ? 'border-violet-500 bg-violet-500/10' : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700'
-              }`}
-            >
-              <TabIcon tab={tb} className={`h-5 w-5 ${tab === tb ? 'text-violet-400' : 'text-zinc-500'}`} />
-              <p className={`mt-1.5 text-sm font-medium ${tab === tb ? 'text-violet-300' : 'text-zinc-200'}`}>
-                {t(WORKFLOW_LABEL_KEY[tb])}
-              </p>
-              <p className="mt-0.5 text-xs text-zinc-500">{t(TAB_META_KEY[tb].blurbKey)}</p>
-            </button>
-          ))}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {TABS.map((tb) => {
+            // image.sequence rides along under the "单图" card (its own
+            // sub-toggle below picks between the two) — highlight that card
+            // for both underlying Tab values, not just an exact match.
+            const active = tab === tb || (tb === 'image.single' && tab === 'image.sequence')
+            return (
+              <button
+                key={tb}
+                onClick={() => setTab(tb)}
+                className={`rounded-xl border p-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+                  active ? 'border-violet-500 bg-violet-500/10' : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700'
+                }`}
+              >
+                <TabIcon tab={tb} className={`h-5 w-5 ${active ? 'text-violet-400' : 'text-zinc-500'}`} />
+                <p className={`mt-1.5 text-sm font-medium ${active ? 'text-violet-300' : 'text-zinc-200'}`}>
+                  {t(WORKFLOW_LABEL_KEY[tb])}
+                </p>
+                <p className="mt-0.5 text-xs text-zinc-500">{t(TAB_META_KEY[tb].blurbKey)}</p>
+              </button>
+            )
+          })}
         </div>
 
         {/* ── Composer ─────────────────────────────────────────── */}
         <div className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
-          {(tab === 'image.single' || tab === 'image.batch') && (
+          {(tab === 'image.single' || tab === 'image.sequence') && (
+            <div className="flex gap-2 text-sm">
+              {([
+                ['image.single', 'studio.imageMode.single'],
+                ['image.sequence', 'studio.imageMode.sequence'],
+              ] as const).map(([mode, labelKey]) => (
+                <button
+                  key={mode}
+                  onClick={() => setTab(mode)}
+                  className={`rounded-lg border px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+                    tab === mode ? 'border-violet-500 bg-violet-500/10 text-violet-300' : 'border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                  }`}
+                >
+                  {t(labelKey)}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {tab === 'image.single' && (
             <div>
               <MentionTextarea
                 value={text}
@@ -726,52 +824,66 @@ export default function Studio() {
               <div className="flex gap-2 text-sm">
                 <button
                   onClick={() => setComicMode('manual')}
-                  className={`rounded-lg px-3 py-1.5 ${comicMode === 'manual' ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-950'}`}
+                  className={`rounded-lg px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${comicMode === 'manual' ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-950'}`}
                 >
                   {t('studio.comic.manual')}
                 </button>
                 <button
                   onClick={() => setComicMode('auto')}
-                  className={`rounded-lg px-3 py-1.5 ${comicMode === 'auto' ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-950'}`}
+                  className={`rounded-lg px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${comicMode === 'auto' ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-950'}`}
                   title={t('studio.comic.autoTooltip')}
                 >
                   {t('studio.comic.auto')}
                 </button>
               </div>
 
-              {/* Orthogonal to manual/auto above: that picks where the text
-                  comes from, this picks how consistent the 4 resulting
-                  images look (jobsvc.go's Spec.Comic4Mode doc). */}
-              <div className="flex gap-2 text-sm">
-                {(['quick', 'continuity'] as const).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setComic4Mode(m)}
-                    title={t(`studio.consistencyMode.${m}Tooltip`)}
-                    className={`rounded-lg border px-3 py-1.5 ${
-                      comic4Mode === m ? 'border-violet-500 bg-violet-500/10 text-violet-300' : 'border-zinc-800 text-zinc-400 hover:border-zinc-700'
-                    }`}
-                  >
-                    {t(`studio.consistencyMode.${m}`)}
-                  </button>
-                ))}
-              </div>
-
+              {/* Every panel always chains to the one before it and gets an
+                  H3-enriched prompt — comic4's old "快速模式" (fully
+                  independent panels) was removed entirely, not just demoted
+                  (jobsvc.go's Spec.Comic4Mode doc / image_comic4.go's
+                  package doc: "沒有參考前圖的...一點用都沒有"). Panel count
+                  is no longer fixed at 4 either — manual mode lets you add/
+                  remove panels; auto-split reuses the same n selector
+                  image.single's own batch count uses. */}
               {comicMode === 'manual' ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {panels.map((p, i) => (
-                    <MentionTextarea
-                      key={i}
-                      value={p}
-                      onChange={(v) => setPanels((cur) => cur.map((c, ci) => (ci === i ? v : c)))}
-                      rows={3}
-                      className="text-sm"
-                      hintPhrases={[t('studio.comic.panelPlaceholder', { n: i + 1 })]}
-                    />
-                  ))}
+                <div className="space-y-2">
+                  <MentionTextarea
+                    ref={panelsTextareaRef}
+                    value={panelsText}
+                    onChange={setPanelsText}
+                    rows={8}
+                    hintPhrases={[t('studio.comic.panelsPlaceholder')]}
+                  />
+                  <div className="flex items-center justify-between text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPanelsText((cur) => cur.replace(/\s*$/, '') + '\n---\n')
+                        // Clicking this button moves DOM focus off the
+                        // textarea — hand it back, caret at the end, so the
+                        // next keystroke continues where the user left off
+                        // instead of landing wherever focus happened to be
+                        // (same pattern MentionTextarea's own pick() uses).
+                        requestAnimationFrame(() => {
+                          const el = panelsTextareaRef.current
+                          if (el) {
+                            el.focus()
+                            el.setSelectionRange(el.value.length, el.value.length)
+                          }
+                        })
+                      }}
+                      disabled={!panelsText.trim()}
+                      className="rounded text-violet-400 hover:text-violet-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:cursor-not-allowed disabled:text-zinc-700"
+                    >
+                      {t('studio.comic.insertSeparator')}
+                    </button>
+                    <span className={manualPanelCount > 0 && (manualPanelCount < minComic4Panels || manualPanelCount > comic4MaxPanels) ? 'text-amber-400' : 'text-zinc-500'}>
+                      {t('studio.comic.detectedCount', { n: manualPanelCount })}
+                    </span>
+                  </div>
                 </div>
               ) : (
-                <div>
+                <div className="space-y-3">
                   <MentionTextarea
                     value={story}
                     onChange={setStory}
@@ -779,6 +891,18 @@ export default function Studio() {
                     hintPhrases={[t('studio.comic.storyPlaceholder')]}
                   />
                   <CharCount value={story} max={capabilities.data?.image.max_prompt_chars} />
+                  <Capsule>
+                    <span className="text-zinc-500">{t('studio.comic.panelCount')}</span>
+                    <select value={n} onChange={(e) => setN(Number(e.target.value))} className="bg-transparent text-zinc-100 outline-none">
+                      {imageNOptions
+                        .filter((v) => v >= minComic4Panels)
+                        .map((v) => (
+                          <option key={v} value={v} className="bg-zinc-900">
+                            {v}
+                          </option>
+                        ))}
+                    </select>
+                  </Capsule>
                 </div>
               )}
             </div>
@@ -792,7 +916,7 @@ export default function Studio() {
                     key={m}
                     onClick={() => setImageSequenceMode(m)}
                     title={t(`studio.consistencyMode.${m}Tooltip`)}
-                    className={`rounded-lg border px-3 py-1.5 ${
+                    className={`rounded-lg border px-3 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
                       imageSequenceMode === m ? 'border-violet-500 bg-violet-500/10 text-violet-300' : 'border-zinc-800 text-zinc-400 hover:border-zinc-700'
                     }`}
                   >
@@ -839,25 +963,6 @@ export default function Studio() {
               </div>
 
               <div>
-                <Capsule>
-                  <span className="text-zinc-500">{t('studio.capsule.refMode')}</span>
-                  <select
-                    value={refMode}
-                    onChange={(e) => setRefModeAndClear(e.target.value as RefMode)}
-                    className="bg-transparent text-zinc-100 outline-none"
-                  >
-                    <option value="none" className="bg-zinc-900">
-                      {t('studio.refMode.none')}
-                    </option>
-                    <option value="firstLast" className="bg-zinc-900">
-                      {t('studio.refMode.firstLast')}
-                    </option>
-                    <option value="reference" className="bg-zinc-900">
-                      {t('studio.refMode.reference')}
-                    </option>
-                  </select>
-                </Capsule>
-
                 {refMode === 'firstLast' && (
                   <div className="mt-3 space-y-2">
                     <div>
@@ -907,15 +1012,6 @@ export default function Studio() {
                 )}
               </div>
 
-              <label className="flex items-center gap-2 text-sm text-zinc-400" title={t('studio.promptEnhanceTooltip')}>
-                <input
-                  type="checkbox"
-                  checked={promptEnhance}
-                  onChange={(e) => setPromptEnhance(e.target.checked)}
-                  className="accent-violet-500"
-                />
-                {t('studio.promptEnhance', { cost: estimatePromptEnhanceCredits() })}
-              </label>
             </div>
           )}
 
@@ -981,32 +1077,21 @@ export default function Studio() {
                 <p className="text-xs text-amber-500">{t('studio.driftWarning', { n: vsRecalibrateEvery })}</p>
               )}
 
-              <div className="pt-2">
-                <Capsule>
-                  <span className="text-zinc-500">{t('studio.narrativeContinuity.label')}</span>
-                  <input
-                    type="checkbox"
-                    checked={narrativeContinuity}
-                    onChange={(e) => setNarrativeContinuity(e.target.checked)}
-                    className="accent-violet-500"
-                  />
-                </Capsule>
-                {narrativeContinuity && (
-                  <div className="mt-2 flex flex-wrap gap-1.5" title={t('studio.narrativeContinuity.modeTooltip')}>
-                    {(['window', 'manual', 'smart'] as const).map((m) => (
-                      <button
-                        key={m}
-                        onClick={() => setVsReferenceSelectionMode(m)}
-                        className={`rounded-lg px-3 py-1.5 text-sm transition ${
-                          vsReferenceSelectionMode === m ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-900'
-                        }`}
-                      >
-                        {t(`studio.narrativeContinuity.mode.${m}`)}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {narrativeContinuity && (
+                <div className="flex flex-wrap gap-1.5 pt-2" title={t('studio.narrativeContinuity.modeTooltip')}>
+                  {(['window', 'manual', 'smart'] as const).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setVsReferenceSelectionMode(m)}
+                      className={`rounded-lg px-3 py-1.5 text-sm transition ${
+                        vsReferenceSelectionMode === m ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-400 hover:bg-zinc-900'
+                      }`}
+                    >
+                      {t(`studio.narrativeContinuity.mode.${m}`)}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div className="pt-2">
                 <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500" title={t('studio.videoSequence.anchorRefTooltip')}>
@@ -1044,13 +1129,13 @@ export default function Studio() {
 
           {/* ── Capsule parameter row ──────────────────────────── */}
           <div className="flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-4">
-            {tab === 'image.batch' && (
+            {tab === 'image.single' && (
               <Capsule>
                 <span className="text-zinc-500">{t('studio.capsule.count')}</span>
                 <select value={n} onChange={(e) => setN(Number(e.target.value))} className="bg-transparent text-zinc-100 outline-none">
-                  {batchNOptions.map((v) => (
+                  {imageNOptions.map((v) => (
                     <option key={v} value={v} className="bg-zinc-900">
-                      n={v}
+                      {v}
                     </option>
                   ))}
                 </select>
@@ -1111,6 +1196,41 @@ export default function Studio() {
               </Capsule>
             )}
 
+            {tab === 'video.single' && (
+              <Capsule>
+                <span className="text-zinc-500">{t('studio.capsule.refMode')}</span>
+                <select
+                  value={refMode}
+                  onChange={(e) => setRefModeAndClear(e.target.value as RefMode)}
+                  className="bg-transparent text-zinc-100 outline-none"
+                >
+                  <option value="none" className="bg-zinc-900">
+                    {t('studio.refMode.none')}
+                  </option>
+                  <option value="firstLast" className="bg-zinc-900">
+                    {t('studio.refMode.firstLast')}
+                  </option>
+                  <option value="reference" className="bg-zinc-900">
+                    {t('studio.refMode.reference')}
+                  </option>
+                </select>
+              </Capsule>
+            )}
+
+            {tab === 'video.single' && (
+              <Capsule title={t('studio.promptEnhanceTooltip')}>
+                <label className="flex cursor-pointer items-center gap-1.5 text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={promptEnhance}
+                    onChange={(e) => setPromptEnhance(e.target.checked)}
+                    className="accent-violet-500"
+                  />
+                  {t('studio.promptEnhance', { cost: estimatePromptEnhanceCredits() })}
+                </label>
+              </Capsule>
+            )}
+
             {tab === 'video.sequence' && (
               <>
                 <Capsule>
@@ -1137,16 +1257,25 @@ export default function Studio() {
                     ))}
                   </select>
                 </Capsule>
-                <Capsule title={t('studio.capsule.skipPreviewTooltip')}>
+                <Capsule title={t('studio.capsule.previewFirstTooltip')}>
                   <label className="flex cursor-pointer items-center gap-1.5 text-zinc-300">
                     <input
                       type="checkbox"
-                      checked={vsSkipPreview}
-                      onChange={(e) => setVsSkipPreview(e.target.checked)}
+                      checked={!vsSkipPreview}
+                      onChange={(e) => setVsSkipPreview(!e.target.checked)}
                       className="accent-violet-500"
                     />
-                    {t('studio.capsule.skipPreview')}
+                    {t('studio.capsule.previewFirst')}
                   </label>
+                </Capsule>
+                <Capsule>
+                  <span className="text-zinc-500">{t('studio.narrativeContinuity.label')}</span>
+                  <input
+                    type="checkbox"
+                    checked={narrativeContinuity}
+                    onChange={(e) => setNarrativeContinuity(e.target.checked)}
+                    className="accent-violet-500"
+                  />
                 </Capsule>
               </>
             )}
@@ -1163,16 +1292,14 @@ export default function Studio() {
                       }
                       options={characters.data?.characters ?? []}
                     />
-                    {characterSlotIds.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => setCharacterSlotIds((cur) => cur.filter((_, cur_i) => cur_i !== i))}
-                        title={t('common.delete')}
-                        className="text-zinc-600 transition hover:text-red-400"
-                      >
-                        ✕
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setCharacterSlotIds((cur) => cur.filter((_, cur_i) => cur_i !== i))}
+                      title={t('common.delete')}
+                      className="text-zinc-600 transition hover:text-red-400"
+                    >
+                      ✕
+                    </button>
                   </Capsule>
                 ))}
                 {characterSlotIds.length < MAX_CHARACTER_SLOTS && (
@@ -1409,9 +1536,10 @@ export default function Studio() {
                     <button
                       key={s.kind}
                       onClick={() => applySuggestion(s)}
-                      className="rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-200 transition hover:border-violet-500 hover:text-violet-300"
+                      className="flex items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-200 transition hover:border-violet-500 hover:text-violet-300"
                     >
-                      {s.icon} {s.label}
+                      <SuggestionIcon kind={s.kind} className="h-3.5 w-3.5" />
+                      {s.label}
                     </button>
                   ))}
                 </div>

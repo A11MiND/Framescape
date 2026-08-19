@@ -1,41 +1,29 @@
-// image_comic4.go implements image.comic4's "連貫模式" (Continuity Mode) —
-// see Spec.Comic4Mode's own doc for why both modes coexist rather than one
-// replacing the other ("兩套並存，就說兩種模式" was an explicit ask, and
-// naming both was left to this implementation). "快速模式" (Quick Mode, the
-// default, empty Comic4Mode) is completely unchanged from before this file
-// existed: still the static workflows/image-comic4.json /
-// image-comic4-auto.json Loop, still 4 fully independent panels — Create()
-// only routes here when Comic4Mode is explicitly "continuity".
+// image_comic4.go implements image.comic4 (F5.3): a Go-generated DAG where
+// every panel after the first automatically chains to the immediately
+// preceding panel's own output and gets an H3-Context-IR-enriched prompt
+// aware of the story so far. There is only one mode — the independent-panel
+// "quick mode" that used to coexist with this has been removed. Panel count
+// is not fixed at 4: any count from minComic4Panels to capability.ImageMaxN
+// is accepted, manual or auto-split.
 //
-// Continuity Mode needs a Go-generated DAG for the same reason
-// image_sequence.go's cross-shot referencing does: panel 2's own subject_
-// reference needs to be panel 1's runtime-produced asset id, which
-// Aether's Loop primitive can't express (only a flat itemsFrom list, same
-// limitation video_sequence.go's own package doc covers). Unlike image.
-// sequence's optional per-shot #-reference, every panel here automatically
-// chains to the immediately preceding panel — matching the ask's own
-// wording ("根據上一頁的內容...的一致性"). The real generation call
-// (minimax.image) only ever gets one reference image regardless: image_
-// generation's subject_reference is verified capped at exactly one per
-// call (a real call, real error 2013 "image_reference must be one" —
-// video_sequence.go's package doc covers the same verification for the
-// *video* r2va endpoint's much higher, unrelated cap), so there is no
-// equivalent to video.sequence's multi-image bundle at the image_
-// generation layer. MiniMax's H3-Context-IR (minimax.prompt_enhance) is
-// used purely as a text-prompt writer here — its own input can still see
-// the single chained reference image (via local.collect_refs, the same
-// intermediate step video.sequence needs whenever a scalar fromTask value
-// has to become a one-element array), so H3 sees the running story
-// outline, this panel's own directed text, and that one reference image,
-// and its output text becomes the real image_generation call's prompt.
+// This needs a Go-generated DAG for the same reason image_sequence.go's
+// cross-shot referencing does: panel 2's own subject_reference has to be
+// panel 1's runtime-produced asset id, which Aether's Loop primitive can't
+// express (only a flat itemsFrom list). image_generation's subject_
+// reference is capped at exactly one reference image per call, so there is
+// no equivalent to video.sequence's multi-image bundle here. MiniMax's
+// H3-Context-IR (minimax.prompt_enhance) is used purely as a text-prompt
+// writer — its input can still see the single chained reference image (via
+// local.collect_refs, which turns a scalar fromTask value into a
+// one-element array), so H3 sees the running story outline, this panel's
+// own directed text, and that one reference image, and its output text
+// becomes the real image_generation call's prompt.
 //
-// Auto-split (Spec.Story, no Panels) needs all 4 panel texts resolved
-// *before* the DAG can be built, unlike Quick Mode's image-comic4-auto.json
-// (a Loop distributes one array element per independent iteration, which
-// has no equivalent for "panel 2 needs panel 1's own future output" chains)
-// — so Continuity Mode calls minimax.SplitStory synchronously in Go here,
-// the same "resolve before building the DAG" reasoning video_sequence.go's
-// own "smart" reference-selection mode already established.
+// Auto-split (Spec.Story, no Panels) needs all N panel texts resolved
+// before the DAG can be built, since a Loop distributing one array element
+// per independent iteration has no equivalent for "panel 2 needs panel 1's
+// own future output" chains — so this calls minimax.SplitStory
+// synchronously in Go before building the workflow JSON.
 package jobsvc
 
 import (
@@ -47,6 +35,7 @@ import (
 	"time"
 
 	"aigc-platform/internal/application/creditsvc"
+	"aigc-platform/internal/domain/capability"
 	"aigc-platform/internal/domain/prompt"
 	"aigc-platform/internal/domain/workflow"
 	"aigc-platform/internal/infra/executor/minimax"
@@ -54,31 +43,72 @@ import (
 	"aigc-platform/internal/pkg/id"
 )
 
+// minComic4Panels is the low end of "漫畫可以自己選數量" — 1 panel isn't a
+// comic (and wouldn't need compose-grid at all), so 2 is the real floor.
+const minComic4Panels = 2
+
 type panelPlan struct {
-	Index   int // 1-based, 1..4
+	Index   int // 1-based, 1..N
 	Prompt  string
 	RawText string
+	Seed    string
 }
 
-func (s *Service) createImageComic4Continuity(ctx context.Context, userID uint64, spec Spec, idemKey string, projectID *uint64) (*persistence.Job, error) {
+// comic4PanelCount answers "how many panels will this job actually run" for
+// EstimateCredits/EstimateBreakdown, which are pure functions with no
+// DB/MiniMax access and so can't know an auto-split call's real returned
+// count in advance — Spec.N (or a default of 4) is the best estimate
+// available, erring toward over-estimating rather than under-holding.
+func comic4PanelCount(spec Spec) (int, error) {
+	if len(spec.Panels) >= minComic4Panels {
+		if len(spec.Panels) > capability.ImageMaxN {
+			return 0, fmt.Errorf("image.comic4 supports at most %d panels, got %d", capability.ImageMaxN, len(spec.Panels))
+		}
+		return len(spec.Panels), nil
+	}
+	if spec.Story != "" {
+		n := spec.N
+		if n < minComic4Panels {
+			n = 4
+		}
+		if n > capability.ImageMaxN {
+			n = capability.ImageMaxN
+		}
+		return n, nil
+	}
+	return 0, fmt.Errorf("image.comic4 requires at least %d panels, or a story to auto-split", minComic4Panels)
+}
+
+func (s *Service) createImageComic4(ctx context.Context, userID uint64, spec Spec, idemKey string, projectID *uint64) (*persistence.Job, error) {
 	panelTexts := spec.Panels
 	splitCost := 0
-	if len(panelTexts) != 4 {
-		if spec.Story == "" {
-			return nil, fmt.Errorf("image.comic4 requires exactly 4 panels, or a story to auto-split")
+	switch {
+	case len(panelTexts) >= minComic4Panels:
+		if len(panelTexts) > capability.ImageMaxN {
+			return nil, fmt.Errorf("image.comic4 supports at most %d panels, got %d", capability.ImageMaxN, len(panelTexts))
 		}
+	case spec.Story != "":
 		if s.minimax == nil {
 			return nil, fmt.Errorf("story auto-split is unavailable in this deployment")
 		}
+		count := spec.N
+		if count < minComic4Panels {
+			count = 4 // auto-split's default panel count
+		}
+		if count > capability.ImageMaxN {
+			count = capability.ImageMaxN
+		}
 		var err error
-		panelTexts, _, err = minimax.SplitStory(ctx, s.minimax, spec.Story)
+		panelTexts, _, err = minimax.SplitStory(ctx, s.minimax, spec.Story, count)
 		if err != nil {
 			return nil, fmt.Errorf("split story into panels: %w", err)
 		}
-		if len(panelTexts) != 4 {
-			return nil, fmt.Errorf("story split returned %d panels, want 4", len(panelTexts))
+		if len(panelTexts) != count {
+			return nil, fmt.Errorf("story split returned %d panels, want %d", len(panelTexts), count)
 		}
 		splitCost = creditsvc.EstimateStorySplitCredits()
+	default:
+		return nil, fmt.Errorf("image.comic4 requires at least %d panels, or a story to auto-split", minComic4Panels)
 	}
 
 	characters, err := s.resolveCharacters(ctx, userID, spec.Characters)
@@ -90,43 +120,41 @@ func (s *Service) createImageComic4Continuity(ctx context.Context, userID uint64
 		return nil, err
 	}
 
-	plans := make([]panelPlan, 4)
+	plans := make([]panelPlan, len(panelTexts))
 	for i, text := range panelTexts {
 		compiled := prompt.Compile(prompt.Input{Text: text, Characters: characters, Presets: presets, Seed: spec.Seed})
-		plans[i] = panelPlan{Index: i + 1, Prompt: compiled.Prompt, RawText: text}
+		plans[i] = panelPlan{Index: i + 1, Prompt: compiled.Prompt, RawText: text, Seed: formatSeed(compiled.Seed)}
 	}
 
-	wfJSON := buildComic4ContinuityWorkflow(plans, spec.SourceImageAssetID)
+	wfJSON := buildComic4Workflow(plans, spec.SourceImageAssetID)
 
 	specJSON, err := json.Marshal(spec)
 	if err != nil {
 		return nil, fmt.Errorf("marshal spec: %w", err)
 	}
 
-	// Every panel gets enhanced in Continuity Mode (this file's own doc) —
-	// 4 minimax.image calls plus 4 minimax.prompt_enhance calls, plus the
-	// sync split cost if auto-split ran.
-	estimatedCredits := creditsvc.EstimatePerNodeImageCredits(4) + 4*creditsvc.EstimatePromptEnhanceCredits() + splitCost
+	// One minimax.image call plus one minimax.prompt_enhance call per
+	// panel, plus the split cost if auto-split ran.
+	estimatedCredits := creditsvc.EstimatePerNodeImageCredits(len(plans)) + len(plans)*creditsvc.EstimatePromptEnhanceCredits() + splitCost
 	bizID := id.New()
 	if err := s.credits.Hold(ctx, userID, "job:"+bizID+":hold", "job", bizID, estimatedCredits, "job", "image.comic4"); err != nil {
 		return nil, fmt.Errorf("hold credits: %w", err)
 	}
 
 	args := map[string]any{"user-id": strconv.FormatUint(userID, 10)}
-	runID, err := s.eng.Submit(ctx, &workflow.Definition{Name: "image-comic4-continuity", JSON: wfJSON}, args)
+	runID, err := s.eng.Submit(ctx, &workflow.Definition{Name: "image-comic4", JSON: wfJSON}, args)
 	if err != nil {
 		_ = s.credits.Refund(ctx, userID, "job:"+bizID+":refund", bizID, estimatedCredits)
 		return nil, fmt.Errorf("submit workflow: %w", err)
 	}
 
-	title := plans[0].RawText
 	job := &persistence.Job{
 		BizID:           bizID,
 		UserID:          userID,
 		ProjectID:       projectID,
 		WorkflowName:    "image.comic4",
 		WorkflowRunID:   string(runID),
-		Title:           truncate(title, 128),
+		Title:           truncate(plans[0].RawText, 128),
 		Status:          "running",
 		Spec:            specJSON,
 		CreditEstimated: estimatedCredits,
@@ -148,6 +176,7 @@ func genOnePanelTaskTemplate() map[string]any {
 			map[string]any{"name": "source-image-asset-id", "type": "string"},
 			map[string]any{"name": "user-id", "type": "string"},
 			map[string]any{"name": "n", "type": "string", "value": "1"},
+			map[string]any{"name": "seed", "type": "string", "value": ""},
 		}},
 		"phaseConditions": map[string]any{
 			"succeeded": `outputs.parameters["success-count"] == outputs.parameters["requested-n"]`,
@@ -165,14 +194,33 @@ func enhancePanelTaskTemplate() map[string]any {
 	}
 }
 
-// buildComic4ContinuityWorkflow chains panel 1 -> panel 2 -> panel 3 ->
-// panel 4, each (optionally, always in practice — every panel gets
-// Enhance) preceded by an enhance-panel-N node whose single reference image
-// is the same one the real gen-one-panel-N call uses: staticSourceAssetID
-// for panel 1 (may be empty), the immediately preceding panel's own
-// asset-id for panels 2-4.
-func buildComic4ContinuityWorkflow(plans []panelPlan, staticSourceAssetID string) []byte {
-	mainTasks := make([]any, 0, len(plans)*3+1)
+// padCollectRefsArgs fills whatever image/video slots a caller didn't
+// already build with empty literals, so every collect-refs call site
+// supplies all collectRefsImageSlots+maxReferenceVideoClips declared
+// inputs regardless of how many are actually meaningful — an omitted
+// Aether argument's bound Value is zero-length bytes, which fails
+// BindInputs' json.Unmarshal downstream. imageArgs must already be built
+// as image-1, image-2, ... in that order (each caller here only ever fills
+// a sequential prefix, never a gap).
+func padCollectRefsArgs(imageArgs, videoArgs []any) []any {
+	args := append([]any{}, imageArgs...)
+	for i := len(imageArgs); i < collectRefsImageSlots; i++ {
+		args = append(args, literal(fmt.Sprintf("image-%d", i+1), ""))
+	}
+	args = append(args, videoArgs...)
+	for i := len(videoArgs); i < maxReferenceVideoClips; i++ {
+		args = append(args, literal(fmt.Sprintf("video-%d", i+1), ""))
+	}
+	return args
+}
+
+// buildComic4Workflow chains panel 1 -> panel 2 -> ... -> panel N, each
+// preceded by an enhance-panel-N node whose single reference image is the
+// same one the real gen-one-panel-N call uses: staticSourceAssetID for
+// panel 1 (may be empty), the immediately preceding panel's own asset-id
+// for every later panel.
+func buildComic4Workflow(plans []panelPlan, staticSourceAssetID string) []byte {
+	mainTasks := make([]any, 0, len(plans)*3+2)
 
 	for _, p := range plans {
 		panelName := fmt.Sprintf("panel-%d", p.Index)
@@ -194,20 +242,14 @@ func buildComic4ContinuityWorkflow(plans []panelPlan, staticSourceAssetID string
 		default:
 			// panel-(N-1)'s own "asset-id" output is a scalar string, but
 			// enhance-panel's reference-image-asset-ids is declared type
-			// array — Aether has no scalar-to-array coercion (a raw JSON
-			// string bound into a []string field fails BindInputs' own
-			// json.Unmarshal), so local.collect_refs bridges it into a real
-			// one-element array, the same intermediate-collecting step
-			// buildBundleTasks (video_sequence.go) already needed for a
-			// multi-element version of the same problem.
+			// array — Aether has no scalar-to-array coercion, so
+			// local.collect_refs bridges it into a real one-element array.
 			prevPanel := fmt.Sprintf("panel-%d", p.Index-1)
 			mainTasks = append(mainTasks, map[string]any{
 				"name": collectName, "template": "collect-refs", "dependencies": []string{prevPanel},
-				"arguments": map[string]any{"parameters": []any{
-					fromTask("image-1", prevPanel, "asset-id"),
-					literal("image-2", ""), literal("image-3", ""), literal("image-4", ""), literal("image-5", ""),
-					literal("video-1", ""), literal("video-2", ""), literal("video-3", ""),
-				}},
+				"arguments": map[string]any{"parameters": padCollectRefsArgs(
+					[]any{fromTask("image-1", prevPanel, "asset-id")}, nil,
+				)},
 			})
 			refImageArg = fromTask("source-image-asset-id", prevPanel, "asset-id")
 			refImageIDsForEnhance = fromTask("reference-image-asset-ids", collectName, "image-ids")
@@ -239,35 +281,32 @@ func buildComic4ContinuityWorkflow(plans []panelPlan, staticSourceAssetID string
 				fromTask("prompt", enhanceName, "enhanced-prompt"),
 				refImageArg,
 				fromWorkflow("user-id", "user-id"),
+				literal("seed", p.Seed),
 			}},
 		})
 	}
 
-	// local.compose's own ComposeConfig takes one "asset-ids" array
-	// parameter (compose.go), not 4 individually-named ones — the exact
-	// same scalar-to-array problem every per-panel enhance step above
-	// already needed local.collect_refs for, so this reuses it once more
-	// to gather all 4 panels' own asset-ids before compose-grid runs.
+	// local.compose's ComposeConfig takes one "asset-ids" array parameter,
+	// not N individually-named ones, so local.collect_refs gathers every
+	// panel's own asset-id into an array before compose-grid runs.
+	// collectRefsImageSlots (9, capability.ImageMaxN) is comic4's own real
+	// panel-count ceiling, so this always fits.
 	composeDeps := make([]string, len(plans))
-	collectArgs := make([]any, 0, 8)
+	collectImageArgs := make([]any, len(plans))
 	for i, p := range plans {
 		panelName := fmt.Sprintf("panel-%d", p.Index)
 		composeDeps[i] = panelName
-		collectArgs = append(collectArgs, fromTask(fmt.Sprintf("image-%d", i+1), panelName, "asset-id"))
+		collectImageArgs[i] = fromTask(fmt.Sprintf("image-%d", i+1), panelName, "asset-id")
 	}
-	for i := len(plans); i < 5; i++ {
-		collectArgs = append(collectArgs, literal(fmt.Sprintf("image-%d", i+1), ""))
-	}
-	collectArgs = append(collectArgs, literal("video-1", ""), literal("video-2", ""), literal("video-3", ""))
 	mainTasks = append(mainTasks, map[string]any{
 		"name": "collect-panels", "template": "collect-refs", "dependencies": composeDeps,
-		"arguments": map[string]any{"parameters": collectArgs},
+		"arguments": map[string]any{"parameters": padCollectRefsArgs(collectImageArgs, nil)},
 	})
 	mainTasks = append(mainTasks, map[string]any{
 		"name": "compose", "template": "compose-grid", "dependencies": []string{"collect-panels"},
 		"arguments": map[string]any{"parameters": []any{
 			fromTask("asset-ids", "collect-panels", "image-ids"),
-			literal("layout", "2x2"),
+			literal("layout", ""), // compose.go always computes the real grid from len(asset-ids) now
 			fromWorkflow("user-id", "user-id"),
 		}},
 	})
@@ -280,25 +319,25 @@ func buildComic4ContinuityWorkflow(plans []panelPlan, staticSourceAssetID string
 			"name": "compose-grid", "executor": map[string]any{"type": "local.compose"},
 			"inputs": map[string]any{"parameters": []any{
 				map[string]any{"name": "asset-ids", "type": "array"},
-				map[string]any{"name": "layout", "type": "string", "value": "2x2"},
+				map[string]any{"name": "layout", "type": "string"},
 				map[string]any{"name": "user-id", "type": "string"},
 			}},
 			"timeout": "1m",
 		}},
+		map[string]any{"task": map[string]any{
+			"name": "collect-refs", "executor": map[string]any{"type": "local.collect_refs"},
+			"inputs": map[string]any{"parameters": collectRefsInputDecl()},
+			"retry":  map[string]any{"limit": 1}, "timeout": "30s",
+		}},
 	}
-	templates = append(templates, map[string]any{"task": map[string]any{
-		"name": "collect-refs", "executor": map[string]any{"type": "local.collect_refs"},
-		"inputs": map[string]any{"parameters": collectRefsInputDecl()},
-		"retry":  map[string]any{"limit": 1}, "timeout": "30s",
-	}})
 
 	doc := map[string]any{
 		"apiVersion": "aether/v1",
 		"kind":       "Workflow",
 		"metadata": map[string]any{
-			"name": "image-comic4-continuity",
+			"name": "image-comic4",
 			"annotations": map[string]any{
-				"description": "F5.3 四格漫画连贯模式: code-generated per job, see internal/application/jobsvc/image_comic4.go",
+				"description": "F5.3 四格漫画（数量可变，见 minComic4Panels/capability.ImageMaxN）: code-generated per job, see internal/application/jobsvc/image_comic4.go",
 			},
 		},
 		"spec": map[string]any{
@@ -309,7 +348,7 @@ func buildComic4ContinuityWorkflow(plans []panelPlan, staticSourceAssetID string
 	}
 	out, err := json.Marshal(doc)
 	if err != nil {
-		panic(fmt.Sprintf("buildComic4ContinuityWorkflow: marshal: %v", err))
+		panic(fmt.Sprintf("buildComic4Workflow: marshal: %v", err))
 	}
 	return out
 }

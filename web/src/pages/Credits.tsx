@@ -37,7 +37,7 @@ export default function Credits() {
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-3xl px-6 py-8">
+      <div className="mx-auto max-w-5xl px-6 py-8">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-lg font-medium">{t('credits.title')}</h1>
           <button

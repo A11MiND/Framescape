@@ -1,8 +1,7 @@
 import type { JobResponse } from './api'
 
 export type Tab =
-  | 'image.single'
-  | 'image.batch'
+  | 'image.single' // covers what used to be the separate image.batch workflow — n is just an optional field now
   | 'image.comic4'
   | 'image.sequence'
   | 'video.single'
@@ -26,7 +25,6 @@ export type Tab =
 // themselves are locale-dependent.
 export const WORKFLOW_LABEL_KEY: Record<Tab, string> = {
   'image.single': 'workflow.imageSingle',
-  'image.batch': 'workflow.imageBatch',
   'image.comic4': 'workflow.imageComic4',
   'image.sequence': 'workflow.imageSequence',
   'video.single': 'workflow.videoSingle',
@@ -35,7 +33,6 @@ export const WORKFLOW_LABEL_KEY: Record<Tab, string> = {
 
 export const RESULT_FIELD: Partial<Record<Tab, { node: string; field: string }>> = {
   'image.single': { node: 'gen', field: 'asset-ids' },
-  'image.batch': { node: 'gen', field: 'asset-ids' },
   'image.comic4': { node: 'compose', field: 'asset-id' },
   'video.single': { node: 'gen', field: 'asset-id' },
   'video.sequence': { node: 'concat', field: 'asset-id' },

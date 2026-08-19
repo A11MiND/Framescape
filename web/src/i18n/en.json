@@ -115,7 +115,6 @@
   },
   "workflow": {
     "imageSingle": "Single image",
-    "imageBatch": "Batch images",
     "imageComic4": "4-panel comic",
     "imageSequence": "Image sequence",
     "videoSingle": "Single clip",
@@ -146,6 +145,9 @@
     "cancelFailed": "Cancel failed, please retry",
     "cancelling": "Cancelling…",
     "cancelJob": "Cancel job",
+    "deleteFailed": "Delete failed, please retry",
+    "deleting": "Deleting…",
+    "deleteJob": "Delete record",
     "reconnecting": "Live connection unstable, reconnecting…",
     "creditSettled": "Settled",
     "creditHeld": "Held",
@@ -260,7 +262,11 @@
     "trashEmpty": "Trash is empty",
     "restore": "Restore",
     "restoreFailed": "Restore failed, please retry",
-    "daysLeft": "{{count}} days left"
+    "daysLeft": "{{count}} days left",
+    "emptyTrash": "Empty trash",
+    "emptyingTrash": "Emptying…",
+    "emptyTrashConfirm": "Permanently delete {{count}} item(s) in trash? This can't be undone.",
+    "emptyTrashFailed": "Failed to empty trash, please retry"
   },
   "assetDetail": {
     "backToLibrary": "← Back to library",
@@ -313,12 +319,14 @@
   },
   "studio": {
     "tabMeta": {
-      "imageSingle": "One line, one image",
-      "imageBatch": "One line, many images at once",
+      "imageSingle": "One line, one image or a batch — or a continuous series",
       "imageComic4": "A 4-panel comic sharing character & style",
-      "imageSequence": "A consistent-character image series",
       "videoSingle": "Text-to-video or image-to-video",
-      "videoSequence": "Preview at 768P, finalize at 2K"
+      "videoSequence": "Multi-shot video, full quality by default"
+    },
+    "imageMode": {
+      "single": "Single",
+      "sequence": "Sequence"
     },
     "examples": {
       "fox": "A fox standing in the snow, watercolor style",
@@ -330,10 +338,13 @@
     "image2imageRef": "Reference image (optional, image-to-image)",
     "comic": {
       "manual": "Write each panel",
-      "auto": "Auto-split a story into 4",
-      "autoTooltip": "Let AI split a story into 4 panel descriptions automatically",
-      "panelPlaceholder": "Panel {{n}}",
-      "storyPlaceholder": "A complete story — the system will auto-split it into 4 consecutive panels"
+      "auto": "Auto-split a story",
+      "autoTooltip": "Let AI split a story into consecutive panel descriptions, each defaulting to reference the one before it",
+      "panelsPlaceholder": "Panel 1: a cat sits on the windowsill\n---\nPanel 2: the cat jumps down\n---\nPanel 3: the cat chases a butterfly (separate panels with ---, or click the button below)",
+      "insertSeparator": "+ Insert separator ---",
+      "detectedCount": "{{n}} panels detected",
+      "storyPlaceholder": "A complete story — the system will auto-split it into consecutive panels",
+      "panelCount": "Panels"
     },
     "imageSequence": {
       "addLabel": "+ Add an image",
@@ -370,8 +381,8 @@
       "ratioDisabledTooltip": "Aspect ratio is determined by the reference asset in first/last-frame or reference mode",
       "anchorInterval": "Anchor interval",
       "anchorIntervalTooltip": "Every N segments, re-anchor to the character reference image (r2va); other segments continue from the previous segment's last frame (i2va)",
-      "skipPreview": "Skip preview, go straight to 2K",
-      "skipPreviewTooltip": "By default the whole sequence previews at 768P first, so you only pay to upgrade the segments you actually like. Turning this on skips the preview — every segment generates directly at 2K and finishes automatically, with the full 2K cost held upfront.",
+      "previewFirst": "Preview at 768P first",
+      "previewFirstTooltip": "By default every segment generates directly at 2K and finishes automatically, with the full 2K cost held upfront. Turning this on previews the whole sequence at 768P first, so you only pay to upgrade the segments you actually like.",
       "everyNSegments": "Every {{n}} segments",
       "characterSlot": "Character {{letter}}",
       "addCharacter": "+ Add character",
@@ -440,8 +451,7 @@
       "title": "Cost breakdown",
       "upgradeHint": "Upgrading this to 2K would cost ✦{{price}}",
       "item": {
-        "image_single": "Single image",
-        "image_batch": "Batch generation",
+        "image_single": "Image generation",
         "comic4_panels": "4-panel comic",
         "story_split": "Story auto-split",
         "sequence_shots": "Sequence shots",

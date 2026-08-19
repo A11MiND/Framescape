@@ -91,6 +91,18 @@ export default function Assets() {
     onError: () => pushToast(t('assets.restoreFailed')),
   })
 
+  // The one destructive action in this whole page that isn't a reversible
+  // soft-delete (api.emptyTrash's own doc) — window.confirm before firing,
+  // unlike every other delete button here.
+  const emptyTrash = useMutation({
+    mutationFn: () => api.emptyTrash(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['assets-trash'] })
+      queryClient.invalidateQueries({ queryKey: ['assets'] })
+    },
+    onError: () => pushToast(t('assets.emptyTrashFailed')),
+  })
+
   // F2.7's batch download: the response is a zip blob, not JSON — trigger a
   // regular browser download via a throwaway <a> + object URL, same pattern
   // as any client-side blob download.
@@ -179,6 +191,19 @@ export default function Assets() {
                   </button>
                 ))}
               </div>
+            )}
+            {showTrash && !!trash.data?.assets.length && (
+              <button
+                onClick={() => {
+                  if (window.confirm(t('assets.emptyTrashConfirm', { count: trash.data?.assets.length ?? 0 }))) {
+                    emptyTrash.mutate()
+                  }
+                }}
+                disabled={emptyTrash.isPending}
+                className="rounded-lg border border-red-900/50 px-3 py-1.5 text-sm text-red-400 transition hover:border-red-500 hover:bg-red-500/10 disabled:opacity-50"
+              >
+                {emptyTrash.isPending ? t('assets.emptyingTrash') : t('assets.emptyTrash')}
+              </button>
             )}
             <button
               onClick={() => setShowTrash((cur) => !cur)}

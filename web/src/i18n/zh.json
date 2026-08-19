@@ -115,7 +115,6 @@
   },
   "workflow": {
     "imageSingle": "单图",
-    "imageBatch": "批量出图",
     "imageComic4": "四格漫画",
     "imageSequence": "连续生成",
     "videoSingle": "单段影片",
@@ -146,6 +145,9 @@
     "cancelFailed": "取消失败，请重试",
     "cancelling": "取消中…",
     "cancelJob": "取消作业",
+    "deleteFailed": "删除失败，请重试",
+    "deleting": "删除中…",
+    "deleteJob": "删除记录",
     "reconnecting": "实时连接不稳定，重新连接中…",
     "creditSettled": "已结算",
     "creditHeld": "已持有",
@@ -260,7 +262,11 @@
     "trashEmpty": "回收站是空的",
     "restore": "恢复",
     "restoreFailed": "恢复失败，请重试",
-    "daysLeft": "{{count}} 天后清除"
+    "daysLeft": "{{count}} 天后清除",
+    "emptyTrash": "清空回收站",
+    "emptyingTrash": "清空中…",
+    "emptyTrashConfirm": "确定要永久删除回收站里的 {{count}} 个素材吗？此操作无法撤销。",
+    "emptyTrashFailed": "清空失败，请重试"
   },
   "assetDetail": {
     "backToLibrary": "← 返回素材库",
@@ -313,12 +319,14 @@
   },
   "studio": {
     "tabMeta": {
-      "imageSingle": "一句话生成一张图",
-      "imageBatch": "同一句话一次出多张",
+      "imageSingle": "一句话生成一张或多张图，也可连续出多段",
       "imageComic4": "共享角色与风格的四格",
-      "imageSequence": "同角色连续出一组图",
       "videoSingle": "文生视频或图生视频",
-      "videoSequence": "768P 预览后再定稿 2K"
+      "videoSequence": "多段视频，默认直接出正式画质"
+    },
+    "imageMode": {
+      "single": "单句",
+      "sequence": "连续生成"
     },
     "examples": {
       "fox": "一只狐狸站在雪地上，水彩风格",
@@ -330,10 +338,13 @@
     "image2imageRef": "参考图（可选，图生图）",
     "comic": {
       "manual": "逐格手写",
-      "auto": "剧情自动拆 4 格",
-      "autoTooltip": "用 AI 把一段剧情自动拆成 4 格画面描述",
-      "panelPlaceholder": "格 {{n}}",
-      "storyPlaceholder": "一段完整的剧情描述，系统会自动拆成 4 个连续分镜"
+      "auto": "剧情自动拆格",
+      "autoTooltip": "用 AI 把一段剧情自动拆成连续的画面描述，每格默认参考上一格",
+      "panelsPlaceholder": "第一格：小猫坐在窗台上\n---\n第二格：小猫跳下窗台\n---\n第三格：小猫追逐蝴蝶（用 --- 分隔每一格，也可以点下方按钮插入）",
+      "insertSeparator": "+ 插入分隔符 ---",
+      "detectedCount": "识别到 {{n}} 格",
+      "storyPlaceholder": "一段完整的剧情描述，系统会自动拆成连续分镜",
+      "panelCount": "格数"
     },
     "imageSequence": {
       "addLabel": "+ 添加一张",
@@ -370,8 +381,8 @@
       "ratioDisabledTooltip": "首尾帧/参考素材模式下画面比例由素材决定",
       "anchorInterval": "锚定间隔",
       "anchorIntervalTooltip": "每 N 段重新锚定一次角色参考图（r2va），其余段落用前一段尾帧续接（i2va）",
-      "skipPreview": "跳过预览，直接 2K",
-      "skipPreviewTooltip": "默认先以 768P 预览整段效果，确认后再选择要升级的分段，避免为不满意的效果多花钱。开启此项会跳过预览，直接以 2K 生成每一段并自动完成，费用也会按 2K 全额预扣。",
+      "previewFirst": "先出 768P 预览",
+      "previewFirstTooltip": "默认直接以 2K 生成每一段并自动完成，费用按 2K 全额预扣。开启此项会先以 768P 预览整段效果，确认后再选择要升级的分段，避免为不满意的效果多花钱。",
       "everyNSegments": "每 {{n}} 段",
       "characterSlot": "角色 {{letter}}",
       "addCharacter": "+ 添加角色",
@@ -440,8 +451,7 @@
       "title": "费用明细",
       "upgradeHint": "若这段升级到 2K 需要 ✦{{price}}",
       "item": {
-        "image_single": "单图生成",
-        "image_batch": "批量生成",
+        "image_single": "图片生成",
         "comic4_panels": "四格漫画",
         "story_split": "剧情自动拆格",
         "sequence_shots": "连续图",

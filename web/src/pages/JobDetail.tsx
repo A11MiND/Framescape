@@ -12,6 +12,15 @@ import { useJobStream } from '../hooks/useJobStream'
 import { api, ApiError } from '../lib/api'
 import { useMutation, useQuery } from '@tanstack/react-query'
 
+// Was ✏️ — plain stroke SVG instead, same reasoning as Studio.tsx's TabIcon.
+function EditIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M12.5 3.5l4 4-9 9H3.5v-4z" />
+    </svg>
+  )
+}
+
 // PRD §19.4.6's job detail / DAG view — fully reconstructible from the URL
 // alone (unlike Studio's inline results, which only exist for the job just
 // submitted in that browser tab): fetches job + spec fresh from
@@ -45,6 +54,14 @@ export default function JobDetail() {
     mutationFn: () => api.cancelJob(bizId!),
     onSuccess: () => jobQuery.refetch(),
     onError: (err) => pushToast(err instanceof ApiError ? err.message : t('jobDetail.cancelFailed'), () => cancelJob.mutate()),
+  })
+  // jobsvc.Service.Delete's own doc: soft-delete, terminal jobs only —
+  // leaves this page for the 作业 list rather than refetching a job that no
+  // longer shows up there.
+  const deleteJob = useMutation({
+    mutationFn: () => api.deleteJob(bizId!),
+    onSuccess: () => navigate('/jobs'),
+    onError: (err) => pushToast(err instanceof ApiError ? err.message : t('jobDetail.deleteFailed'), () => deleteJob.mutate()),
   })
 
   return (
@@ -91,9 +108,10 @@ export default function JobDetail() {
                     partially/fully failed and has no asset to click through. */}
                 <button
                   onClick={() => navigate('/', { state: { prefillJob: { workflowName: job.workflow_name, spec: job.spec } } })}
-                  className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-violet-500 hover:text-violet-300"
+                  className="flex items-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-violet-500 hover:text-violet-300"
                 >
-                  ✏️ {t('assetDetail.regenerateFromThis')}
+                  <EditIcon className="h-3.5 w-3.5" />
+                  {t('assetDetail.regenerateFromThis')}
                 </button>
                 {running && (
                   <button
@@ -102,6 +120,15 @@ export default function JobDetail() {
                     className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-red-500 hover:text-red-400 disabled:opacity-50"
                   >
                     {cancelJob.isPending ? t('jobDetail.cancelling') : t('jobDetail.cancelJob')}
+                  </button>
+                )}
+                {!running && (
+                  <button
+                    onClick={() => deleteJob.mutate()}
+                    disabled={deleteJob.isPending}
+                    className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-red-500 hover:text-red-400 disabled:opacity-50"
+                  >
+                    {deleteJob.isPending ? t('jobDetail.deleting') : t('jobDetail.deleteJob')}
                   </button>
                 )}
               </div>

@@ -1,18 +1,24 @@
 // Package local implements executors that don't call any external provider
 // (PRD §10.1: local.compose/local.ffmpeg.*/local.moderation). compose.go is
-// F5.3's "自动拼版": tiles the four comic-panel images into one 2x2 grid.
+// F5.3's "自动拼版": tiles N comic-panel images into one grid. Grid
+// dimensions are computed from however many asset IDs actually arrive,
+// nearly-square (ceil(sqrt(n)) columns), since image.comic4's panel count
+// is not fixed at 4.
 package local
 
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"image"
 	"image/draw"
 	"image/jpeg"
 	_ "image/png" // decoder registration (jpeg is imported non-blank below since we also Encode with it)
+	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/BabySid/aether/executor"
@@ -27,8 +33,12 @@ const tileSize = 768 // each panel is resized to a tileSize x tileSize square be
 
 type ComposeConfig struct {
 	AssetIDs []string `json:"asset-ids"`
-	Layout   string   `json:"layout"` // "2x2" (only option for now)
-	UserID   string   `json:"user-id"`
+	// Layout is currently unused (grid dimensions are always computed from
+	// len(AssetIDs) — see composeGrid) — kept as a declared field so a
+	// future non-grid layout has somewhere to go without another Aether
+	// Binder "undeclared parameter" failure.
+	Layout string `json:"layout"`
+	UserID string `json:"user-id"`
 }
 
 type ComposePlugin struct {
@@ -77,7 +87,7 @@ func (p *ComposePlugin) Execute(ctx context.Context, req *executor.ExecuteReques
 		tiles = append(tiles, img)
 	}
 
-	grid := composeGrid(tiles)
+	grid, cols, rows := composeGrid(tiles)
 
 	var buf bytes.Buffer
 	if err := jpeg.Encode(&buf, grid, &jpeg.Options{Quality: 90}); err != nil {
@@ -97,7 +107,7 @@ func (p *ComposePlugin) Execute(ctx context.Context, req *executor.ExecuteReques
 		Height:        grid.Bounds().Dy(),
 		Meta: map[string]any{
 			"composed_from": cfg.AssetIDs,
-			"layout":        "2x2",
+			"layout":        fmt.Sprintf("%dx%d", cols, rows),
 		},
 	})
 	if err != nil {
@@ -111,6 +121,12 @@ func (p *ComposePlugin) Execute(ctx context.Context, req *executor.ExecuteReques
 }
 
 func (p *ComposePlugin) fetchImage(ctx context.Context, url string) (image.Image, error) {
+	// mock.image's own PublicURL is a data: URI, not a real provider URL —
+	// net/http.Client can't fetch that scheme, so decode it directly.
+	if strings.HasPrefix(url, "data:") {
+		return decodeDataURIImage(url)
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -127,22 +143,49 @@ func (p *ComposePlugin) fetchImage(ctx context.Context, url string) (image.Image
 	return img, err
 }
 
-// composeGrid tiles up to 4 images into a fixed 2x2 canvas (F5.3's only
-// supported layout). Each source image is scaled to fill a tileSize square
-// via nearest-neighbor (fine for POC; a real resampler is a cosmetic
-// upgrade, not a correctness one).
-func composeGrid(tiles []image.Image) *image.RGBA {
-	canvas := image.NewRGBA(image.Rect(0, 0, tileSize*2, tileSize*2))
-	positions := []image.Point{{0, 0}, {tileSize, 0}, {0, tileSize}, {tileSize, tileSize}}
+// decodeDataURIImage decodes a "data:<mime>;base64,<payload>" URI in memory
+// (RFC 2397; bare, non-base64 encodings are not supported).
+func decodeDataURIImage(uri string) (image.Image, error) {
+	rest, ok := strings.CutPrefix(uri, "data:")
+	if !ok {
+		return nil, fmt.Errorf("not a data URI")
+	}
+	meta, payload, ok := strings.Cut(rest, ",")
+	if !ok || !strings.HasSuffix(meta, ";base64") {
+		return nil, fmt.Errorf("unsupported data URI encoding (want base64)")
+	}
+	raw, err := base64.StdEncoding.DecodeString(payload)
+	if err != nil {
+		return nil, fmt.Errorf("decode base64 data URI: %w", err)
+	}
+	img, _, err := image.Decode(bytes.NewReader(raw))
+	return img, err
+}
+
+// composeGrid tiles N images into a nearly-square canvas — columns =
+// ceil(sqrt(n)), rows = ceil(n/columns), so 4 still lands on the original
+// 2x2, 6 becomes 3x2, 9 becomes 3x3, and an odd count like 5 or 7 gets a
+// trailing partial row rather than failing or silently dropping panels
+// (image.comic4 no longer promises exactly 4, see this file's package
+// doc). Each source image is scaled to fill a tileSize square via
+// nearest-neighbor (fine for POC; a real resampler is a cosmetic upgrade,
+// not a correctness one).
+func composeGrid(tiles []image.Image) (canvas *image.RGBA, cols, rows int) {
+	n := len(tiles)
+	cols = int(math.Ceil(math.Sqrt(float64(n))))
+	if cols < 1 {
+		cols = 1
+	}
+	rows = (n + cols - 1) / cols
+
+	canvas = image.NewRGBA(image.Rect(0, 0, tileSize*cols, tileSize*rows))
 	for i, tile := range tiles {
-		if i >= 4 {
-			break
-		}
+		col, row := i%cols, i/cols
 		scaled := scaleToSquare(tile, tileSize)
-		dstRect := image.Rect(positions[i].X, positions[i].Y, positions[i].X+tileSize, positions[i].Y+tileSize)
+		dstRect := image.Rect(col*tileSize, row*tileSize, (col+1)*tileSize, (row+1)*tileSize)
 		draw.Draw(canvas, dstRect, scaled, image.Point{}, draw.Src)
 	}
-	return canvas
+	return canvas, cols, rows
 }
 
 func scaleToSquare(src image.Image, size int) image.Image {

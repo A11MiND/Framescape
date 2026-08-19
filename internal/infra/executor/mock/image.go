@@ -8,8 +8,13 @@
 package mock
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"math/rand"
 	"strconv"
 	"time"
@@ -24,15 +29,8 @@ import (
 // kebab-case (DNS-1123) per docs/aether-validation-report.md §three.1.
 //
 // N is string, not int — every real workflow file declares "n" as a
-// type:"string" parameter (matching minimax.image's own ImageConfig.N,
-// see its doc for why: workflow.parameters always arrive as JSON strings).
-// Loop-body invocations (image.comic4/image.sequence's normal path) never
-// actually exercise this: their per-iteration item never supplies "n", and
-// this plugin's own n<=0 fallback below masks a mismatched type silently.
-// A plain DAG-task invocation that relies on the template's own declared
-// literal `value` as its default (Aether's bindOne priority 3 — see
-// third_party/aether/internal/binding/bind.go) does exercise it, e.g.
-// jobsvc.RetryNode's satellite workflows — that's how this got caught.
+// type:"string" parameter (matching minimax.image's own ImageConfig.N:
+// workflow.parameters always arrive as JSON strings).
 type ImageConfig struct {
 	Prompt string `json:"prompt" desc:"structured prompt text"`
 	N      string `json:"n" desc:"how many images to generate, 1..9, as a string"`
@@ -87,9 +85,9 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 			Type:          "image",
 			Source:        "generated",
 			FromTaskRunID: req.TaskRunID,
-			StorageKey:    fmt.Sprintf("mock/%s/%d.svg", req.TaskRunID, i),
-			PublicURL:     placeholderSVGDataURI(hue, cfg.Prompt),
-			Mime:          "image/svg+xml",
+			StorageKey:    fmt.Sprintf("mock/%s/%d.png", req.TaskRunID, i),
+			PublicURL:     placeholderPNGDataURI(hue),
+			Mime:          "image/png",
 			Width:         768,
 			Height:        768,
 			Meta: map[string]any{
@@ -103,12 +101,22 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 		assetIDs = append(assetIDs, bizID)
 	}
 
+	// AssetID (singular) mirrors minimax.image's own convenience field —
+	// needed so a single mock.image panel's output can chain into the next
+	// panel's reference (image.comic4, image.sequence).
+	firstAssetID := ""
+	if len(assetIDs) > 0 {
+		firstAssetID = assetIDs[0]
+	}
+
 	return executor.OutputFrom(struct {
+		AssetID      string   `json:"asset-id"`
 		AssetIDs     []string `json:"asset-ids"`
 		SuccessCount int      `json:"success-count"`
 		FailedCount  int      `json:"failed-count"`
 		RequestedN   int      `json:"requested-n"`
 	}{
+		AssetID:      firstAssetID,
 		AssetIDs:     assetIDs,
 		SuccessCount: len(assetIDs),
 		FailedCount:  n - len(assetIDs),
@@ -116,35 +124,76 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 	})
 }
 
-// placeholderSVGDataURI builds a tiny inline SVG so the frontend has a real,
-// renderable image URL without needing any object storage in W1 (MinIO
-// wiring + real materialize-to-S3 is a W3 concern per DEV_PLAN.md §7).
-func placeholderSVGDataURI(hue int, prompt string) string {
-	label := prompt
-	if len(label) > 40 {
-		label = label[:40] + "…"
-	}
-	svg := fmt.Sprintf(
-		`<svg xmlns='http://www.w3.org/2000/svg' width='768' height='768'>`+
-			`<rect width='100%%' height='100%%' fill='hsl(%d,70%%,55%%)'/>`+
-			`<text x='24' y='700' font-family='sans-serif' font-size='28' fill='white'>%s</text>`+
-			`</svg>`, hue, escapeXML(label))
-	return "data:image/svg+xml;utf8," + svg
-}
+// placeholderPNGSize is deliberately tiny, not 768 (the asset's own
+// declared Width/Height metadata): assets.public_url is a varchar(1024),
+// which a solid-colour 768x768 PNG's base64 payload can exceed. Every
+// consumer upscales anyway — a browser <img> stretches to its CSS box
+// regardless of intrinsic size, and local.compose's own nearest-neighbor
+// resize fills tileSize from whatever arrives — so a 16x16 solid square is
+// visually identical to a 768x768 one at every call site.
+const placeholderPNGSize = 16
 
-func escapeXML(s string) string {
-	out := make([]rune, 0, len(s))
-	for _, r := range s {
-		switch r {
-		case '&':
-			out = append(out, []rune("&amp;")...)
-		case '<':
-			out = append(out, []rune("&lt;")...)
-		case '>':
-			out = append(out, []rune("&gt;")...)
-		default:
-			out = append(out, r)
+// placeholderPNGDataURI builds a tiny solid-colour PNG so the frontend has a
+// real, renderable image URL without needing any object storage. A raster
+// format (not SVG) matters beyond the browser: local.compose decodes each
+// panel through Go's stdlib image codecs to tile them, and Go has no SVG
+// decoder registered.
+func placeholderPNGDataURI(hue int) string {
+	img := image.NewRGBA(image.Rect(0, 0, placeholderPNGSize, placeholderPNGSize))
+	fill := hueToRGBA(hue)
+	for y := 0; y < img.Bounds().Dy(); y++ {
+		for x := 0; x < img.Bounds().Dx(); x++ {
+			img.Set(x, y, fill)
 		}
 	}
-	return string(out)
+	var buf bytes.Buffer
+	_ = png.Encode(&buf, img) // encoding a freshly-built in-memory RGBA can't fail
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes())
+}
+
+// hueToRGBA converts an HSL(hue, 70%, 55%) colour (the original SVG
+// placeholder's own palette) to RGBA, so the mock's placeholder colour
+// scheme is unchanged by the SVG->PNG format swap above.
+func hueToRGBA(hue int) color.RGBA {
+	const s, l = 0.70, 0.55
+	h := float64(((hue % 360) + 360) % 360)
+	c := (1 - abs(2*l-1)) * s
+	x := c * (1 - abs(mod(h/60, 2)-1))
+	m := l - c/2
+	var r, g, b float64
+	switch {
+	case h < 60:
+		r, g, b = c, x, 0
+	case h < 120:
+		r, g, b = x, c, 0
+	case h < 180:
+		r, g, b = 0, c, x
+	case h < 240:
+		r, g, b = 0, x, c
+	case h < 300:
+		r, g, b = x, 0, c
+	default:
+		r, g, b = c, 0, x
+	}
+	return color.RGBA{
+		R: uint8((r + m) * 255),
+		G: uint8((g + m) * 255),
+		B: uint8((b + m) * 255),
+		A: 255,
+	}
+}
+
+func abs(v float64) float64 {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+func mod(a, b float64) float64 {
+	m := a - float64(int(a/b))*b
+	if m < 0 {
+		m += b
+	}
+	return m
 }

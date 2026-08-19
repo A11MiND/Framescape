@@ -9,38 +9,42 @@ import type { Tab } from './jobResult'
 // affordances for data the backend doesn't return yet (e.g. image.comic4's
 // auto-split mode doesn't expose its four generated panel texts anywhere
 // in GET /jobs, so "转成分镜" only offers itself for hand-written panels).
+// No icon field here on purpose — icons are a presentation concern
+// (SuggestionIcon in Studio.tsx maps `kind` to a plain stroke SVG), kept out
+// of this plain logic file rather than carrying a rendered glyph/emoji
+// through the data model.
 export type SuggestedAction =
-  | { kind: 'to-video'; label: string; icon: string; sourceAssetId: string }
-  | { kind: 'more-batch'; label: string; icon: string }
-  | { kind: 'save-character'; label: string; icon: string; sourceAssetId: string }
-  | { kind: 'to-sequence'; label: string; icon: string; shots: string[] }
-  | { kind: 'upgrade-2k'; label: string; icon: string }
-  | { kind: 'save-frame-character'; label: string; icon: string; sourceAssetId: string }
+  | { kind: 'to-video'; label: string; sourceAssetId: string }
+  | { kind: 'more-batch'; label: string }
+  | { kind: 'save-character'; label: string; sourceAssetId: string }
+  | { kind: 'to-sequence'; label: string; shots: string[] }
+  | { kind: 'upgrade-2k'; label: string }
+  | { kind: 'save-frame-character'; label: string; sourceAssetId: string }
 
 export function suggestActions(job: JobResponse, tab: Tab, resultAssetIds: string[], t: TFunction): SuggestedAction[] {
   const out: SuggestedAction[] = []
   const firstAsset = resultAssetIds[0]
 
-  if ((tab === 'image.single' || tab === 'image.batch') && firstAsset) {
-    out.push({ kind: 'to-video', label: t('suggestions.toVideo'), icon: '🎬', sourceAssetId: firstAsset })
-    out.push({ kind: 'more-batch', label: t('suggestions.moreBatch'), icon: '🔁' })
+  if (tab === 'image.single' && firstAsset) {
+    out.push({ kind: 'to-video', label: t('suggestions.toVideo'), sourceAssetId: firstAsset })
+    out.push({ kind: 'more-batch', label: t('suggestions.moreBatch') })
     if (!job.spec.characters?.length) {
-      out.push({ kind: 'save-character', label: t('suggestions.saveCharacter'), icon: '☺', sourceAssetId: firstAsset })
+      out.push({ kind: 'save-character', label: t('suggestions.saveCharacter'), sourceAssetId: firstAsset })
     }
   }
 
   if (tab === 'image.comic4' && job.spec.panels?.length) {
-    out.push({ kind: 'to-sequence', label: t('suggestions.toSequence'), icon: '✨', shots: job.spec.panels })
+    out.push({ kind: 'to-sequence', label: t('suggestions.toSequence'), shots: job.spec.panels })
   }
 
   if (tab === 'video.single') {
     if (job.spec.resolution === '768P') {
-      out.push({ kind: 'upgrade-2k', label: t('suggestions.upgrade2k'), icon: '⬆' })
+      out.push({ kind: 'upgrade-2k', label: t('suggestions.upgrade2k') })
     }
     const extractNode = job.nodes.find((n) => n.name === 'extract')
     const frameAssetId = extractNode?.outputs?.['first-frame-asset-id'] as string | undefined
     if (frameAssetId) {
-      out.push({ kind: 'save-frame-character', label: t('suggestions.saveFrameCharacter'), icon: '☺', sourceAssetId: frameAssetId })
+      out.push({ kind: 'save-frame-character', label: t('suggestions.saveFrameCharacter'), sourceAssetId: frameAssetId })
     }
   }
 

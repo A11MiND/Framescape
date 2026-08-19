@@ -102,18 +102,22 @@ func countAnchorShots(shotCount, recalibrateEvery int) int {
 	return n
 }
 
-// referenceWindowSeconds/maxReferenceVideoClips mirror r2va's real,
-// live-verified reference_video budget (this file's own package doc) —
-// not a number invented from the docs alone.
+// referenceWindowSeconds/maxReferenceVideoClips mirror r2va's real
+// reference_video budget: at most 3 clips, 15s combined.
 const referenceWindowSeconds = 15
 const maxReferenceVideoClips = 3
 
 // maxReferenceImages is comfortably under MiniMax's documented ≤9 r2va
-// reference_image cap — the narrative-continuity bundle only ever needs a
-// handful of keyframes plus the protagonist's own reference image, not the
-// full ceiling (local.collect_refs' own CollectRefsConfig declares exactly
-// this many slots).
+// reference_image cap — video.sequence's own narrative-continuity bundle
+// only ever needs a handful of keyframes plus the protagonist's own
+// reference image, not the full ceiling.
 const maxReferenceImages = 5
+
+// collectRefsImageSlots is local.collect_refs' own declared image-slot
+// capacity — bigger than maxReferenceImages above because image.comic4
+// reuses the same executor to gather however many panels the batch has (up
+// to capability.ImageMaxN) into one array for its final compose-grid step.
+const collectRefsImageSlots = 9
 
 // shotPlan is the statically-decidable half of one shot's generation request
 // — mode and prompt are pure functions of (shot index, characters, presets,
@@ -177,13 +181,35 @@ func planShots(shots []string, characters []prompt.Character, presets []prompt.P
 		isAnchor := idx == 1 || (idx-1)%recalibrateEvery == 0
 		compiled := prompt.Compile(prompt.Input{Text: text, Characters: characters, Presets: presets, MaxChars: 7000})
 		p := shotPlan{Index: idx, Prompt: compiled.Prompt}
+
+		// A bundle needs computing *before* the mode decision below, not
+		// after: without this, an anchor with no bound character and no
+		// static SourceImageAssetID/SourceVideoAssetID always fell back to
+		// t2va (no reference at all) even once earlier shots existed to
+		// reference — NarrativeContinuity's whole point is that a shot's
+		// *own already-generated predecessors* are a real reference on
+		// their own, not merely an enrichment layered on top of a
+		// pre-existing static anchor. Only shot 1 (or any anchor with
+		// narrativeContinuity off) can have an empty bundle and no static
+		// ref — that's the one case with genuinely nothing to anchor on.
+		var bundleIndexes []int
+		if isAnchor && narrativeContinuity {
+			bundleIndexes = selectBundleShots(selectionMode, idx, duration, overrides, bundlePicks)
+		}
+		hasReference := characterRefAssetID != "" || len(bundleIndexes) > 0
+
 		switch {
-		case isAnchor && characterRefAssetID != "" && characterRefIsVideo:
+		case isAnchor && hasReference && characterRefAssetID != "" && characterRefIsVideo:
 			p.Mode = "r2va"
 			p.StaticRefVideoAssetID = characterRefAssetID
-		case isAnchor && characterRefAssetID != "":
+		case isAnchor && hasReference:
 			p.Mode = "r2va"
-			p.StaticRefImageAssetID = characterRefAssetID
+			if characterRefAssetID != "" {
+				p.StaticRefImageAssetID = characterRefAssetID
+			}
+			// else: r2va anchored purely on the dynamic bundle below, no
+			// static literal at all — e.g. shot 4 referencing shots 1-3's
+			// own already-generated clips with no protagonist image ever set.
 		case isAnchor:
 			p.Mode = "t2va"
 		default:
@@ -191,7 +217,7 @@ func planShots(shots []string, characters []prompt.Character, presets []prompt.P
 		}
 		if p.Mode == "r2va" && narrativeContinuity {
 			p.Enhance = true
-			p.BundleShotIndexes = selectBundleShots(selectionMode, idx, duration, overrides, bundlePicks)
+			p.BundleShotIndexes = bundleIndexes
 			p.Outline = buildOutline(rawTexts, idx)
 		}
 		plans[i] = p
@@ -202,12 +228,10 @@ func planShots(shots []string, characters []prompt.Character, presets []prompt.P
 // selectBundleShots implements Spec.ReferenceSelectionMode: for anchor shot
 // anchorIdx (1-based), returns which earlier shots (1-based, oldest first)
 // belong in its narrative-continuity bundle, sized to what the real r2va
-// reference_video budget can actually hold — see this file's own package
-// doc for why these numbers are verified, not assumed.
+// reference_video budget can actually hold.
 func selectBundleShots(mode string, anchorIdx int, duration int, overrides []int, bundlePicks map[int][]int) []int {
 	// A manual #-mention override always wins for this specific shot,
-	// whatever the mode — "引用# 這個本身是個值得的功能，需要你保留" was an
-	// explicit ask, not just image.sequence's own precedent.
+	// whatever the mode is set to.
 	if anchorIdx-1 >= 0 && anchorIdx-1 < len(overrides) && overrides[anchorIdx-1] > 0 {
 		return []int{overrides[anchorIdx-1]}
 	}
@@ -384,8 +408,7 @@ func (s *Service) resolveCharacterRef(ctx context.Context, userID uint64, spec S
 // planVideoSequence is createVideoSequence's and Resume's shared plan
 // derivation — resolves the character anchor, runs "smart" mode's advisory
 // LLM call if requested, and calls planShots. Both callers must derive the
-// identical plan from the same persisted Spec (this file's own long-
-// standing invariant, now extended to the narrative-continuity fields too).
+// identical plan from the same persisted Spec.
 func (s *Service) planVideoSequence(ctx context.Context, userID uint64, spec Spec, characters []prompt.Character, presets []prompt.Preset) []shotPlan {
 	characterRefAssetID, characterRefIsVideo := s.resolveCharacterRef(ctx, userID, spec)
 
@@ -555,21 +578,23 @@ func genShotInputDecl() []map[string]any {
 }
 
 // collectRefsInputDecl mirrors local.collect_refs.CollectRefsConfig's own
-// slots exactly.
+// slots exactly (collectRefsImageSlots image slots, maxReferenceVideoClips
+// video slots).
 func collectRefsInputDecl() []map[string]any {
-	return []map[string]any{
-		{"name": "image-1", "type": "string"}, {"name": "image-2", "type": "string"},
-		{"name": "image-3", "type": "string"}, {"name": "image-4", "type": "string"},
-		{"name": "image-5", "type": "string"},
-		{"name": "video-1", "type": "string"}, {"name": "video-2", "type": "string"},
-		{"name": "video-3", "type": "string"},
+	decl := make([]map[string]any, 0, collectRefsImageSlots+maxReferenceVideoClips)
+	for i := 1; i <= collectRefsImageSlots; i++ {
+		decl = append(decl, map[string]any{"name": fmt.Sprintf("image-%d", i), "type": "string"})
 	}
+	for i := 1; i <= maxReferenceVideoClips; i++ {
+		decl = append(decl, map[string]any{"name": fmt.Sprintf("video-%d", i), "type": "string"})
+	}
+	return decl
 }
 
 // enhanceInputDecl mirrors minimax.prompt_enhance.PromptEnhanceConfig's own
 // fields — the same multimodal reference shape genShotInputDecl's r2va
 // fields use, since H3-Context-IR reasons about exactly the content the
-// subsequent real gen-shot call sends (this file's own package doc).
+// subsequent real gen-shot call sends.
 func enhanceInputDecl() []map[string]any {
 	return []map[string]any{
 		{"name": "prompt", "type": "string"},
@@ -600,7 +625,14 @@ func buildBundleTasks(p shotPlan, shotDurationStr, ratio string) (mainTasks []an
 	collectName := fmt.Sprintf("collect-shot-%d", p.Index)
 	enhanceName := fmt.Sprintf("enhance-shot-%d", p.Index)
 
-	imageSlots := make([]any, maxReferenceImages)
+	// Sized to collect-refs' own full declared capacity (collectRefsImageSlots),
+	// not maxReferenceImages — every declared template input needs some
+	// value, or Aether's Binder fails. useImage below is only ever called
+	// once for the static ref plus once per BundleShotIndexes entry (itself
+	// capped at maxReferenceVideoClips), so video.sequence's own bundle
+	// naturally never approaches this many slots regardless of the array's
+	// full size.
+	imageSlots := make([]any, collectRefsImageSlots)
 	for i := range imageSlots {
 		imageSlots[i] = literal(fmt.Sprintf("image-%d", i+1), "")
 	}
@@ -960,9 +992,9 @@ type ResumeVideoSequenceRequest struct {
 // ever runs after every draft shot has finished) but pass the bundle's
 // asset IDs as *literal* values here rather than another collect-refs/
 // enhance-shot DAG detour: redo-loop/upgrade-loop bodies are Loop items
-// (plain object arrays, §5.5's own "loop.arguments {{...}} interpolation
-// doesn't work" constraint from image-comic4.json's doc applies equally
-// here), and every value this function produces is already resolved from
+// (plain object arrays — §5.5's own "loop.arguments {{...}} interpolation
+// doesn't work" constraint, docs/aether-validation-report.md §四 W4), and
+// every value this function produces is already resolved from
 // live engine state at Resume-call time — there is no DAG left to build a
 // dynamic fromTask reference into.
 func (s *Service) Resume(ctx context.Context, userID uint64, bizID string, req ResumeVideoSequenceRequest) error {

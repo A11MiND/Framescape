@@ -25,10 +25,10 @@ type ImageConfig struct {
 	// N arrives as a string, not a JSON number: every value that flows
 	// through workflow.parameters in this codebase is submitted as a JSON
 	// string by jobsvc/Engine.Submit (its args are map[string]string), so
-	// declaring N as int here would fail BindInputs' json.Unmarshal whenever
-	// it's wired from a workflow arg (image-batch.json) rather than a
-	// literal task input (image-single.json, which also uses a quoted
-	// string literal for exactly this reason — see that file).
+	// declaring N as int here would fail BindInputs' json.Unmarshal —
+	// image-single.json (image.single and the old image.batch merged into
+	// one workflow_name, jobsvc.go's own doc) wires n through as exactly
+	// such a workflow arg.
 	N           string `json:"n"`
 	Model       string `json:"model"`
 	AspectRatio string `json:"aspect-ratio"`

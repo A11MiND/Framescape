@@ -8,7 +8,6 @@ import type { Tab } from './jobResult'
 // back up. Revisit once real timing data exists.
 const BASE_SECONDS: Record<Tab, number> = {
   'image.single': 20,
-  'image.batch': 35,
   'image.comic4': 60,
   'image.sequence': 50,
   'video.single': 150,
@@ -20,7 +19,7 @@ const BASE_SECONDS: Record<Tab, number> = {
 // a real regression fit.
 export function estimateWaitSeconds(tab: Tab, opts: { n?: number; shots?: number; durationSeconds?: number; resolution?: string } = {}): number {
   const base = BASE_SECONDS[tab]
-  if (tab === 'image.batch') return base + (Math.max(opts.n ?? 4, 1) - 1) * 8
+  if (tab === 'image.single' && (opts.n ?? 1) > 1) return base + (Math.max(opts.n ?? 1, 1) - 1) * 8
   if (tab === 'image.sequence') return base * Math.max(opts.shots ?? 1, 1)
   if (tab === 'video.single') {
     const durationFactor = (opts.durationSeconds ?? 5) / 5

@@ -80,13 +80,13 @@ func main() {
 	registry := executor.NewRegistry()
 	must(registry.Register(mock.NewImagePlugin(sink)), log)
 	must(registry.Register(mock.NewVideoPlugin(sink)), log)
+	must(registry.Register(mock.NewPromptEnhancePlugin()), log)
 	must(registry.Register(minimax.NewImagePlugin(minimaxClient, sink, sink)), log)
 	must(registry.Register(minimax.NewFileUploadPlugin(minimaxClient, sink, fileCache)), log)
 	videoLimiter := minimax.NewVideoLimiter(redisClient, "default", config.MiniMaxVideoConcurrency())
 	must(registry.Register(minimax.NewVideoPlugin(minimaxClient, sink, sink, fileCache, redisClient, config.MiniMaxCallbackURL(), videoLimiter)), log)
 	must(registry.Register(minimax.NewVideoRegenPlugin(minimaxClient, sink, sink, fileCache, redisClient, config.MiniMaxCallbackURL(), videoLimiter)), log)
 	must(registry.Register(minimax.NewPromptEnhancePlugin(minimaxClient, sink, fileCache)), log)
-	must(registry.Register(minimax.NewStorySplitPlugin(minimaxClient)), log)
 	must(registry.Register(local.NewComposePlugin(sink, sink)), log)
 	must(registry.Register(local.NewExtractFramesPlugin(sink, sink)), log)
 	must(registry.Register(local.NewGatePlugin()), log)
@@ -106,14 +106,11 @@ func main() {
 	}
 	defer eng.Stop()
 
-	// jobsvc.Service here backs only upkeep's autoResumeSkipPreview duty
-	// (Resume's own doc) — the scheduler otherwise never touches jobsvc,
-	// same "one instance, narrow exception" reasoning as this file's own
-	// minimaxClient (F8.3's post-hoc review). minimaxClient itself is passed
-	// through unchanged — jobsvc needs it for video.sequence's "smart"
-	// reference-selection mode (Spec.ReferenceSelectionMode's own doc), one
-	// synchronous MiniMax-M3 call at Create()/Resume() time, before any DAG
-	// exists to run it as a task node.
+	// jobsvc.Service here backs only upkeep's autoResumeSkipPreview duty —
+	// the scheduler otherwise never touches jobsvc. minimaxClient is passed
+	// through because jobsvc needs it for video.sequence's "smart"
+	// reference-selection mode: one synchronous MiniMax-M3 call at
+	// Create()/Resume() time, before any DAG exists to run it as a task node.
 	jobs := jobsvc.New(gormDB, eng, credits, minimaxClient)
 
 	// §11.4's Scheduler duties: suspended-timeout cleanup + credit

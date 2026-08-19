@@ -299,6 +299,42 @@ func (s *Server) handleRestoreAsset(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// handleEmptyTrash is the user-triggered "一键倾倒" (empty trash now)
+// counterpart to upkeep.Runner.autoPurgeTrash: same storage-object-then-row
+// hard-delete order (never orphan a storage object by deleting its row
+// first), just scoped to the caller's own trash and with no
+// TrashRetentionDays cutoff — every one of their own already-soft-deleted
+// assets, not just the ones old enough for the automatic sweep. This is a
+// real, permanent, unrecoverable delete; the frontend's own doc covers why
+// that's fine here (the user explicitly asked to empty trash, not casually
+// clicked something).
+func (s *Server) handleEmptyTrash(c *gin.Context) {
+	ctx := c.Request.Context()
+	var rows []persistence.Asset
+	if err := s.db.WithContext(ctx).Where("user_id = ? AND deleted_at IS NOT NULL", userID(c)).Find(&rows).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "list trash"))
+		return
+	}
+	purged := 0
+	for _, a := range rows {
+		if a.StorageKey != "" {
+			if err := s.objects.Delete(ctx, a.StorageKey); err != nil {
+				continue // leave the row for a later purge rather than orphan the object
+			}
+		}
+		if a.ThumbKey != "" {
+			if err := s.objects.Delete(ctx, a.ThumbKey); err != nil {
+				continue
+			}
+		}
+		if err := s.db.WithContext(ctx).Delete(&persistence.Asset{}, a.ID).Error; err != nil {
+			continue
+		}
+		purged++
+	}
+	c.JSON(http.StatusOK, gin.H{"purged": purged})
+}
+
 // handleBatchDownloadAssets is F2.7's other half: given a set of asset
 // biz_ids, streams back a single zip so the browser gets one download
 // instead of N (which browsers routinely block as pop-ups anyway).

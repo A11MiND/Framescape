@@ -21,19 +21,26 @@ import (
 	"github.com/BabySid/aether/model"
 )
 
-// CollectRefsConfig's slot count matches what the narrative-continuity
-// window actually needs, not MiniMax's full documented ceiling (reference_image
-// ≤9, reference_video≤3 per the real API, verified directly against a live
-// call): a handful of keyframes plus the protagonist's own reference image,
-// and — per the real 15s-total/2-15s-per-clip r2va budget this project
-// verified — at most 3 video clips ever fit regardless of how many slots
-// exist.
+// CollectRefsConfig has two callers with two different reasons for their
+// slot counts. video.sequence's narrative-continuity bundle only ever needs
+// a handful of keyframes plus the protagonist's own reference image (well
+// under this struct's own image capacity) — its own real ceiling is the
+// verified r2va reference_video budget (≤3 clips total, this project's own
+// live-call verification), not this struct's slot count. image.comic4's
+// Continuity Mode reuses the same executor for a different job — gathering
+// however many panels the batch actually has (up to capability.ImageMaxN)
+// into one array before the final compose-grid step — which is what
+// actually sets the image slot count to 9, not video.sequence's own needs.
 type CollectRefsConfig struct {
 	Image1 string `json:"image-1"`
 	Image2 string `json:"image-2"`
 	Image3 string `json:"image-3"`
 	Image4 string `json:"image-4"`
 	Image5 string `json:"image-5"`
+	Image6 string `json:"image-6"`
+	Image7 string `json:"image-7"`
+	Image8 string `json:"image-8"`
+	Image9 string `json:"image-9"`
 	Video1 string `json:"video-1"`
 	Video2 string `json:"video-2"`
 	Video3 string `json:"video-3"`
@@ -57,7 +64,7 @@ func (p *CollectRefsPlugin) Execute(ctx context.Context, req *executor.ExecuteRe
 		return nil, fmt.Errorf("bind local.collect_refs inputs: %w", err)
 	}
 
-	images := nonEmptyStrings(cfg.Image1, cfg.Image2, cfg.Image3, cfg.Image4, cfg.Image5)
+	images := nonEmptyStrings(cfg.Image1, cfg.Image2, cfg.Image3, cfg.Image4, cfg.Image5, cfg.Image6, cfg.Image7, cfg.Image8, cfg.Image9)
 	videos := nonEmptyStrings(cfg.Video1, cfg.Video2, cfg.Video3)
 
 	return executor.OutputFrom(struct {

@@ -2,8 +2,7 @@
 // constraints PRD §10.5 calls the "Capability Matrix" — model limits like
 // max batch size, video duration range, and supported resolutions/ratios.
 // Before this package existed these numbers were hardcoded independently
-// in three places that could (and did, per jobsvc's own upper-bound-clamp
-// bug fixed earlier this session) drift apart: jobsvc's request-boundary
+// in three places that could drift apart: jobsvc's request-boundary
 // validation, each executor's own backstop clamp, and the frontend's
 // hardcoded option lists. This package is what all three now read from —
 // see GET /api/v1/capabilities (internal/interfaces/http/capabilities.go)
@@ -19,7 +18,7 @@ package capability
 
 // Image generation (MiniMax image-01, PRD §3.1).
 const (
-	ImageMaxN           = 9    // image.batch's upper bound — minimax.image's own MiniMax-imposed hard limit
+	ImageMaxN           = 9    // image.single's n upper bound (covers what used to be the separate image.batch workflow) — minimax.image's own MiniMax-imposed hard limit
 	ImageMaxPromptChars = 1500 // mirrors prompt.MaxPromptChars; duplicated as a plain constant here so this package stays dependency-free
 )
 

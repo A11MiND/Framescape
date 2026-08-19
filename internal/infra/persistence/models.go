@@ -120,6 +120,7 @@ type Job struct {
 	FinishedAt *time.Time `gorm:"column:finished_at"`
 	CreatedAt  time.Time  `gorm:"column:created_at"`
 	UpdatedAt  time.Time  `gorm:"column:updated_at"`
+	DeletedAt  *time.Time `gorm:"column:deleted_at"`
 }
 
 func (Job) TableName() string { return "jobs" }

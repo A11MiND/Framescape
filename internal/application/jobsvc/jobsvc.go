@@ -28,15 +28,14 @@ import (
 
 // definitions maps our business-layer workflow_name (dotted, e.g.
 // "image.single") to the aether/v1 document that implements it. Static files
-// only — video.sequence (W6) and image.sequence (its own cross-shot-
-// referencing extension) both generate their DAG dynamically per job instead
-// of loading a static file (docs/aether-validation-report.md §four, and
-// image_sequence.go's package doc), so neither is listed here; Create()
-// special-cases both before this map is ever consulted.
+// only — video.sequence (W6), image.sequence, and image.comic4 (both their
+// own cross-shot/panel-chaining extensions) all generate their DAG
+// dynamically per job instead of loading a static file
+// (docs/aether-validation-report.md §four, and image_sequence.go's/
+// image_comic4.go's own package docs), so none of the three is listed here;
+// Create() special-cases all three before this map is ever consulted.
 var definitions = map[string]string{
 	"image.single": "image-single",
-	"image.batch":  "image-batch",
-	"image.comic4": "image-comic4",
 	"video.single": "video-single",
 }
 
@@ -53,9 +52,9 @@ type CharacterSlot struct {
 // presets, and a seed.
 type Spec struct {
 	Text       string          `json:"text"`
-	N          int             `json:"n,omitempty"`          // image.batch only: 2..9 (PRD F5.2)
-	Panels     []string        `json:"panels,omitempty"`     // image.comic4 only: exactly 4 panel prompts (PRD F5.3)
-	Story      string          `json:"story,omitempty"`      // image.comic4 only, F5.4: auto-split into 4 panels instead of Panels; ignored if Panels is set
+	N          int             `json:"n,omitempty"`          // image.single only: 1..9, omitted/0 means 1 (image.batch merged into image.single, PRD F5.1/F5.2)
+	Panels     []string        `json:"panels,omitempty"`     // image.comic4 only: minComic4Panels..capability.ImageMaxN panel prompts (PRD F5.3, panel count no longer fixed at 4)
+	Story      string          `json:"story,omitempty"`      // image.comic4 only, F5.4: auto-split into N panels instead of Panels (N from Spec.N, default 4); ignored if Panels is set
 	Shots      []string        `json:"shots,omitempty"`      // image.sequence only: N shot descriptions (PRD F5.5)
 	// ShotSourceRefs is image.sequence's cross-shot referencing (§07 gap: a
 	// user asked to #-reference a sibling shot's about-to-be-generated
@@ -70,9 +69,12 @@ type Spec struct {
 	// server-side too) — a forward or self reference would be a real
 	// dependency cycle, not just tasteless.
 	ShotSourceRefs []int `json:"shot_source_refs,omitempty"`
-	// ImageSequenceMode mirrors Comic4Mode's own two-mode split, applied to
-	// image.sequence for the same reason: "甚至不只是四格漫畫" was explicit
-	// about this not being comic4-only. Empty/"quick" is the default and
+	// ImageSequenceMode is image.sequence's own quick/continuity split
+	// (§07 gap: "甚至不只是四格漫畫" was explicit about wanting this beyond
+	// just comic4 — though unlike comic4, image.sequence keeps Quick Mode:
+	// its #-mention override needs a real "off" state to fall back to,
+	// where comic4 dropped that distinction entirely since an unreferenced
+	// panel was never useful there). Empty/"quick" is the default and
 	// unchanged: shots stay fully independent unless a #-mention manually
 	// sets ShotSourceRefs. "continuity" changes only the *default* for a
 	// shot with no explicit override — it becomes the immediately preceding
@@ -88,28 +90,11 @@ type Spec struct {
 	// image.single only, extended to every image.* mode (§07 gap: a user
 	// asked why reference-image support wasn't universal) since
 	// minimax.image's subject_reference is already per-call, not tied to
-	// any one workflow shape; image.batch applies it to the whole n-batch,
-	// image.comic4/image.sequence apply it to every panel/shot the same
+	// any one workflow shape; image.single applies it across the whole
+	// n-batch when n>1, image.comic4/image.sequence apply it to every panel/shot the same
 	// way they already share one seed (F5.5's "同 seed" reasoning extends
 	// unchanged to "同 reference").
 	SourceImageAssetID string `json:"source_image_asset_id,omitempty"`
-
-	// Comic4Mode is image.comic4's own two-mode split (§07 gap: 4 panels
-	// generated fully independently in parallel, sharing only a seed and
-	// character text, never actually looked coherent as one comic) — an
-	// explicit ask to keep both rather than replace one with the other:
-	// "兩套並存，就說兩種模式". Empty/"quick" is the default and is
-	// completely unchanged from before this field existed — still the
-	// static workflows/image-comic4.json / image-comic4-auto.json Loop,
-	// still 4 independent panels. "continuity" routes to a Go-generated DAG
-	// (image_comic4.go) where every panel after the first automatically
-	// references the immediately preceding panel's own output (image_
-	// generation's subject_reference is verified capped at exactly one
-	// image per call — video_sequence.go's package doc covers the same
-	// verification for the unrelated, much higher video r2va cap) and gets
-	// an H3-Context-IR-enriched prompt aware of the story so far, not just
-	// its own isolated text.
-	Comic4Mode string `json:"comic4_mode,omitempty"` // image.comic4 only: "quick" (default) | "continuity"
 
 	// video.single only (F6.1-F6.3; PRD §3.2). Exactly one of
 	// {FirstFrameAssetID, LastFrameAssetID} vs the three Reference*AssetIDs
@@ -159,22 +144,17 @@ type Spec struct {
 	SourceVideoAssetID string `json:"source_video_asset_id,omitempty"` // video.sequence only
 
 	// NarrativeContinuity is video.sequence's opt-in upgrade to how r2va
-	// anchor shots get referenced (§07 gap: comic4/image.sequence/
-	// video.sequence's panel-to-panel consistency was too weak — same seed
-	// and character text, no real visual history). Off (default): an
-	// anchor shot still uses exactly one static reference (SourceImageAssetID/
-	// SourceVideoAssetID), identical to today's behavior. On: every anchor
-	// shot's reference becomes a real bundle built from the shots already
-	// generated earlier in this same job — most-recent full clips (as many
-	// as fit MiniMax's real reference_video budget: ≤3 clips, ≤15s combined,
-	// verified directly against the live API) plus their extracted
-	// keyframes plus the protagonist's own reference image — and that
-	// bundle, together with a running story outline, is run through
-	// MiniMax's H3-Context-IR (minimax.prompt_enhance, already wired for
-	// video.single as F6.10, now reused here) before the real r2va call, so
-	// the model is actually shown what happened rather than just told in
-	// one static image. See image_sequence_video.go's package doc for the
-	// full design and why this needed real API verification first.
+	// anchor shots get referenced. Off (default): an anchor shot still uses
+	// exactly one static reference (SourceImageAssetID/SourceVideoAssetID).
+	// On: every anchor shot's reference becomes a real bundle built from the
+	// shots already generated earlier in this same job — most-recent full
+	// clips (as many as fit MiniMax's r2va reference_video budget: ≤3
+	// clips, ≤15s combined) plus their extracted keyframes plus the
+	// protagonist's own reference image — and that bundle, together with a
+	// running story outline, is run through MiniMax's H3-Context-IR
+	// (minimax.prompt_enhance) before the real r2va call, so the model is
+	// actually shown what happened rather than just told in one static
+	// image.
 	NarrativeContinuity bool `json:"narrative_continuity,omitempty"` // video.sequence only
 
 	// ReferenceSelectionMode picks how an anchor shot's bundle gets built
@@ -183,11 +163,10 @@ type Spec struct {
 	//   - "window": most-recent-first sliding window (the default) — packs
 	//     as many of the immediately preceding shots' clips as fit the
 	//     15s reference_video budget.
-	//   - "manual": ShotReferenceOverrides wins instead of the window —
-	//     the same "#-mention picks a specific earlier shot" UX
-	//     image.sequence's ShotSourceRefs already established, kept here
-	//     rather than replaced by the new automatic modes (an explicit ask:
-	//     "引用# 這個本身是個值得的功能，需要你保留").
+	//   - "manual": ShotReferenceOverrides wins instead of the window — the
+	//     same "#-mention picks a specific earlier shot" UX image.sequence's
+	//     ShotSourceRefs uses, kept alongside the automatic modes rather
+	//     than replaced by them.
 	//   - "smart": one MiniMax-M3 text call (reusing minimax.text.split_story's
 	//     own pattern) reads every shot's text up front and decides, per
 	//     anchor, which earlier shot(s) actually matter narratively —
@@ -268,11 +247,12 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 		// image_sequence.go's package doc.
 		return s.createImageSequence(ctx, userID, spec, idemKey, projectID)
 	}
-	if workflowName == "image.comic4" && spec.Comic4Mode == "continuity" {
-		// Also dynamically generated, only for this one mode — "quick" (the
-		// default) keeps using the static file below entirely unchanged. See
-		// Spec.Comic4Mode's own doc and image_comic4.go's package doc.
-		return s.createImageComic4Continuity(ctx, userID, spec, idemKey, projectID)
+	if workflowName == "image.comic4" {
+		// Also dynamically generated, unconditionally now — image.comic4's
+		// old "quick" static-Loop mode was removed entirely (image_comic4.go's
+		// package doc: "沒有參考前圖的四格漫畫快速模式可以去掉了...一點用都
+		// 沒有"), not just demoted to a non-default option.
+		return s.createImageComic4(ctx, userID, spec, idemKey, projectID)
 	}
 
 	defFile, ok := definitions[workflowName]
@@ -281,9 +261,6 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 	}
 	if workflowName == "video.single" && spec.PromptEnhance {
 		defFile = "video-single-enhanced"
-	}
-	if workflowName == "image.comic4" && len(spec.Panels) == 0 && spec.Story != "" {
-		defFile = "image-comic4-auto"
 	}
 	raw, err := workflowdefs.FS.ReadFile(defFile + ".json")
 	if err != nil {
@@ -310,60 +287,26 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 	estimatedCredits := 0
 	switch workflowName {
 	case "image.single":
-		compiled := prompt.Compile(prompt.Input{Text: spec.Text, Characters: characters, Presets: presets, Seed: spec.Seed})
-		args["prompt"] = compiled.Prompt
-		args["seed"] = formatSeed(compiled.Seed)
-		args["source-image-asset-id"] = spec.SourceImageAssetID
-		estimatedCredits = creditsvc.EstimateImageCredits(1)
-	case "image.batch":
+		// image.batch merged in here (§07 gap: "單圖生成和批量出圖本質上只是
+		// n 的區別" — they always shared this exact same compile/prompt/seed
+		// logic and only differed in whether n was baked to 1 or read from
+		// Spec.N, so keeping them as two workflow_names was pure
+		// duplication). n unset/0 means "just one image", not batch's old
+		// "default to 4" — image.single is the primary entry point now, an
+		// unspecified count should never silently multiply.
 		compiled := prompt.Compile(prompt.Input{Text: spec.Text, Characters: characters, Presets: presets, Seed: spec.Seed})
 		args["prompt"] = compiled.Prompt
 		args["seed"] = formatSeed(compiled.Seed)
 		args["source-image-asset-id"] = spec.SourceImageAssetID
 		n := spec.N
 		if n <= 0 {
-			n = 4
+			n = 1
 		}
 		if n > capability.ImageMaxN {
 			n = 9 // mirrors image.go's own MiniMax-hard-limit clamp, so the hold matches what actually runs
 		}
 		args["n"] = strconv.Itoa(n)
 		estimatedCredits = creditsvc.EstimateImageCredits(n)
-	case "image.comic4":
-		switch {
-		case len(spec.Panels) == 4:
-			// Items are objects, not bare strings: a loop body task's inputs are
-			// populated directly from each item's own fields — loop.arguments
-			// {{...}} interpolation does not resolve for values pulled from
-			// inputs.parameters/workflow.parameters inside a loop (empirically
-			// verified against the real engine; see docs/aether-validation-report.md
-			// §四 W4 addendum). user-id has to ride along on every item since
-			// there is no other way to get a constant into the loop body.
-			panels := make([]map[string]any, 4)
-			for i, panelText := range spec.Panels {
-				compiled := prompt.Compile(prompt.Input{Text: panelText, Characters: characters, Presets: presets, Seed: spec.Seed})
-				panels[i] = map[string]any{
-					"prompt": compiled.Prompt, "seed": formatSeed(compiled.Seed),
-					"source-image-asset-id": spec.SourceImageAssetID, "user-id": strconv.FormatUint(userID, 10),
-				}
-			}
-			args["panels"] = panels
-			// Per-node, not EstimateImageCredits(4): each panel is its own
-			// minimax.image call (Loop body), so each pays the per-node
-			// credit floor independently — see EstimatePerNodeImageCredits's
-			// doc for why the combined-cost formula undercounts this.
-			estimatedCredits = creditsvc.EstimatePerNodeImageCredits(4)
-		case spec.Story != "":
-			// F5.4: routed to image-comic4-auto.json (see defFile selection
-			// above), whose split-story node builds the panels array itself —
-			// no character/preset compilation on the auto-split path, see
-			// story_split.go's doc.
-			args["story"] = spec.Story
-			args["source-image-asset-id"] = spec.SourceImageAssetID
-			estimatedCredits = creditsvc.EstimatePerNodeImageCredits(4) + creditsvc.EstimateStorySplitCredits()
-		default:
-			return nil, fmt.Errorf("image.comic4 requires exactly 4 panels, or a story to auto-split")
-		}
 	case "video.single":
 		// §3.2's 7000-char cap, not image's 1500 (PRD §3.1) — video.go itself
 		// also hard-truncates at 7000 as a backstop, same belt-and-braces
@@ -473,35 +416,26 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 func EstimateCredits(workflowName string, spec Spec) (int, error) {
 	switch workflowName {
 	case "image.single":
-		return creditsvc.EstimateImageCredits(1), nil
-	case "image.batch":
 		n := spec.N
 		if n <= 0 {
-			n = 4
+			n = 1
 		}
 		if n > capability.ImageMaxN {
 			n = 9
 		}
 		return creditsvc.EstimateImageCredits(n), nil
 	case "image.comic4":
-		switch {
-		case len(spec.Panels) == 4, spec.Story != "":
-			// nothing else to validate — the two sub-cases below only
-			// differ in cost, not in which shot count/story check applies.
-		default:
-			return 0, fmt.Errorf("image.comic4 requires exactly 4 panels, or a story to auto-split")
+		n, err := comic4PanelCount(spec)
+		if err != nil {
+			return 0, err
 		}
-		credits := creditsvc.EstimatePerNodeImageCredits(4)
-		if len(spec.Panels) != 4 && spec.Story != "" {
+		credits := creditsvc.EstimatePerNodeImageCredits(n)
+		if len(spec.Panels) < minComic4Panels && spec.Story != "" {
 			credits += creditsvc.EstimateStorySplitCredits()
 		}
-		if spec.Comic4Mode == "continuity" {
-			// Continuity Mode's own createImageComic4Continuity holds the
-			// same +4*EstimatePromptEnhanceCredits() — every panel gets
-			// enhanced (image_comic4.go's own doc), regardless of whether
-			// it's a static or chained reference.
-			credits += 4 * creditsvc.EstimatePromptEnhanceCredits()
-		}
+		// Every panel gets H3-Context-IR enhanced now — image_comic4.go's
+		// own doc, no more "quick" mode without this cost.
+		credits += n * creditsvc.EstimatePromptEnhanceCredits()
 		return credits, nil
 	case "image.sequence":
 		if len(spec.Shots) == 0 {
@@ -572,8 +506,7 @@ type EstimateItem struct {
 }
 
 const (
-	ItemKindImageSingle     = "image_single"
-	ItemKindImageBatch      = "image_batch"
+	ItemKindImageSingle     = "image_single" // covers every n (1 or many — image.batch merged into image.single)
 	ItemKindComic4Panels    = "comic4_panels"
 	ItemKindStorySplit      = "story_split"
 	ItemKindSequenceShots   = "sequence_shots"
@@ -596,25 +529,25 @@ func EstimateBreakdown(workflowName string, spec Spec) ([]EstimateItem, int, err
 	}
 	switch workflowName {
 	case "image.single":
-		return []EstimateItem{{Kind: ItemKindImageSingle, Count: 1, Credits: total}}, total, nil
-	case "image.batch":
 		n := spec.N
 		if n <= 0 {
-			n = 4
+			n = 1
 		}
 		if n > capability.ImageMaxN {
 			n = 9
 		}
-		return []EstimateItem{{Kind: ItemKindImageBatch, Count: n, Credits: total}}, total, nil
+		return []EstimateItem{{Kind: ItemKindImageSingle, Count: n, Credits: total}}, total, nil
 	case "image.comic4":
+		n, err := comic4PanelCount(spec)
+		if err != nil {
+			return nil, 0, err
+		}
 		perPanel := creditsvc.EstimatePerNodeImageCredits(1)
-		items := []EstimateItem{{Kind: ItemKindComic4Panels, Count: 4, Credits: perPanel * 4}}
-		if spec.Story != "" && len(spec.Panels) != 4 {
+		items := []EstimateItem{{Kind: ItemKindComic4Panels, Count: n, Credits: perPanel * n}}
+		if spec.Story != "" && len(spec.Panels) < minComic4Panels {
 			items = append(items, EstimateItem{Kind: ItemKindStorySplit, Count: 1, Credits: creditsvc.EstimateStorySplitCredits()})
 		}
-		if spec.Comic4Mode == "continuity" {
-			items = append(items, EstimateItem{Kind: ItemKindPromptEnhance, Count: 4, Credits: 4 * creditsvc.EstimatePromptEnhanceCredits()})
-		}
+		items = append(items, EstimateItem{Kind: ItemKindPromptEnhance, Count: n, Credits: n * creditsvc.EstimatePromptEnhanceCredits()})
 		return items, total, nil
 	case "image.sequence":
 		perShot := creditsvc.EstimatePerNodeImageCredits(1)
@@ -676,7 +609,7 @@ func (s *Service) List(ctx context.Context, userID uint64, status string, cursor
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	q := s.db.WithContext(ctx).Where("user_id = ?", userID)
+	q := s.db.WithContext(ctx).Where("user_id = ? AND deleted_at IS NULL", userID)
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
@@ -721,6 +654,26 @@ func (s *Service) Cancel(ctx context.Context, userID uint64, bizID string) error
 		return fmt.Errorf("cancel workflow run: %w", err)
 	}
 	return nil
+}
+
+// Delete soft-deletes a job record from the user's own history (作业列表),
+// same deleted_at mechanism assets/characters/projects already use. Only
+// terminal jobs can be deleted — a still-running one has to be cancelled
+// first, since its credit hold/refund and node projections are still live
+// and deleting the row out from under them would leave that bookkeeping
+// with nothing to update. The row itself is never hard-deleted: it's also
+// credit-ledger provenance (credit_ledger.ref_id points at its biz_id).
+func (s *Service) Delete(ctx context.Context, userID uint64, bizID string) error {
+	job, _, err := s.Get(ctx, userID, bizID)
+	if err != nil {
+		return err
+	}
+	if job.Status != "succeeded" && job.Status != "failed" && job.Status != "cancelled" {
+		return fmt.Errorf("job %q is still %s — cancel it before deleting", bizID, job.Status)
+	}
+	now := time.Now()
+	return s.db.WithContext(ctx).Model(&persistence.Job{}).
+		Where("id = ?", job.ID).Update("deleted_at", now).Error
 }
 
 // resolveCharacters loads the characters bound to spec.Characters, in slot
@@ -805,7 +758,7 @@ func (s *Service) resolvePresets(ctx context.Context, presetIDs []string) ([]pro
 // this was the one read path that didn't.
 func (s *Service) Get(ctx context.Context, userID uint64, bizID string) (*persistence.Job, *workflow.Run, error) {
 	var job persistence.Job
-	if err := s.db.WithContext(ctx).Where("biz_id = ? AND user_id = ?", bizID, userID).First(&job).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("biz_id = ? AND user_id = ? AND deleted_at IS NULL", bizID, userID).First(&job).Error; err != nil {
 		return nil, nil, fmt.Errorf("job %q not found: %w", bizID, err)
 	}
 	run, err := s.eng.Get(ctx, workflow.RunID(job.WorkflowRunID))

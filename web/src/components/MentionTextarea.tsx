@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api, type AssetResponse } from '../lib/api'
@@ -100,19 +100,7 @@ function useTypewriterHint(phrases: string[], active: boolean) {
 // and highlights inserted tokens via a same-text overlay <div> sitting
 // behind a color-transparent textarea (kept in scroll-sync), the standard
 // technique for styling substrings a native textarea can't style itself.
-export function MentionTextarea({
-  value,
-  onChange,
-  onMentionAsset,
-  onMentionShot,
-  siblingShots,
-  shotLabelKey = 'studio.mention.shot',
-  rows = 3,
-  placeholder,
-  hintPhrases,
-  className = '',
-  enableRewrite = true,
-}: {
+interface MentionTextareaProps {
   value: string
   onChange: (v: string) => void
   onMentionAsset?: (asset: AssetResponse) => void
@@ -145,7 +133,30 @@ export function MentionTextarea({
   // caller is a free-text prompt field it makes sense for; a caller can
   // still opt out if a future use of this component isn't one.
   enableRewrite?: boolean
-}) {
+}
+
+// forwardRef so a caller can imperatively focus/move the caret (comic4's
+// "插入分隔符" button needs this: clicking it must hand focus straight back
+// to the textarea, caret at the end, or the user's next keystroke lands
+// wherever focus happened to be instead of continuing what they were
+// writing — the same requestAnimationFrame-then-setSelectionRange pattern
+// pick()/pickShot() below already use for the same reason).
+export const MentionTextarea = forwardRef<HTMLTextAreaElement, MentionTextareaProps>(function MentionTextarea(
+  {
+    value,
+    onChange,
+    onMentionAsset,
+    onMentionShot,
+    siblingShots,
+    shotLabelKey = 'studio.mention.shot',
+    rows = 3,
+    placeholder,
+    hintPhrases,
+    className = '',
+    enableRewrite = true,
+  },
+  forwardedRef,
+) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [focused, setFocused] = useState(false)
@@ -248,7 +259,11 @@ export function MentionTextarea({
         {value ? renderHighlighted(value) : <span className="text-zinc-600">{typedHint}</span>}
       </div>
       <textarea
-        ref={ref}
+        ref={(node) => {
+          ref.current = node
+          if (typeof forwardedRef === 'function') forwardedRef(node)
+          else if (forwardedRef) forwardedRef.current = node
+        }}
         value={value}
         onChange={handleChange}
         onFocus={() => setFocused(true)}
@@ -317,4 +332,4 @@ export function MentionTextarea({
       )}
     </div>
   )
-}
+})

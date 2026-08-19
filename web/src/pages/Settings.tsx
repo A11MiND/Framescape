@@ -46,7 +46,7 @@ export default function Settings() {
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-2xl space-y-6 px-6 py-8">
+      <div className="mx-auto max-w-5xl space-y-6 px-6 py-8">
         <h1 className="text-lg font-medium">{t('settings.title')}</h1>
 
         <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
