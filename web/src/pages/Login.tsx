@@ -377,7 +377,7 @@ export default function Login() {
             <button
               type="button"
               onClick={handleGoogleLogin}
-              className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-zinc-700 bg-white px-3 py-2.5 text-sm font-medium text-zinc-800 transition hover:border-zinc-500"
+              className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-neutral-300 bg-white px-3 py-2.5 text-sm font-medium text-neutral-800 transition hover:border-neutral-400"
             >
               <GoogleLogo className="h-4 w-4" />
               {t('login.continueWithGoogle')}
