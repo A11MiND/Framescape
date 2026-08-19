@@ -240,9 +240,7 @@ export default function Login() {
 
         <div className="relative w-full max-w-sm space-y-5">
           <div className="text-center">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-400 to-violet-600 text-xl text-white shadow-lg shadow-violet-950/40">
-              ✦
-            </div>
+            <img src="/logo-mark.png" alt="" className="mx-auto mb-3 h-12 w-12 object-contain" />
             <h1 className="text-xl font-semibold text-zinc-50">{t('brand.name')}</h1>
             <p className="mt-1 text-sm text-zinc-500">{t('brand.tagline')}</p>
           </div>

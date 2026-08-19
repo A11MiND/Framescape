@@ -83,9 +83,7 @@ export default function Rail() {
 
   return (
     <aside className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-zinc-800 bg-zinc-950 px-3 py-2 lg:h-screen lg:w-[76px] lg:flex-col lg:overflow-visible lg:border-b-0 lg:border-r lg:px-0 lg:py-5">
-      <div className="mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 text-base text-white shadow-lg shadow-violet-950/40 lg:mb-4 lg:mr-0">
-        ✦
-      </div>
+      <img src="/logo-mark.png" alt="" className="mr-1 h-9 w-9 shrink-0 object-contain lg:mb-4 lg:mr-0" />
 
       <nav className="flex items-center gap-1 lg:flex-1 lg:flex-col lg:gap-1.5">
         {LINKS.map((l) => (
