@@ -261,6 +261,19 @@ func (s *Service) RechargeDemo(ctx context.Context, userID uint64, idemKey strin
 	return s.recharge(ctx, userID, idemKey, amount, encodeRemark(remarkPayload{Kind: "recharge_demo", Amount: amount}))
 }
 
+// GrantStreak is communitysvc.Service.RecordPublish's payout for crossing a
+// daily-publish streak milestone (3/10/30 days) — same mechanics as
+// RechargeDemo, kept as its own method rather than a shared "bonus" one
+// because the ledger's remark.kind varies by milestone
+// (community_streak_3/10/30, each its own zh.json/en.json string) so a
+// user's credit history reads "连续发布3天奖励" rather than a generic
+// "bonus credited". idemKey is communitysvc's own
+// "community_streak:{userID}:{days}:{date}", so a retried RecordPublish
+// call can never double-grant the same day's milestone.
+func (s *Service) GrantStreak(ctx context.Context, userID uint64, idemKey string, streakDays, amount int) error {
+	return s.recharge(ctx, userID, idemKey, amount, encodeRemark(remarkPayload{Kind: fmt.Sprintf("community_streak_%d", streakDays), Amount: amount}))
+}
+
 func (s *Service) recharge(ctx context.Context, userID uint64, idemKey string, amount int, remark string) error {
 	if amount <= 0 {
 		return fmt.Errorf("recharge amount must be positive, got %d", amount)

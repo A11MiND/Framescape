@@ -194,6 +194,21 @@ export interface CommunityAsset {
   prompt?: string
 }
 
+// StreakMilestone/CommunityStreak mirror handleCommunityStreak's response —
+// communitysvc.Service.GetStatus's own doc covers the milestone/cap rules
+// this is just a read projection of.
+export interface StreakMilestone {
+  days: number
+  credits: number
+  monthly_cap: number
+  used_this_month: number
+}
+
+export interface CommunityStreak {
+  current_streak: number
+  milestones: StreakMilestone[]
+}
+
 export interface Project {
   biz_id: string
   name: string
@@ -446,6 +461,7 @@ export const api = {
     request<void>('PATCH', `/assets/${bizId}`, { is_public: isPublic }),
   listCommunityFeed: (limit?: number) =>
     request<{ assets: CommunityAsset[] }>('GET', limit ? `/community/feed?limit=${limit}` : '/community/feed'),
+  getCommunityStreak: () => request<CommunityStreak>('GET', '/community/streak'),
 
   listProjects: () => request<{ projects: Project[] }>('GET', '/projects'),
   createProject: (name: string, description: string) =>

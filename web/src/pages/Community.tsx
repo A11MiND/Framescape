@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { api, type CommunityAsset } from '../lib/api'
+import { api, type CommunityAsset, type CommunityStreak } from '../lib/api'
 import AppShell from '../components/AppShell'
 
 // §07's "社區功能：看別人做的作品，也可以發佈出去" ask — a masonry feed of
@@ -19,6 +19,7 @@ import AppShell from '../components/AppShell'
 export default function Community() {
   const { t } = useTranslation()
   const feed = useQuery({ queryKey: ['community', 'feed'], queryFn: () => api.listCommunityFeed(90) })
+  const streak = useQuery({ queryKey: ['community', 'streak'], queryFn: () => api.getCommunityStreak() })
   const [active, setActive] = useState<CommunityAsset | null>(null)
 
   return (
@@ -28,6 +29,8 @@ export default function Community() {
           <h1 className="text-lg font-medium">{t('community.title')}</h1>
           <p className="mt-1 text-sm text-zinc-500">{t('community.subtitle')}</p>
         </div>
+
+        {streak.data && <StreakPanel streak={streak.data} />}
 
         {feed.isSuccess && feed.data.assets.length === 0 && <p className="mt-6 text-zinc-500">{t('community.empty')}</p>}
 
@@ -75,5 +78,40 @@ export default function Community() {
         </div>
       )}
     </AppShell>
+  )
+}
+
+// StreakPanel surfaces handleCommunityStreak's read model — GetStatus's own
+// doc covers the milestone/cap rules this just renders. A milestone with
+// monthly_cap: 0 (currently only the 30-day one) never shows a used/cap
+// line since there's no cap to report.
+function StreakPanel({ streak }: { streak: CommunityStreak }) {
+  const { t } = useTranslation()
+  return (
+    <div className="mb-6 flex flex-wrap items-center gap-4 rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-3">
+      <div>
+        <p className="text-xs text-zinc-500">{t('community.streak.heading')}</p>
+        <p className="text-sm font-medium text-zinc-200">
+          {streak.current_streak > 0
+            ? t('community.streak.current', { count: streak.current_streak })
+            : t('community.streak.current_zero')}
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {streak.milestones.map((m) => (
+          <div
+            key={m.days}
+            className={`rounded-lg border px-2.5 py-1 text-xs ${
+              streak.current_streak >= m.days ? 'border-violet-700 text-violet-300' : 'border-zinc-700 text-zinc-500'
+            }`}
+          >
+            <div>{t('community.streak.milestone', { days: m.days, credits: m.credits })}</div>
+            {m.monthly_cap > 0 && (
+              <div className="text-zinc-600">{t('community.streak.capUsed', { used: m.used_this_month, cap: m.monthly_cap })}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }

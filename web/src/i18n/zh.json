@@ -59,7 +59,10 @@
       "commit": "结算 {{amount}} 积分（成本 ¥{{cost}}）",
       "refund": "退还 {{amount}} 积分（未使用的预留额度）",
       "recharge_demo": "演示充值（非真实支付）",
-      "recharge_custom": "管理员充值：{{text}}"
+      "recharge_custom": "管理员充值：{{text}}",
+      "community_streak_3": "连续发布 3 天奖励",
+      "community_streak_10": "连续发布 10 天奖励",
+      "community_streak_30": "连续发布 30 天奖励"
     },
     "topupFailed": "充值失败",
     "topupTooltip": "POC 示范充值，非真实支付，直接为帐号增加积分",
@@ -111,7 +114,14 @@
     "empty": "还没有人发布作品，来做第一个吧",
     "publish": "发布到社区",
     "unpublish": "从社区移除",
-    "publishFailed": "操作失败，请重试"
+    "publishFailed": "操作失败，请重试",
+    "streak": {
+      "heading": "连续发布",
+      "current_zero": "今天发布一次，开始你的连续发布记录",
+      "current": "已连续发布 {{count}} 天",
+      "milestone": "{{days}} 天 · +{{credits}} 积分",
+      "capUsed": "本月已用 {{used}}/{{cap}} 次"
+    }
   },
   "workflow": {
     "imageSingle": "单图",

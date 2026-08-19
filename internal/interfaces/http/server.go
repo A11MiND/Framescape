@@ -14,6 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
+	"aigc-platform/internal/application/communitysvc"
 	"aigc-platform/internal/application/creditsvc"
 	"aigc-platform/internal/application/jobsvc"
 	"aigc-platform/internal/infra/executor/minimax"
@@ -41,10 +42,15 @@ type Server struct {
 	// isn't triggered by a job lifecycle event, so it needs its own handle
 	// on the service rather than going through jobs.
 	credits *creditsvc.Service
+	// community backs the daily-publish streak reward (handleUpdateAsset's
+	// RecordPublish call, handleCommunityStreak's status read) — its own
+	// *creditsvc.Service handle, separate from the one above, since a
+	// streak bonus is granted independently of any job/topup flow.
+	community *communitysvc.Service
 }
 
-func NewServer(db *gorm.DB, jobs *jobsvc.Service, credits *creditsvc.Service, redisClient *redis.Client, jwtSecret string, minimaxClient *minimax.Client, objectStore *storage.Store) *Server {
-	return &Server{db: db, jobs: jobs, credits: credits, redis: redisClient, jwtSecret: jwtSecret, minimax: minimaxClient, objects: objectStore}
+func NewServer(db *gorm.DB, jobs *jobsvc.Service, credits *creditsvc.Service, community *communitysvc.Service, redisClient *redis.Client, jwtSecret string, minimaxClient *minimax.Client, objectStore *storage.Store) *Server {
+	return &Server{db: db, jobs: jobs, credits: credits, community: community, redis: redisClient, jwtSecret: jwtSecret, minimax: minimaxClient, objects: objectStore}
 }
 
 func (s *Server) Router() *gin.Engine {
@@ -83,6 +89,7 @@ func (s *Server) Router() *gin.Engine {
 		authed.POST("/assets/:bizID/complete", s.handleCompleteAsset)
 		authed.GET("/assets", s.handleListAssets)
 		authed.GET("/community/feed", s.handleCommunityFeed)
+		authed.GET("/community/streak", s.handleCommunityStreak)
 		authed.GET("/assets/:bizID", s.handleGetAsset)
 		authed.PATCH("/assets/:bizID", s.handleUpdateAsset)
 		authed.DELETE("/assets/:bizID", s.handleDeleteAsset)

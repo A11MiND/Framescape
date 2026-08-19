@@ -13,10 +13,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
 	"aigc-platform/internal/application/upkeep"
 	"aigc-platform/internal/infra/persistence"
 	"aigc-platform/internal/pkg/id"
+	"aigc-platform/internal/pkg/logger"
 )
 
 // handleGetAsset is F2.5's detail read: the full record, not the list
@@ -149,6 +151,29 @@ func (s *Server) handleCommunityFeed(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"assets": out})
 }
 
+// handleCommunityStreak is GET /api/v1/community/streak: the caller's own
+// current daily-publish streak plus each reward milestone's this-month cap
+// usage (communitysvc.Service.GetStatus's own doc covers the rules) — a
+// pure read, never advances the streak itself (only RecordPublish, called
+// from handleUpdateAsset's publish path, does that).
+func (s *Server) handleCommunityStreak(c *gin.Context) {
+	status, err := s.community.GetStatus(c.Request.Context(), userID(c))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "get community streak"))
+		return
+	}
+	milestones := make([]gin.H, 0, len(status.Milestones))
+	for _, m := range status.Milestones {
+		milestones = append(milestones, gin.H{
+			"days":            m.Days,
+			"credits":         m.Credits,
+			"monthly_cap":     m.MonthlyCap,
+			"used_this_month": m.UsedThisMonth,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"current_streak": status.CurrentStreak, "milestones": milestones})
+}
+
 // resolveProjectID turns a project biz_id into its numeric id, scoped to
 // userID so one user can't file an asset under another's project — same
 // ownership-check shape as resolveCharacters in jobsvc.
@@ -227,7 +252,28 @@ func (s *Server) handleUpdateAsset(c *gin.Context) {
 		c.JSON(http.StatusNotFound, errBody("not_found", "asset not found"))
 		return
 	}
-	c.Status(http.StatusOK)
+
+	// The daily-publish streak (communitysvc.Service.RecordPublish's own
+	// doc covers the milestone/cap rules) advances on every is_public:true
+	// call, not just a false→true transition — RecordPublish is itself
+	// idempotent per calendar day, so re-publishing an already-public asset
+	// or publishing a second one the same day is a safe no-op rather than
+	// something this handler needs to detect. A streak-bonus failure here
+	// is never allowed to fail the publish itself, which already committed
+	// above — logged and swallowed, not surfaced as a 5xx for something
+	// that actually succeeded.
+	if req.IsPublic != nil && *req.IsPublic {
+		if _, err := s.community.RecordPublish(c.Request.Context(), userID(c)); err != nil {
+			logger.From(c.Request.Context()).Error("record community publish streak", zap.Error(err))
+		}
+	}
+	// 204, not 200: the frontend's request() helper only skips resp.json()
+	// on a 204, so a 200-with-empty-body here throws a JSON parse error on
+	// every successful call — publish/unpublish landed in the DB but the
+	// UI saw it as a failure (never invalidated its query, showed the
+	// generic error toast instead). Found live via a real publish/unpublish
+	// click that updated the row but left the button's label stuck.
+	c.Status(http.StatusNoContent)
 }
 
 // handleDeleteAsset is F2.7's soft-delete: sets deleted_at rather than

@@ -59,7 +59,10 @@
       "commit": "Settled {{amount}} credits (cost ¥{{cost}})",
       "refund": "Refunded {{amount}} unused held credits",
       "recharge_demo": "Demo top-up (not a real payment)",
-      "recharge_custom": "Admin recharge: {{text}}"
+      "recharge_custom": "Admin recharge: {{text}}",
+      "community_streak_3": "3-day publish streak bonus",
+      "community_streak_10": "10-day publish streak bonus",
+      "community_streak_30": "30-day publish streak bonus"
     },
     "topupFailed": "Top-up failed",
     "topupTooltip": "POC demo top-up — not a real payment, credits your account directly",
@@ -111,7 +114,14 @@
     "empty": "No one has published anything yet — be the first",
     "publish": "Publish to community",
     "unpublish": "Remove from community",
-    "publishFailed": "Failed, please retry"
+    "publishFailed": "Failed, please retry",
+    "streak": {
+      "heading": "Publish streak",
+      "current_zero": "Publish once today to start your streak",
+      "current": "{{count}}-day streak",
+      "milestone": "{{days}} days · +{{credits}} credits",
+      "capUsed": "{{used}}/{{cap}} used this month"
+    }
   },
   "workflow": {
     "imageSingle": "Single image",

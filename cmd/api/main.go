@@ -13,6 +13,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"aigc-platform/internal/application/communitysvc"
 	"aigc-platform/internal/application/creditsvc"
 	"aigc-platform/internal/application/jobsvc"
 	"aigc-platform/internal/infra/cache"
@@ -43,6 +44,7 @@ func main() {
 	}
 	eng := rpc.NewClient(config.SchedulerURL())
 	credits := creditsvc.New(sqlDB)
+	community := communitysvc.New(sqlDB, credits)
 	redisClient := cache.NewClient(config.RedisAddr())
 	// F1.2's anonymous trial only — see internal/interfaces/http/trial.go's
 	// doc for why cmd/api holds a MiniMax client despite the package doc's
@@ -70,7 +72,7 @@ func main() {
 		objectStore = nil
 	}
 
-	srv := httpapi.NewServer(db, jobs, credits, redisClient, config.JWTSecret(), minimaxClient, objectStore)
+	srv := httpapi.NewServer(db, jobs, credits, community, redisClient, config.JWTSecret(), minimaxClient, objectStore)
 
 	httpSrv := &http.Server{Addr: config.APIAddr(), Handler: srv.Router()}
 	go func() {
