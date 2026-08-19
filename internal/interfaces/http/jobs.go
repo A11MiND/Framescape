@@ -69,7 +69,10 @@ func (s *Server) handleResumeJob(c *gin.Context) {
 		c.JSON(http.StatusUnprocessableEntity, errBody("resume_failed", err.Error()))
 		return
 	}
-	c.Status(http.StatusOK)
+	// 204, not 200: see handleUpdateAsset's identical comment — a 200 with
+	// no body makes the frontend's request() helper throw on resp.json(),
+	// so the preview-gate resume looked like it failed even after succeeding.
+	c.Status(http.StatusNoContent)
 }
 
 // handleListJobs is GET /api/v1/jobs?status=&cursor=&limit= (F7.1): the job
@@ -171,7 +174,8 @@ func (s *Server) handleCancelJob(c *gin.Context) {
 		c.JSON(http.StatusUnprocessableEntity, errBody("cancel_failed", err.Error()))
 		return
 	}
-	c.Status(http.StatusOK)
+	// 204, not 200: see handleUpdateAsset's identical comment.
+	c.Status(http.StatusNoContent)
 }
 
 // handleDeleteJob is DELETE /api/v1/jobs/{bizID} — soft-deletes one job
