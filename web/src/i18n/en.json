@@ -25,7 +25,19 @@
     "passwordPlaceholder": "Password (8+ characters)",
     "createAccount": "Create account",
     "notSure": "Not ready yet? ",
-    "tryFree": "Try it free in the workshop"
+    "tryFree": "Browse what the community has made",
+    "usePhone": "Sign in with a phone number",
+    "useEmail": "Sign in with email",
+    "phoneNumberPlaceholder": "Phone number",
+    "codePlaceholder": "Verification code",
+    "sendCode": "Send code",
+    "continuePhone": "Sign in / sign up",
+    "codeSent": "Sent — resend",
+    "orDivider": "or",
+    "continueWithGoogle": "Continue with Google",
+    "googleNotConfigured": "Google sign-in isn't available yet",
+    "phoneNotConfigured": "Phone sign-in isn't available yet",
+    "emailCodeNotConfigured": "Email verification isn't available yet — you can register without it"
   },
   "rail": {
     "generate": "Workshop",
@@ -112,6 +124,11 @@
     "title": "Community",
     "subtitle": "Browse what everyone else has published",
     "empty": "No one has published anything yet — be the first",
+    "mineEmpty": "You haven't published anything yet",
+    "tabs": {
+      "feed": "All",
+      "mine": "Mine"
+    },
     "publish": "Publish to community",
     "unpublish": "Remove from community",
     "publishFailed": "Failed, please retry",
@@ -291,14 +308,9 @@
       "prompt": "Prompt",
       "seed": "Seed",
       "mode": "Mode",
-      "layout": "Layout",
-      "providerTaskId": "MiniMax task"
+      "layout": "Layout"
     },
     "saveFrameAsCharacter": "Extract frame & save as character",
-    "providerCacheTooltip": "Whether this is currently cached with MiniMax (avoids re-uploading the same asset)",
-    "cached": "Cached",
-    "cacheExpired": "Cache expired",
-    "notCached": "Not cached",
     "notFound": "This asset can't be found — it may have been deleted"
   },
   "assetPicker": {
@@ -492,7 +504,8 @@
     "appearance": "Appearance",
     "themeDark": "Dark",
     "themeLight": "Light",
-    "language": "Language"
+    "language": "Language",
+    "noEmail": "No email on file"
   },
   "notifications": {
     "title": "Notifications",

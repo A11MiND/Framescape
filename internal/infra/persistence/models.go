@@ -9,15 +9,47 @@ import "time"
 
 // User mirrors the `users` table (migrations/00001_init.sql).
 type User struct {
-	ID           uint64 `gorm:"primaryKey"`
-	BizID        string `gorm:"column:biz_id"`
-	Email        string
-	PasswordHash string    `gorm:"column:password_hash"`
+	ID    uint64 `gorm:"primaryKey"`
+	BizID string `gorm:"column:biz_id"`
+	// Email/PasswordHash are nullable (migration 00013): a Google- or
+	// phone-only account has neither. Every login path still resolves to
+	// exactly one row via whichever identifier it was created with.
+	Email        *string
+	PasswordHash *string `gorm:"column:password_hash"`
+	Phone        *string
+	GoogleSub    *string   `gorm:"column:google_sub"`
 	CreatedAt    time.Time `gorm:"column:created_at"`
 	UpdatedAt    time.Time `gorm:"column:updated_at"`
 }
 
 func (User) TableName() string { return "users" }
+
+// PhoneVerificationCode backs handlePhoneSendCode/handlePhoneVerify's OTP
+// flow (migration 00013) — one row per code sent, Consumed once used so it
+// can't be replayed.
+type PhoneVerificationCode struct {
+	ID         uint64 `gorm:"primaryKey"`
+	Phone      string
+	Code       string
+	ExpiresAt  time.Time  `gorm:"column:expires_at"`
+	ConsumedAt *time.Time `gorm:"column:consumed_at"`
+	CreatedAt  time.Time  `gorm:"column:created_at"`
+}
+
+func (PhoneVerificationCode) TableName() string { return "phone_verification_codes" }
+
+// EmailVerificationCode backs handleEmailSendCode/handleRegister's optional
+// code check (migration 00015) — same shape as PhoneVerificationCode.
+type EmailVerificationCode struct {
+	ID         uint64 `gorm:"primaryKey"`
+	Email      string
+	Code       string
+	ExpiresAt  time.Time  `gorm:"column:expires_at"`
+	ConsumedAt *time.Time `gorm:"column:consumed_at"`
+	CreatedAt  time.Time  `gorm:"column:created_at"`
+}
+
+func (EmailVerificationCode) TableName() string { return "email_verification_codes" }
 
 // CreditAccount mirrors the `credit_accounts` table.
 type CreditAccount struct {

@@ -102,3 +102,25 @@ func SuspendedTimeout() time.Duration {
 	}
 	return time.Duration(seconds) * time.Second
 }
+
+// --- Google / phone login scaffolding — routes, DB columns, and frontend
+// entry points exist regardless (auth_oauth.go), but every one of them
+// checks these first and answers "not configured" (a real 4xx, not a
+// silently-broken login) until real credentials land here. Nothing in this
+// codebase should ever hardcode a fallback for either. ---
+
+// GoogleClientID is the OAuth 2.0 web client ID from Google Cloud Console
+// (APIs & Services → Credentials) — also the ID token's expected `aud`
+// claim, checked in auth_oauth.go's verifyGoogleIDToken. Empty disables
+// Google login entirely (handleGoogleLogin's own doc).
+func GoogleClientID() string { return getEnv("GOOGLE_CLIENT_ID", "") }
+
+// SMSAPIKey gates phone login the same way — provider unspecified on
+// purpose (§ auth_oauth.go's sendSMSCode doc: this POC never picked one,
+// so there's nothing to configure a base URL/region for yet either).
+func SMSAPIKey() string { return getEnv("SMS_API_KEY", "") }
+
+// EmailProviderAPIKey gates handleRegister's email-verification-code step
+// (auth_oauth.go's sendEmailCode doc) — empty (the default) means
+// registration works exactly as it always has, no code required.
+func EmailProviderAPIKey() string { return getEnv("EMAIL_PROVIDER_API_KEY", "") }

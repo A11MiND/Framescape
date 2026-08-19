@@ -51,7 +51,7 @@ export default function Settings() {
 
         <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
           <p className="mb-3 text-xs uppercase tracking-wide text-zinc-500">{t('settings.account')}</p>
-          <p className="text-sm text-zinc-300">{me.data?.email}</p>
+          <p className="text-sm text-zinc-300">{me.data?.email ?? t('settings.noEmail')}</p>
           <button
             onClick={logout}
             className="mt-4 rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition hover:border-red-500 hover:text-red-400"

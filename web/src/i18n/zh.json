@@ -25,7 +25,19 @@
     "passwordPlaceholder": "密码（至少 8 位）",
     "createAccount": "创建账号",
     "notSure": "还没想好？",
-    "tryFree": "先去工坊免费试用一次"
+    "tryFree": "先去社区看看大家的作品",
+    "usePhone": "使用手机号登录",
+    "useEmail": "使用邮箱登录",
+    "phoneNumberPlaceholder": "手机号",
+    "codePlaceholder": "验证码",
+    "sendCode": "发送验证码",
+    "continuePhone": "登录 / 注册",
+    "codeSent": "已发送，重新发送",
+    "orDivider": "或",
+    "continueWithGoogle": "使用 Google 登录",
+    "googleNotConfigured": "Google 登录尚未开放",
+    "phoneNotConfigured": "手机号登录尚未开放",
+    "emailCodeNotConfigured": "邮箱验证码尚未开放，可直接注册"
   },
   "rail": {
     "generate": "工坊",
@@ -112,6 +124,11 @@
     "title": "社区",
     "subtitle": "浏览大家发布的作品",
     "empty": "还没有人发布作品，来做第一个吧",
+    "mineEmpty": "你还没有发布过作品",
+    "tabs": {
+      "feed": "全部作品",
+      "mine": "我发布的"
+    },
     "publish": "发布到社区",
     "unpublish": "从社区移除",
     "publishFailed": "操作失败，请重试",
@@ -291,14 +308,9 @@
       "prompt": "提示词",
       "seed": "Seed",
       "mode": "模式",
-      "layout": "拼版",
-      "providerTaskId": "MiniMax 任务"
+      "layout": "拼版"
     },
     "saveFrameAsCharacter": "抽帧存为角色",
-    "providerCacheTooltip": "是否已缓存到 MiniMax（避免同一素材重复上传）",
-    "cached": "已缓存",
-    "cacheExpired": "缓存已过期",
-    "notCached": "未缓存",
     "notFound": "找不到这个素材，可能已被删除"
   },
   "assetPicker": {
@@ -492,7 +504,8 @@
     "appearance": "外观",
     "themeDark": "深色",
     "themeLight": "浅色",
-    "language": "语言"
+    "language": "语言",
+    "noEmail": "未绑定邮箱"
   },
   "notifications": {
     "title": "通知",

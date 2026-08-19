@@ -3,18 +3,24 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
 	"aigc-platform/internal/infra/persistence"
+	"aigc-platform/internal/pkg/config"
 	"aigc-platform/internal/pkg/id"
 )
 
+// registerRequest's Code is only checked when config.EmailProviderAPIKey()
+// is set (handleRegister's own doc) — until then it's read and ignored,
+// same as today's behavior before this field existed.
 type registerRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required,min=8"`
+	Code     string `json:"code"`
 }
 
 type loginRequest struct {
@@ -48,11 +54,29 @@ func (s *Server) issueTokens(userID uint64) (tokenPair, error) {
 	return tokenPair{AccessToken: access, RefreshToken: refresh}, nil
 }
 
+// handleRegister requires a verified email code only once
+// config.EmailProviderAPIKey() is actually set — see auth_oauth.go's
+// sendEmailCode doc. Left unset (today's default), registration behaves
+// exactly as it always has: email + password, no code.
 func (s *Server) handleRegister(c *gin.Context) {
 	var req registerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
 		return
+	}
+
+	if config.EmailProviderAPIKey() != "" {
+		var vc persistence.EmailVerificationCode
+		err := s.db.Where("email = ? AND code = ? AND consumed_at IS NULL AND expires_at > ?", req.Email, req.Code, time.Now()).
+			Order("id DESC").First(&vc).Error
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, errBody("invalid_code", "verification code is invalid or expired"))
+			return
+		}
+		if err := s.db.Model(&vc).Update("consumed_at", time.Now()).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, errBody("internal", "consume verification code"))
+			return
+		}
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
@@ -61,7 +85,8 @@ func (s *Server) handleRegister(c *gin.Context) {
 		return
 	}
 
-	user := persistence.User{BizID: id.New(), Email: req.Email, PasswordHash: string(hash)}
+	hashStr := string(hash)
+	user := persistence.User{BizID: id.New(), Email: &req.Email, PasswordHash: &hashStr}
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&user).Error; err != nil {
 			return err
@@ -97,7 +122,11 @@ func (s *Server) handleLogin(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, errBody("internal", "lookup user"))
 		return
 	}
-	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
+	// PasswordHash is nil for a Google-/phone-only account — same
+	// "incorrect" response as a real mismatch rather than a distinct error,
+	// so this endpoint never confirms which accounts do or don't have a
+	// password set.
+	if user.PasswordHash == nil || bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(req.Password)) != nil {
 		c.JSON(http.StatusUnauthorized, errBody("invalid_credentials", "email or password incorrect"))
 		return
 	}
@@ -161,7 +190,10 @@ func (s *Server) handleChangePassword(c *gin.Context) {
 		c.JSON(http.StatusNotFound, errBody("not_found", "user not found"))
 		return
 	}
-	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.CurrentPassword)) != nil {
+	// A Google-/phone-only account has no current password to check against
+	// — treated as "incorrect" too, same reasoning as handleLogin's own nil
+	// check just above it.
+	if user.PasswordHash == nil || bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(req.CurrentPassword)) != nil {
 		c.JSON(http.StatusUnauthorized, errBody("invalid_credentials", "current password incorrect"))
 		return
 	}

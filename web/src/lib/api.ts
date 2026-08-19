@@ -86,7 +86,8 @@ export interface TokenPair {
 
 export interface MeResponse {
   biz_id: string
-  email: string
+  // null for a phone-only account (no email set) — see auth_oauth.go.
+  email: string | null
   balance: number
 }
 
@@ -159,10 +160,6 @@ export interface AssetResponse {
   source?: string
   meta?: Record<string, unknown>
   job_biz_id?: string
-  // provider_cache: whether this asset currently has a cached MiniMax
-  // file_id (provider_files) — only present on the single-asset GET, same
-  // as source/meta/job_biz_id above.
-  provider_cache?: { cached: boolean; expire_at?: string | null; expired?: boolean }
 }
 
 // TrashAsset is handleListTrash's own projection (assetToJSON's fields
@@ -361,10 +358,21 @@ export interface CreditLedgerEntry {
 }
 
 export const api = {
-  register: (email: string, password: string) =>
-    request<TokenPair>('POST', '/auth/register', { email, password }, { auth: false }),
+  // code is ignored server-side unless config.EmailProviderAPIKey() is set
+  // (handleRegister's own doc) — harmless to always send whatever the
+  // "发送验证码" field holds, empty or not.
+  register: (email: string, password: string, code?: string) =>
+    request<TokenPair>('POST', '/auth/register', { email, password, code }, { auth: false }),
   login: (email: string, password: string) =>
     request<TokenPair>('POST', '/auth/login', { email, password }, { auth: false }),
+  // auth_oauth.go's own doc — all three answer 400 with code
+  // "google_not_configured" / "sms_not_configured" / "email_not_configured"
+  // until real provider credentials exist server-side.
+  googleLogin: (idToken: string) => request<TokenPair>('POST', '/auth/google', { id_token: idToken }, { auth: false }),
+  sendPhoneCode: (phone: string) => request<void>('POST', '/auth/phone/send-code', { phone }, { auth: false }),
+  sendEmailCode: (email: string) => request<void>('POST', '/auth/email/send-code', { email }, { auth: false }),
+  verifyPhoneCode: (phone: string, code: string) =>
+    request<TokenPair>('POST', '/auth/phone/verify', { phone, code }, { auth: false }),
   me: () => request<MeResponse>('GET', '/me'),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<void>('PATCH', '/me/password', { current_password: currentPassword, new_password: newPassword }),
@@ -436,12 +444,13 @@ export const api = {
     }),
 
   getAsset: (bizId: string) => request<AssetResponse>('GET', `/assets/${bizId}`),
-  listAssets: (opts: { type?: 'image' | 'video'; projectId?: string; limit?: number; q?: string } = {}) => {
+  listAssets: (opts: { type?: 'image' | 'video'; projectId?: string; limit?: number; q?: string; isPublic?: boolean } = {}) => {
     const params = new URLSearchParams()
     if (opts.type) params.set('type', opts.type)
     if (opts.projectId) params.set('project_id', opts.projectId)
     if (opts.limit) params.set('limit', String(opts.limit))
     if (opts.q) params.set('q', opts.q)
+    if (opts.isPublic) params.set('is_public', 'true')
     const qs = params.toString()
     return request<{ assets: AssetResponse[] }>('GET', qs ? `/assets?${qs}` : '/assets')
   },
