@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { resultAssetIds, statusToPhase, WORKFLOW_LABEL_KEY, type Tab } from '../lib/jobResult'
+import { resultAssetIds, resolveTab, statusToPhase, WORKFLOW_LABEL_KEY } from '../lib/jobResult'
 import { displayNodeError, firstSpecificError } from '../lib/errors'
 import { useToast } from '../components/Toast'
 import AppShell from '../components/AppShell'
@@ -42,9 +42,9 @@ export default function JobDetail() {
   const job = jobQuery.data
   const gateNode = job?.nodes.find((n) => n.name === 'gate')
   const gateSuspended = job?.workflow_name === 'video.sequence' && gateNode?.phase === 'Suspended'
-  const assetIds = job ? resultAssetIds(job, job.workflow_name as Tab) : []
+  const assetIds = job ? resultAssetIds(job, resolveTab(job.workflow_name)) : []
   const running = job && job.status !== 'succeeded' && job.status !== 'failed' && job.status !== 'cancelled'
-  const label = job ? t(WORKFLOW_LABEL_KEY[job.workflow_name as Tab]) || job.workflow_name : ''
+  const label = job ? t(WORKFLOW_LABEL_KEY[resolveTab(job.workflow_name)]) || job.workflow_name : ''
 
   // F7.4: stops the run and lets the existing terminal-phase machinery
   // (jobsvc.Service.Cancel's own doc) settle credits — this just fires the

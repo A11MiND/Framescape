@@ -31,6 +31,21 @@ export const WORKFLOW_LABEL_KEY: Record<Tab, string> = {
   'video.sequence': 'workflow.videoSequence',
 }
 
+// LEGACY_TAB_ALIASES maps a workflow_name from before a merge/rename to its
+// current Tab. jobs.workflow_name is never rewritten on existing rows, so
+// a job created before image.batch folded into image.single still reports
+// "image.batch" forever — every place that reads job.workflow_name as a
+// Tab must resolve it through resolveTab below rather than casting
+// directly, or that old job silently resolves to no result assets, no
+// label, and an empty un-prefilled composer (found live, all three).
+const LEGACY_TAB_ALIASES: Record<string, Tab> = {
+  'image.batch': 'image.single',
+}
+
+export function resolveTab(workflowName: string): Tab {
+  return (LEGACY_TAB_ALIASES[workflowName] ?? workflowName) as Tab
+}
+
 export const RESULT_FIELD: Partial<Record<Tab, { node: string; field: string }>> = {
   'image.single': { node: 'gen', field: 'asset-ids' },
   'image.comic4': { node: 'compose', field: 'asset-id' },

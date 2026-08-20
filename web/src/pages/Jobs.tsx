@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
-import { statusToPhase, WORKFLOW_LABEL_KEY, type Tab } from '../lib/jobResult'
+import { statusToPhase, WORKFLOW_LABEL_KEY, resolveTab } from '../lib/jobResult'
 import AppShell from '../components/AppShell'
 import PhaseBadge from '../components/PhaseBadge'
 
@@ -101,7 +101,7 @@ export default function Jobs() {
 
         <div className="space-y-2">
           {jobs.map((j) => {
-            const label = t(WORKFLOW_LABEL_KEY[j.workflow_name as Tab]) || j.workflow_name
+            const label = t(WORKFLOW_LABEL_KEY[resolveTab(j.workflow_name)]) || j.workflow_name
             return (
               <Link
                 key={j.biz_id}

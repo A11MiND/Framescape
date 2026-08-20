@@ -8,12 +8,13 @@ import { CSS } from '@dnd-kit/utilities'
 import { api, ApiError, type Spec, type WorkflowName, type JobResponse } from '../lib/api'
 import {
   estimateImageCredits,
+  estimatePerNodeImageCredits,
   estimateVideoCredits,
   estimatePromptEnhanceCredits,
   estimateStorySplitCredits,
 } from '../lib/pricing'
 import { videoSingleSchema, RATIO_VALUES } from '../lib/videoSpec'
-import { resultAssetIds, WORKFLOW_LABEL_KEY, type Tab } from '../lib/jobResult'
+import { resultAssetIds, resolveTab, WORKFLOW_LABEL_KEY, type Tab } from '../lib/jobResult'
 import { displayNodeError, firstSpecificError } from '../lib/errors'
 import { suggestActions, type SuggestedAction } from '../lib/suggestions'
 import { shotMode, SHOT_MODE_LABEL_KEY, SHOT_MODE_CLASS, type ShotMode } from '../lib/shotPlan'
@@ -111,8 +112,8 @@ function TabIcon({ tab, className }: { tab: Tab; className?: string }) {
 }
 
 // suggestActions' own SuggestedAction used to carry an emoji glyph per
-// action (🎬🔁☺✨⬆) — moved here as plain stroke SVGs, same reasoning as
-// TabIcon just above.
+// action (clapper board, repeat arrows, smiling face, sparkles, up arrow)
+// — moved here as plain stroke SVGs, same reasoning as TabIcon just above.
 function SuggestionIcon({ kind, className }: { kind: SuggestedAction['kind']; className?: string }) {
   const common = { viewBox: '0 0 20 20', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, className }
   switch (kind) {
@@ -342,7 +343,15 @@ export default function Studio() {
   useEffect(() => {
     const prefill = (location.state as { prefillJob?: { workflowName: Tab; spec: Spec } } | null)?.prefillJob
     if (!prefill) return
-    const { workflowName, spec } = prefill
+    const spec = prefill.spec
+    // AssetDetail/JobDetail's "以此再生成" pass job.workflow_name straight
+    // through with no guarantee it's a currently-valid Tab — a job created
+    // before image.batch merged into image.single still carries that old
+    // name forever (workflow_name is never rewritten on existing rows).
+    // resolveTab is the same legacy-alias fix jobResult.ts's other readers
+    // of workflow_name use; without it this landed on tab: 'image.batch',
+    // which matches no format card and populates no fields below.
+    const workflowName = resolveTab(prefill.workflowName)
     setTab(workflowName)
     setBizId(null)
 
@@ -607,9 +616,10 @@ export default function Studio() {
     tab === 'image.single'
       ? estimateImageCredits(n)
       : tab === 'image.comic4'
-          ? estimateImageCredits(4) + (comicMode === 'auto' ? estimateStorySplitCredits() : 0)
+          ? estimatePerNodeImageCredits(comicMode === 'manual' ? manualPanelCount : n) +
+            (comicMode === 'auto' ? estimateStorySplitCredits() : 0)
           : tab === 'image.sequence'
-            ? estimateImageCredits(shots.filter((s) => s.trim()).length || 1)
+            ? estimatePerNodeImageCredits(shots.filter((s) => s.trim()).length || 1)
             : tab === 'video.single'
               ? estimateVideoCredits(duration, resolution) +
                 (promptEnhance ? estimatePromptEnhanceCredits() : 0)
@@ -1370,7 +1380,21 @@ export default function Studio() {
                 <button
                   onClick={() => createJob.mutate()}
                   disabled={
-                    createJob.isPending || running || insufficientBalance || (tab === 'video.single' && !videoValidation.success)
+                    createJob.isPending ||
+                    running ||
+                    insufficientBalance ||
+                    (tab === 'video.single' && !videoValidation.success) ||
+                    // The amber "识别到 N 格" hint just above already computes
+                    // this exact validity check but only as a color cue — the
+                    // button itself never read it, so a manual-mode comic4
+                    // with too few/many panels submitted anyway and only
+                    // failed after a round trip to the backend. Auto mode's
+                    // own n comes from a constrained dropdown (imageNOptions
+                    // filtered to >= minComic4Panels), so it can't go invalid
+                    // the same way.
+                    (tab === 'image.comic4' &&
+                      comicMode === 'manual' &&
+                      (manualPanelCount < minComic4Panels || manualPanelCount > comic4MaxPanels))
                   }
                   className="rounded-full bg-violet-500 px-5 py-2 text-sm font-medium text-white transition hover:bg-violet-400 disabled:opacity-50"
                 >

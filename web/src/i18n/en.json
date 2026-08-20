@@ -37,7 +37,9 @@
     "continueWithGoogle": "Continue with Google",
     "googleNotConfigured": "Google sign-in isn't available yet",
     "phoneNotConfigured": "Phone sign-in isn't available yet",
-    "emailCodeNotConfigured": "Email verification isn't available yet — you can register without it"
+    "emailCodeNotConfigured": "Email verification isn't available yet — you can register without it",
+    "emailTaken": "This email is already registered — try a different sign-in method",
+    "tooManyAttempts": "Too many attempts, please try again later"
   },
   "rail": {
     "generate": "Workshop",

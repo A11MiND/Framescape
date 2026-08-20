@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
-import { WORKFLOW_LABEL_KEY, type Tab } from '../lib/jobResult'
+import { WORKFLOW_LABEL_KEY, resolveTab } from '../lib/jobResult'
 import { useClickOutside } from '../hooks/useClickOutside'
 
 // §07/09's "通知中心 + 數字角標" gap — the running-job badge Rail already
@@ -73,7 +73,7 @@ export default function NotificationCenter() {
               className="block rounded-lg px-1.5 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800"
             >
               <span className="mr-1 text-amber-400">●</span>
-              {j.title || t(WORKFLOW_LABEL_KEY[j.workflow_name as Tab]) || j.workflow_name}
+              {j.title || t(WORKFLOW_LABEL_KEY[resolveTab(j.workflow_name)]) || j.workflow_name}
             </Link>
           ))}
 
@@ -88,7 +88,7 @@ export default function NotificationCenter() {
               onClick={() => setOpen(false)}
               className="flex items-center justify-between rounded-lg px-1.5 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
             >
-              <span className="truncate">{j.title || t(WORKFLOW_LABEL_KEY[j.workflow_name as Tab]) || j.workflow_name}</span>
+              <span className="truncate">{j.title || t(WORKFLOW_LABEL_KEY[resolveTab(j.workflow_name)]) || j.workflow_name}</span>
               <span className="shrink-0 pl-2 text-zinc-600">{formatTime(j.created_at)}</span>
             </Link>
           ))}

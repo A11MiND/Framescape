@@ -7,13 +7,13 @@ package httpapi
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
-	"math/rand"
 	"net/http"
 	"time"
 
@@ -25,6 +25,44 @@ import (
 	"aigc-platform/internal/pkg/config"
 	"aigc-platform/internal/pkg/id"
 )
+
+// generateVerificationCode returns a uniform random 6-digit code from
+// crypto/rand — math/rand's default source is not safe for anything an
+// attacker benefits from predicting, which a login code plainly is.
+func generateVerificationCode() (string, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
+	if err != nil {
+		return "", fmt.Errorf("generate verification code: %w", err)
+	}
+	return fmt.Sprintf("%06d", n.Int64()), nil
+}
+
+// maxVerifyAttempts bounds how many guesses a single phone/email gets
+// against its own live code before checkVerifyRateLimit starts refusing —
+// a 6-digit code has 1,000,000 possibilities, so an unthrottled verify
+// endpoint is a straightforward brute force within the code's own
+// validity window. Keyed and expired to match that window (10 minutes,
+// same as the code's own ExpiresAt), so the limit resets once the code
+// they were guessing against has expired anyway.
+const maxVerifyAttempts = 8
+
+func (s *Server) checkVerifyRateLimit(ctx context.Context, kind, identifier string) error {
+	if s.redis == nil {
+		return nil // no rate limiting without Redis rather than hard-failing every verify call
+	}
+	key := fmt.Sprintf("verify_attempts:%s:%s", kind, identifier)
+	n, err := s.redis.Incr(ctx, key).Result()
+	if err != nil {
+		return nil // fail open on a Redis error — a transient outage there shouldn't lock everyone out of signing in
+	}
+	if n == 1 {
+		s.redis.Expire(ctx, key, 10*time.Minute)
+	}
+	if n > maxVerifyAttempts {
+		return fmt.Errorf("too many verification attempts, try again later")
+	}
+	return nil
+}
 
 // --- Google ID token verification ---
 
@@ -165,29 +203,28 @@ func (s *Server) handleGoogleLogin(c *gin.Context) {
 	case err == nil:
 		// already linked, nothing else to do
 	case errors.Is(err, gorm.ErrRecordNotFound):
-		// Not linked yet — an existing email/password account with the same
-		// verified email gets Google linked onto it instead of a duplicate
-		// second account; a brand-new email creates a fresh, password-less
-		// account (Google is the only way in until Settings adds one).
+		// Not linked yet. This used to auto-link onto any existing account
+		// with the same email — a real account-takeover hole: email
+		// verification is off by default (config.EmailProviderAPIKey()
+		// unset), so an attacker could register victim@gmail.com with a
+		// password of their own choosing via /auth/register *before* the
+		// real victim ever signs in with Google, and Google's own
+		// email_verified claim doesn't prove they own *this app's* row for
+		// that email — the code found the attacker's row and handed them
+		// shared access to it. Never auto-link by email now; a genuine
+		// email collision is refused with a clear "log in the other way"
+		// error instead of silently merging into a stranger's account.
 		email := claims.Email
 		sub := claims.Subject
-		if linkErr := s.db.Where("email = ?", email).First(&user).Error; linkErr == nil {
-			if err := s.db.Model(&user).Update("google_sub", sub).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, errBody("internal", "link google account"))
-				return
-			}
-		} else {
-			user = persistence.User{BizID: id.New(), Email: &email, GoogleSub: &sub}
-			txErr := s.db.Transaction(func(tx *gorm.DB) error {
-				if err := tx.Create(&user).Error; err != nil {
-					return err
-				}
-				return tx.Create(&persistence.CreditAccount{UserID: user.ID, Balance: 0}).Error
-			})
-			if txErr != nil {
-				c.JSON(http.StatusInternalServerError, errBody("internal", "create user"))
-				return
-			}
+		var existing persistence.User
+		if lookupErr := s.db.Where("email = ?", email).First(&existing).Error; lookupErr == nil {
+			c.JSON(http.StatusConflict, errBody("email_taken", "an account already exists for this email — sign in with your password (or phone) instead"))
+			return
+		}
+		user = persistence.User{BizID: id.New(), Email: &email, GoogleSub: &sub}
+		if err := s.createAccount(&user); err != nil {
+			c.JSON(http.StatusInternalServerError, errBody("internal", "create user"))
+			return
 		}
 	default:
 		c.JSON(http.StatusInternalServerError, errBody("internal", "lookup user"))
@@ -228,7 +265,11 @@ func (s *Server) handlePhoneSendCode(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
 		return
 	}
-	code := fmt.Sprintf("%06d", rand.Intn(1_000_000))
+	code, err := generateVerificationCode()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "generate verification code"))
+		return
+	}
 	if err := s.db.Create(&persistence.PhoneVerificationCode{
 		Phone: req.Phone, Code: code, ExpiresAt: time.Now().Add(10 * time.Minute),
 	}).Error; err != nil {
@@ -261,6 +302,10 @@ func (s *Server) handlePhoneVerify(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
 		return
 	}
+	if err := s.checkVerifyRateLimit(c.Request.Context(), "phone", req.Phone); err != nil {
+		c.JSON(http.StatusTooManyRequests, errBody("too_many_attempts", err.Error()))
+		return
+	}
 
 	var vc persistence.PhoneVerificationCode
 	err := s.db.Where("phone = ? AND code = ? AND consumed_at IS NULL AND expires_at > ?", req.Phone, req.Code, time.Now()).
@@ -279,13 +324,7 @@ func (s *Server) handlePhoneVerify(c *gin.Context) {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		phone := req.Phone
 		user = persistence.User{BizID: id.New(), Phone: &phone}
-		txErr := s.db.Transaction(func(tx *gorm.DB) error {
-			if err := tx.Create(&user).Error; err != nil {
-				return err
-			}
-			return tx.Create(&persistence.CreditAccount{UserID: user.ID, Balance: 0}).Error
-		})
-		if txErr != nil {
+		if err := s.createAccount(&user); err != nil {
 			c.JSON(http.StatusInternalServerError, errBody("internal", "create user"))
 			return
 		}
@@ -326,7 +365,11 @@ func (s *Server) handleEmailSendCode(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
 		return
 	}
-	code := fmt.Sprintf("%06d", rand.Intn(1_000_000))
+	code, err := generateVerificationCode()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "generate verification code"))
+		return
+	}
 	if err := s.db.Create(&persistence.EmailVerificationCode{
 		Email: req.Email, Code: code, ExpiresAt: time.Now().Add(10 * time.Minute),
 	}).Error; err != nil {

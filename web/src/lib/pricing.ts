@@ -18,6 +18,18 @@ export function estimateImageCredits(n: number): number {
   return creditsFromYuan(Math.max(1, n) * IMAGE_RATE_YUAN)
 }
 
+// Mirrors creditsvc.EstimatePerNodeImageCredits — image.comic4/
+// image.sequence each bill one MiniMax call per panel/shot independently,
+// so n separate §12.2 "minimum 1 credit" floors is the correct estimate,
+// not one combined-cost floor for n images the way estimateImageCredits
+// above works (that one's image.single's own shape: one call producing n
+// outputs). Using estimateImageCredits for comic4/sequence here used to
+// under-price them the same way the server-side bug this mirrors had
+// (4 panels floors to 4 credits total, not 2).
+export function estimatePerNodeImageCredits(n: number): number {
+  return Math.max(1, n) * creditsFromYuan(IMAGE_RATE_YUAN)
+}
+
 export function estimateVideoCredits(durationSeconds: number, resolution: string): number {
   const rate = VIDEO_RATE_YUAN[resolution] ?? VIDEO_RATE_YUAN['768P']
   return creditsFromYuan(durationSeconds * rate)

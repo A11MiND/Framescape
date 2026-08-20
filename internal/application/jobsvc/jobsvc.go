@@ -838,7 +838,13 @@ func nonNil(s []string) []string {
 // usual "not found is a valid outcome" convention for lookup helpers.
 func (s *Service) findByIdemKey(ctx context.Context, userID uint64, idemKey string) (*persistence.Job, error) {
 	var job persistence.Job
-	err := s.db.WithContext(ctx).Where("user_id = ? AND idem_key = ?", userID, idemKey).First(&job).Error
+	// deleted_at IS NULL matches List()/Get() — without it, a retried
+	// request whose original job was since soft-deleted (Delete() never
+	// clears idem_key) finds that dead row and Create() hands it back
+	// unchanged, but GET /jobs/{bizID} then 404s since Get() does filter
+	// on this. The idempotency key would be permanently stuck pointing at
+	// a job the caller can never fetch again. Found live in code review.
+	err := s.db.WithContext(ctx).Where("user_id = ? AND idem_key = ? AND deleted_at IS NULL", userID, idemKey).First(&job).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}

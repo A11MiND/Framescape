@@ -54,6 +54,22 @@ func (s *Server) issueTokens(userID uint64) (tokenPair, error) {
 	return tokenPair{AccessToken: access, RefreshToken: refresh}, nil
 }
 
+// createAccount inserts a new user row plus its zero-balance CreditAccount
+// in one transaction — every signup path (email/password, Google, phone)
+// needs exactly this pair and nothing else, so each one just fills in
+// `user`'s identifier field(s) and calls this rather than repeating the
+// transaction inline. Was three hand-copied versions of the same two
+// lines before this — a future addition to what a new account needs
+// (signup bonus, default project, etc.) now only has one place to land.
+func (s *Server) createAccount(user *persistence.User) error {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(user).Error; err != nil {
+			return err
+		}
+		return tx.Create(&persistence.CreditAccount{UserID: user.ID, Balance: 0}).Error
+	})
+}
+
 // handleRegister requires a verified email code only once
 // config.EmailProviderAPIKey() is actually set — see auth_oauth.go's
 // sendEmailCode doc. Left unset (today's default), registration behaves
@@ -66,6 +82,10 @@ func (s *Server) handleRegister(c *gin.Context) {
 	}
 
 	if config.EmailProviderAPIKey() != "" {
+		if err := s.checkVerifyRateLimit(c.Request.Context(), "email", req.Email); err != nil {
+			c.JSON(http.StatusTooManyRequests, errBody("too_many_attempts", err.Error()))
+			return
+		}
 		var vc persistence.EmailVerificationCode
 		err := s.db.Where("email = ? AND code = ? AND consumed_at IS NULL AND expires_at > ?", req.Email, req.Code, time.Now()).
 			Order("id DESC").First(&vc).Error
@@ -87,12 +107,7 @@ func (s *Server) handleRegister(c *gin.Context) {
 
 	hashStr := string(hash)
 	user := persistence.User{BizID: id.New(), Email: &req.Email, PasswordHash: &hashStr}
-	err = s.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&user).Error; err != nil {
-			return err
-		}
-		return tx.Create(&persistence.CreditAccount{UserID: user.ID, Balance: 0}).Error
-	})
+	err = s.createAccount(&user)
 	if err != nil {
 		c.JSON(http.StatusConflict, errBody("email_taken", "email already registered"))
 		return

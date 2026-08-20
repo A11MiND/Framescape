@@ -37,7 +37,9 @@
     "continueWithGoogle": "使用 Google 登录",
     "googleNotConfigured": "Google 登录尚未开放",
     "phoneNotConfigured": "手机号登录尚未开放",
-    "emailCodeNotConfigured": "邮箱验证码尚未开放，可直接注册"
+    "emailCodeNotConfigured": "邮箱验证码尚未开放，可直接注册",
+    "emailTaken": "这个邮箱已经注册过了，换个邮箱登录方式试试",
+    "tooManyAttempts": "尝试次数太多了，请稍后再试"
   },
   "rail": {
     "generate": "工坊",

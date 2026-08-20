@@ -80,25 +80,23 @@ func comic4PanelCount(spec Spec) (int, error) {
 }
 
 func (s *Service) createImageComic4(ctx context.Context, userID uint64, spec Spec, idemKey string, projectID *uint64) (*persistence.Job, error) {
+	// count/bounds-validation is comic4PanelCount's own job (also used by
+	// EstimateCredits) — re-deriving the same min/max clamping here used to
+	// drift from it under different local variable names (n vs count),
+	// which desyncs the price shown to the user from what the job actually
+	// runs. This only adds what comic4PanelCount can't do itself (no
+	// DB/MiniMax access): actually calling SplitStory in auto-split mode.
+	count, err := comic4PanelCount(spec)
+	if err != nil {
+		return nil, err
+	}
+
 	panelTexts := spec.Panels
 	splitCost := 0
-	switch {
-	case len(panelTexts) >= minComic4Panels:
-		if len(panelTexts) > capability.ImageMaxN {
-			return nil, fmt.Errorf("image.comic4 supports at most %d panels, got %d", capability.ImageMaxN, len(panelTexts))
-		}
-	case spec.Story != "":
+	if len(panelTexts) < minComic4Panels {
 		if s.minimax == nil {
 			return nil, fmt.Errorf("story auto-split is unavailable in this deployment")
 		}
-		count := spec.N
-		if count < minComic4Panels {
-			count = 4 // auto-split's default panel count
-		}
-		if count > capability.ImageMaxN {
-			count = capability.ImageMaxN
-		}
-		var err error
 		panelTexts, _, err = minimax.SplitStory(ctx, s.minimax, spec.Story, count)
 		if err != nil {
 			return nil, fmt.Errorf("split story into panels: %w", err)
@@ -107,8 +105,6 @@ func (s *Service) createImageComic4(ctx context.Context, userID uint64, spec Spe
 			return nil, fmt.Errorf("story split returned %d panels, want %d", len(panelTexts), count)
 		}
 		splitCost = creditsvc.EstimateStorySplitCredits()
-	default:
-		return nil, fmt.Errorf("image.comic4 requires at least %d panels, or a story to auto-split", minComic4Panels)
 	}
 
 	characters, err := s.resolveCharacters(ctx, userID, spec.Characters)

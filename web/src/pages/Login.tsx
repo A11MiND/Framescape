@@ -110,6 +110,8 @@ export default function Login() {
       if (err.code === 'google_not_configured') return t('login.googleNotConfigured')
       if (err.code === 'sms_not_configured') return t('login.phoneNotConfigured')
       if (err.code === 'email_not_configured') return t('login.emailCodeNotConfigured')
+      if (err.code === 'email_taken') return t('login.emailTaken')
+      if (err.code === 'too_many_attempts') return t('login.tooManyAttempts')
       return err.message
     }
     return t('common.somethingWentWrong')
@@ -202,7 +204,7 @@ export default function Login() {
       setTokens(tokens.access_token, tokens.refresh_token)
       navigate('/')
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('common.somethingWentWrong'))
+      setError(friendlyError(err))
     } finally {
       setBusy(false)
     }
