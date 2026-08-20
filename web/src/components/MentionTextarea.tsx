@@ -129,9 +129,9 @@ interface MentionTextareaProps {
   // omitted, and always includes the "#" tip as its last phrase.
   hintPhrases?: string[]
   className?: string
-  // The ✨ AI-rewrite corner button — on by default since every current
-  // caller is a free-text prompt field it makes sense for; a caller can
-  // still opt out if a future use of this component isn't one.
+  // The sparkles-icon AI-rewrite corner button — on by default since every
+  // current caller is a free-text prompt field it makes sense for; a caller
+  // can still opt out if a future use of this component isn't one.
   enableRewrite?: boolean
 }
 

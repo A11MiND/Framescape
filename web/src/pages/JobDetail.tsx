@@ -12,11 +12,23 @@ import { useJobStream } from '../hooks/useJobStream'
 import { api, ApiError } from '../lib/api'
 import { useMutation, useQuery } from '@tanstack/react-query'
 
-// Was ✏️ — plain stroke SVG instead, same reasoning as Studio.tsx's TabIcon.
+// Was the pencil codepoint (U+270F + VS16) — default emoji presentation,
+// plain stroke SVG instead, same reasoning as Studio.tsx's TabIcon.
 function EditIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M12.5 3.5l4 4-9 9H3.5v-4z" />
+    </svg>
+  )
+}
+
+// Was the downwards-arrow codepoint (U+2B07) — same default-emoji block as
+// the up-arrow Studio.tsx's SuggestionIcon replaced, and this one is live UI
+// (a real download button), not just a comment.
+function DownloadIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M10 3v9M6.5 9L10 12.5 13.5 9M4 16h12" />
     </svg>
   )
 }
@@ -226,9 +238,9 @@ function ResultAsset({ assetId }: { assetId: string }) {
         target="_blank"
         rel="noreferrer"
         title={t('assetDetail.download')}
-        className="absolute right-1.5 top-1.5 rounded-lg bg-black/60 px-2 py-1 text-xs text-white opacity-0 backdrop-blur transition group-hover:opacity-100"
+        className="absolute right-1.5 top-1.5 rounded-lg bg-black/60 p-1.5 text-white opacity-0 backdrop-blur transition group-hover:opacity-100"
       >
-        ⬇
+        <DownloadIcon className="h-3.5 w-3.5" />
       </a>
     </div>
   )

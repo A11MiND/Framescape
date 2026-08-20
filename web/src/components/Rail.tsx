@@ -7,7 +7,8 @@ import { setStoredLang, type Lang } from '../i18n'
 import AnimatedNumber from './AnimatedNumber'
 import NotificationCenter from './NotificationCenter'
 
-// ☺/⚙/⏻ used to sit here as bare Unicode characters — all three have a
+// The smiling-face, gear, and power-symbol codepoints (U+263A/U+2699/
+// U+23FB) used to sit here as bare Unicode characters — all three have a
 // default *emoji* presentation on common platforms (a yellow smiley face, a
 // colorful gear, a colored power glyph), unlike the rest of this rail's
 // icons (◷▤▧◈⬡◍✦ are plain Geometric Shapes/Symbols with no emoji

@@ -5,7 +5,8 @@ import { api } from '../lib/api'
 import AppShell from '../components/AppShell'
 import { useToast } from '../components/Toast'
 
-// Was ✏️ — plain stroke SVG instead, same reasoning as Studio.tsx's TabIcon.
+// Was the pencil codepoint (U+270F + VS16) — default emoji presentation,
+// plain stroke SVG instead, same reasoning as Studio.tsx's TabIcon.
 function EditIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={className}>
