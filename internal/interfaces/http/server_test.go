@@ -4,12 +4,16 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/redis/go-redis/v9"
 
+	"aigc-platform/internal/application/communitysvc"
+	"aigc-platform/internal/application/creditsvc"
+	"aigc-platform/internal/application/jobsvc"
 	"aigc-platform/internal/infra/cache"
 	"aigc-platform/internal/infra/persistence"
 	"aigc-platform/internal/pkg/config"
@@ -22,9 +26,9 @@ const testJWTSecret = "http-layer-test-secret"
 // rather than fail when it's unreachable, since schema only ever comes from
 // goose migrations, never AutoMigrate, so there's nothing this helper could
 // stand up on its own). jobs/credits/community/minimax/objects stay nil —
-// every handler covered by this package's current tests only touches
-// s.db/s.jwtSecret/s.redis; job/asset/credit-topup routes need a real
-// jobsvc.Service + workflow.Engine and are out of scope here.
+// fine for auth_test.go/auth_oauth_test.go, whose handlers only ever touch
+// s.db/s.jwtSecret/s.redis. Anything that needs a real job/credits/asset
+// stack (jobs_test.go, assets_test.go) uses newFullTestServer instead.
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	db, err := persistence.Open(persistence.Config{DSN: config.MySQLDSN()})
@@ -39,6 +43,61 @@ func newTestServer(t *testing.T) *Server {
 		t.Skipf("no local MySQL available, skipping: %v", err)
 	}
 	return NewServer(db, nil, nil, nil, testRedisClient(t), testJWTSecret, nil, nil)
+}
+
+// newFullTestServer wires jobs/credits/community the same way cmd/api/
+// main.go does — real *creditsvc.Service/*communitysvc.Service against the
+// same MySQL, a fakeEngine standing in for the real Aether rpc.Client, and
+// nil minimax/objects (out of scope: no route this package currently tests
+// needs either — see server.go's own field docs for what actually depends
+// on them). Use this over the plain newTestServer whenever a test needs to
+// create/read/cancel/delete a job or touch an asset's publish flag.
+func newFullTestServer(t *testing.T) (*Server, *fakeEngine) {
+	t.Helper()
+	db, err := persistence.Open(persistence.Config{DSN: config.MySQLDSN()})
+	if err != nil {
+		t.Skipf("no local MySQL available, skipping: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql.DB: %v", err)
+	}
+	if err := sqlDB.Ping(); err != nil {
+		t.Skipf("no local MySQL available, skipping: %v", err)
+	}
+	eng := newFakeEngine()
+	credits := creditsvc.New(sqlDB)
+	community := communitysvc.New(sqlDB, credits)
+	jobs := jobsvc.New(db, eng, credits, nil)
+	return NewServer(db, jobs, credits, community, testRedisClient(t), testJWTSecret, nil, nil), eng
+}
+
+// registerAndFund creates a fresh account through the real /auth/register
+// endpoint (so it's exactly what a real signup produces, not a hand-rolled
+// row) and, if credits > 0, tops up its balance through creditsvc.Recharge —
+// never a raw SQL balance write, same reasoning as creditsvc_test.go's own
+// seeding: every balance change must be ledger-backed or the
+// balance+held==SUM(credit_ledger.amount) invariant this app relies on
+// elsewhere wouldn't mean anything here.
+func registerAndFund(t *testing.T, s *Server, credits int) (accessToken string, uid uint64) {
+	t.Helper()
+	r := s.Router()
+	email := uniqueEmail(t)
+	rec := doJSON(t, r, http.MethodPost, "/api/v1/auth/register", registerRequest{Email: email, Password: "correct-horse"}, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("register: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	tp := decodeTokens(t, rec)
+	cl, err := parseToken(testJWTSecret, tp.AccessToken, tokenAccess)
+	if err != nil {
+		t.Fatalf("parse access token: %v", err)
+	}
+	if credits > 0 {
+		if err := s.credits.Recharge(context.Background(), cl.UserID, "test:recharge:"+email, credits, "test seed"); err != nil {
+			t.Fatalf("recharge: %v", err)
+		}
+	}
+	return tp.AccessToken, cl.UserID
 }
 
 // testRedisClient returns a live client only if Redis actually answers —
@@ -65,15 +124,22 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	if db, err := persistence.Open(persistence.Config{DSN: config.MySQLDSN()}); err == nil {
 		if sqlDB, err := db.DB(); err == nil && sqlDB.Ping() == nil {
-			// No FK on credit_accounts.user_id — the row createAccount inserts
-			// alongside each test user would otherwise outlive it forever.
-			// Captured before the users themselves are deleted, and scoped to
-			// exactly those IDs rather than a blanket "delete every orphan"
-			// sweep that could also catch rows unrelated to this test run.
+			// No FK on any of these user_id columns — every row jobs_test.go/
+			// assets_test.go create alongside a test user (credit account,
+			// ledger entries, jobs, assets) would otherwise outlive it
+			// forever. Captured before the users themselves are deleted, and
+			// scoped to exactly those IDs rather than a blanket "delete every
+			// orphan" sweep that could also catch rows unrelated to this run.
 			var testUserIDs []uint64
 			db.Model(&persistence.User{}).Where("email LIKE ?", "httptest-%").Pluck("id", &testUserIDs)
 			if len(testUserIDs) > 0 {
 				db.Where("user_id IN ?", testUserIDs).Delete(&persistence.CreditAccount{})
+				db.Where("user_id IN ?", testUserIDs).Delete(&persistence.CreditLedger{})
+				// DeletedAt here is a plain *time.Time, not gorm.DeletedAt — GORM
+				// has no soft-delete scope on these models, so this is already
+				// a real DELETE, not the no-op Unscoped() would exist to bypass.
+				db.Where("user_id IN ?", testUserIDs).Delete(&persistence.Job{})
+				db.Where("user_id IN ?", testUserIDs).Delete(&persistence.Asset{})
 			}
 			db.Where("email LIKE ?", "httptest-%").Delete(&persistence.User{})
 			db.Where("email LIKE ?", "httptest-%").Delete(&persistence.EmailVerificationCode{})

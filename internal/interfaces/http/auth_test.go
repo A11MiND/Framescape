@@ -11,7 +11,10 @@ import (
 	"aigc-platform/internal/pkg/id"
 )
 
-func doJSON(t *testing.T, r http.Handler, method, path string, body any, bearer string) *httptest.ResponseRecorder {
+// httptestRequest builds a JSON request without sending it — split out from
+// doJSON so a caller that needs to set an extra header first (jobs_test.go's
+// Idempotency-Key tests) can do that before serveRequest actually sends it.
+func httptestRequest(t *testing.T, method, path string, body any, bearer string) *http.Request {
 	t.Helper()
 	var buf bytes.Buffer
 	if body != nil {
@@ -24,9 +27,18 @@ func doJSON(t *testing.T, r http.Handler, method, path string, body any, bearer 
 	if bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+bearer)
 	}
+	return req
+}
+
+func serveRequest(r http.Handler, req *http.Request) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	return rec
+}
+
+func doJSON(t *testing.T, r http.Handler, method, path string, body any, bearer string) *httptest.ResponseRecorder {
+	t.Helper()
+	return serveRequest(r, httptestRequest(t, method, path, body, bearer))
 }
 
 func decodeTokens(t *testing.T, rec *httptest.ResponseRecorder) tokenPair {
