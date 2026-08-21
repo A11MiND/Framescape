@@ -526,18 +526,17 @@ func (s *Server) handleCompleteAsset(c *gin.Context) {
 	}
 
 	row := persistence.Asset{
-		BizID:            bizID,
-		UserID:           userID(c),
-		Type:             typ,
-		Source:           "upload",
-		StorageKey:       req.StorageKey,
-		PublicURL:        s.objects.PublicURLFor(req.StorageKey),
-		Mime:             info.Mime,
-		Width:            req.Width,
-		Height:           req.Height,
-		DurationMs:       req.DurationMs,
-		SizeBytes:        info.SizeBytes,
-		ModerationStatus: "pending",
+		BizID:      bizID,
+		UserID:     userID(c),
+		Type:       typ,
+		Source:     "upload",
+		StorageKey: req.StorageKey,
+		PublicURL:  s.objects.PublicURLFor(req.StorageKey),
+		Mime:       info.Mime,
+		Width:      req.Width,
+		Height:     req.Height,
+		DurationMs: req.DurationMs,
+		SizeBytes:  info.SizeBytes,
 	}
 	if err := s.db.WithContext(c.Request.Context()).Create(&row).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, errBody("internal", "insert asset"))

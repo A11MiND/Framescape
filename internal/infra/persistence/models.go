@@ -105,8 +105,7 @@ type Asset struct {
 	FirstFrameAssetID *uint64 `gorm:"column:first_frame_asset_id"`
 	LastFrameAssetID  *uint64 `gorm:"column:last_frame_asset_id"`
 
-	Meta             []byte     `gorm:"column:meta;type:json"`
-	ModerationStatus string     `gorm:"column:moderation_status"`
+	Meta []byte `gorm:"column:meta;type:json"`
 	// IsPublic/PublishedAt back the community feed (migration 00010's own
 	// doc on why this is a separate opt-in flag, not a loosened ownership
 	// check on the existing asset endpoints).
