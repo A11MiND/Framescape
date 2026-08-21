@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api, ApiError } from '../lib/api'
 import { useAuthStore } from '../lib/authStore'
-import { getStoredLang, setStoredLang, type Lang } from '../i18n'
+import { setStoredLang, type Lang } from '../i18n'
 import { getStoredTheme, setStoredTheme, type Theme } from '../lib/theme'
 
 // §07's "登录页只有一张孤零零的表单卡片" gap — jimeng-style auth pages pair

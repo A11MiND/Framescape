@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    # Same images/credentials as deploy/docker-compose.yml's mysql/redis
+    # services — GitHub Actions publishes service containers on
+    # 127.0.0.1:<mapped port>, which matches internal/pkg/config's own
+    # MYSQL_DSN/REDIS_ADDR defaults exactly, but they're set explicitly
+    # below rather than relied on implicitly.
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: aigc
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      MYSQL_DSN: "root:root@tcp(127.0.0.1:3306)/aigc?parseTime=true&loc=UTC&charset=utf8mb4"
+      REDIS_ADDR: "127.0.0.1:6379"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go build ./...
+      - run: go vet ./...
+      # internal/interfaces/http's tests need real MySQL/Redis to run for
+      # real rather than skip (server_test.go's own newTestServer doc) —
+      # this is the one step that actually exercises them, everywhere else
+      # in this workflow is schema-agnostic.
+      - name: Apply migrations
+        run: go run ./cmd/migrate
+      - run: go test -race ./...
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      # tsc -b (typecheck) then vite build — package.json's own "build" script.
+      - run: npm run build
