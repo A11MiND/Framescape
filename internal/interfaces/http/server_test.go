@@ -124,12 +124,14 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	if db, err := persistence.Open(persistence.Config{DSN: config.MySQLDSN()}); err == nil {
 		if sqlDB, err := db.DB(); err == nil && sqlDB.Ping() == nil {
-			// No FK on any of these user_id columns — every row jobs_test.go/
-			// assets_test.go create alongside a test user (credit account,
-			// ledger entries, jobs, assets) would otherwise outlive it
-			// forever. Captured before the users themselves are deleted, and
-			// scoped to exactly those IDs rather than a blanket "delete every
-			// orphan" sweep that could also catch rows unrelated to this run.
+			// No FK on any of these user_id/owner_user_id columns — every row
+			// jobs_test.go/assets_test.go/characters_test.go/presets_test.go/
+			// projects_test.go create alongside a test user (credit account,
+			// ledger entries, jobs, assets, characters, projects, saved
+			// presets) would otherwise outlive it forever. Captured before the
+			// users themselves are deleted, and scoped to exactly those IDs
+			// rather than a blanket "delete every orphan" sweep that could
+			// also catch rows unrelated to this run.
 			var testUserIDs []uint64
 			db.Model(&persistence.User{}).Where("email LIKE ?", "httptest-%").Pluck("id", &testUserIDs)
 			if len(testUserIDs) > 0 {
@@ -140,7 +142,14 @@ func TestMain(m *testing.M) {
 				// a real DELETE, not the no-op Unscoped() would exist to bypass.
 				db.Where("user_id IN ?", testUserIDs).Delete(&persistence.Job{})
 				db.Where("user_id IN ?", testUserIDs).Delete(&persistence.Asset{})
+				db.Where("user_id IN ?", testUserIDs).Delete(&persistence.Character{})
+				db.Where("user_id IN ?", testUserIDs).Delete(&persistence.Project{})
+				db.Where("owner_user_id IN ?", testUserIDs).Delete(&persistence.Preset{})
 			}
+			// presets_test.go's system-preset fixtures have owner_user_id NULL
+			// (that's the whole point — they stand in for a seeded system
+			// preset), so they can't be swept via any test user's ID above.
+			db.Where("name = ?", "httptest-system-preset-fixture").Delete(&persistence.Preset{})
 			db.Where("email LIKE ?", "httptest-%").Delete(&persistence.User{})
 			db.Where("email LIKE ?", "httptest-%").Delete(&persistence.EmailVerificationCode{})
 			db.Where("phone LIKE ?", "+1555%").Delete(&persistence.PhoneVerificationCode{})
