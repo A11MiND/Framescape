@@ -197,11 +197,40 @@ func (s *Server) handleGoogleLogin(c *gin.Context) {
 		return
 	}
 
+	user, err := s.findOrCreateGoogleUser(claims)
+	if errors.Is(err, errGoogleEmailTaken) {
+		c.JSON(http.StatusConflict, errBody("email_taken", "an account already exists for this email — sign in with your password (or phone) instead"))
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "lookup or create user"))
+		return
+	}
+
+	tokens, err := s.issueTokens(user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "issue tokens"))
+		return
+	}
+	c.JSON(http.StatusOK, tokens)
+}
+
+// errGoogleEmailTaken is findOrCreateGoogleUser's sentinel for the one
+// branch handleGoogleLogin must turn into a 409 rather than a 500.
+var errGoogleEmailTaken = errors.New("email already registered under a different account")
+
+// findOrCreateGoogleUser resolves an already-verified Google identity
+// (claims.Subject/claims.Email — signature/issuer/audience/email_verified
+// all checked by the caller) to a persistence.User, separated out from
+// handleGoogleLogin so the account-linking decision itself — the part that
+// actually matters for security — is testable without a real Google-signed
+// token.
+func (s *Server) findOrCreateGoogleUser(claims *googleClaims) (persistence.User, error) {
 	var user persistence.User
-	err = s.db.Where("google_sub = ?", claims.Subject).First(&user).Error
+	err := s.db.Where("google_sub = ?", claims.Subject).First(&user).Error
 	switch {
 	case err == nil:
-		// already linked, nothing else to do
+		return user, nil // already linked
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		// Not linked yet. This used to auto-link onto any existing account
 		// with the same email — a real account-takeover hole: email
@@ -218,25 +247,16 @@ func (s *Server) handleGoogleLogin(c *gin.Context) {
 		sub := claims.Subject
 		var existing persistence.User
 		if lookupErr := s.db.Where("email = ?", email).First(&existing).Error; lookupErr == nil {
-			c.JSON(http.StatusConflict, errBody("email_taken", "an account already exists for this email — sign in with your password (or phone) instead"))
-			return
+			return persistence.User{}, errGoogleEmailTaken
 		}
 		user = persistence.User{BizID: id.New(), Email: &email, GoogleSub: &sub}
 		if err := s.createAccount(&user); err != nil {
-			c.JSON(http.StatusInternalServerError, errBody("internal", "create user"))
-			return
+			return persistence.User{}, err
 		}
+		return user, nil
 	default:
-		c.JSON(http.StatusInternalServerError, errBody("internal", "lookup user"))
-		return
+		return persistence.User{}, err
 	}
-
-	tokens, err := s.issueTokens(user.ID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, errBody("internal", "issue tokens"))
-		return
-	}
-	c.JSON(http.StatusOK, tokens)
 }
 
 // --- Phone number registration/login ---
