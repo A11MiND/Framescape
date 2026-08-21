@@ -5,10 +5,13 @@
 package config
 
 import (
+	"log"
 	"os"
 	"strconv"
 	"time"
 )
+
+const devOnlyJWTSecret = "dev-only-insecure-secret-change-me"
 
 func getEnv(key, def string) string {
 	if v := os.Getenv(key); v != "" {
@@ -46,8 +49,17 @@ func SchedulerAddr() string { return getEnv("SCHEDULER_ADDR", ":8090") }
 // SchedulerURL is how cmd/api reaches cmd/scheduler's internal API.
 func SchedulerURL() string { return getEnv("SCHEDULER_URL", "http://127.0.0.1:8090") }
 
-// JWTSecret signs access/refresh tokens. Must be overridden outside local dev.
-func JWTSecret() string { return getEnv("JWT_SECRET", "dev-only-insecure-secret-change-me") }
+// JWTSecret signs access/refresh tokens. Falls back to a known literal for
+// zero-config local dev, but refuses to start under APP_ENV=prod with that
+// fallback still in place — silently signing every token with a value
+// that's sitting in this file would let anyone forge a valid session.
+func JWTSecret() string {
+	secret := getEnv("JWT_SECRET", devOnlyJWTSecret)
+	if secret == devOnlyJWTSecret && Env() == "prod" {
+		log.Fatal("JWT_SECRET must be set to a real secret when APP_ENV=prod")
+	}
+	return secret
+}
 
 // Env is "dev" or "prod"; controls logger formatting (internal/pkg/logger).
 func Env() string { return getEnv("APP_ENV", "dev") }
