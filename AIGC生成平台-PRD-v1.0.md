@@ -271,7 +271,7 @@ GET  /community/feed
 ## 9. 已知缺口（诚实列出，不回避）
 
 1. **`DEV_PLAN.md` 落后多个功能提交**，不能再当作最新进度的准确来源。
-2. **Scheduler 只能单实例**，水平扩容需要先做 leader 选举，目前完全没做。
+2. **Scheduler 只能单实例，水平扩容需要先做 leader 选举，目前完全没做**——2026-08-22 验证过具体会坏在哪，不只是"没做"这么模糊：`RunControlConsumer`（`internal/infra/workflow/aether/broker_asynq.go`）把 asynq 消费者的 `Concurrency` 特意设成 1，注释里写得很清楚——同一个 task 的 started/completed 两条消息必须严格按入队顺序处理，否则 completed 先于 started 到达会被 `OnTaskCompleted` 的守卫默默丢弃，任务卡在 Running 直到超时看门狗才收场（这个顺序反转本身是真实踩过的 bug，本地 executor 秒级完成时才会现形，之前用 minimax.image 那种 15-20s 的调用测不出来）。这个"严格顺序"的保证只在单进程的 `Concurrency:1` 内成立——两个 scheduler 进程各自起一个消费者去抢同一条 Redis 队列，asynq 只保证每条消息被处理一次，不保证两条消息去同一个进程，顺序保证直接作废。更值得记录的是：真起了第二个实例（同一个 MySQL/Redis，换了个端口）完全正常启动，没有任何报错或警告——它会安安静静地以为自己是唯一的消费者，危险是完全沉默的，没有任何东西会提醒你现在跑了两个。
 3. **手机号验证码 / 邮箱验证码两条认证路径代码已完整，但生产密钥都还没配**（`SMS_API_KEY` / `EMAIL_PROVIDER_API_KEY`），配置好之前这两条路径对用户可见但不可用，会提示"尚未开放"。Google 登录已配好真实 `GOOGLE_CLIENT_ID` 并端到端验证过，不在此列。
 
 ---
