@@ -396,12 +396,31 @@ W7 收口之后，产品又长了 33 个提交（`18dc114`..`HEAD`）没有被�
 - 补上预设删除功能的 UI 入口（接口早就有，没有按钮调用）（`7c043a1`）
 - 修复预设删除的三处问题：真实双击竞态、键盘不可达、仅悬停可见的触屏可用性（`2890e1f`）
 
-**这次会话（2026-08-19，真实验证过）**
+**2026-08-19 会话（真实验证过）**
 - 修复取消/恢复作业静默失败、修复 aether 原始报错文案泄露给用户（`ec469e9`）
 - 修复亮色主题下角标文字对比度、资产详情页去掉三处内部专用字段（`8c67214`）
 - 用真实 Logo 替换占位的 ✦ 品牌标（`4390c9a`）
 - 修复亮色主题下 Google 按钮文字不可见（`c5715f7`）
 - PRD 从立项论证文档重写为现状参照文档，v0.2 → v1.0（`f0b3512`）
+
+**2026-08-19～22 代码审查修复批次（真实验证过）**——`code-review high --scope architecture` 找出的 10 个问题，逐个修完：
+- Google 登录不再按邮箱静默关联已有账号（真实账号劫持漏洞，邮箱冲突改成 409 提示换登录方式）、手机/邮箱验证码从 `math/rand` 换成 `crypto/rand` 并加限流（`495c7e1`）
+- `findByIdemKey` 补上 `deleted_at IS NULL`（重试请求命中已软删的旧 job 会导致后续 GET 404）、comic4 面板数去重、`createAccount` 三处手抄合一、`resolveTab` 处理 legacy `image.batch` job、comic4/sequence 前端估价公式对齐后端 per-node floor（同上）
+- 注释里嵌真实 emoji 字符改成描述码位名称，`JobDetail.tsx` 下载按钮的实体箭头字符换成 SVG（`fcff9d7`）
+- `DEV_PLAN.md` 补上 W7 之后的 33 个提交（`181c958`，即本节前半部分）
+
+**2026-08-22 会话（真实验证过，含现网状态修复）**
+- `JWT_SECRET` 缺失时的兜底改成 `APP_ENV=prod` 下拒绝启动而不是静默用已知硬编码值签发 token（`d9b89f1`）；新增 `.env.example`/`web/.env.example`（`65a191f`）
+- `internal/interfaces/http`（认证/作业/资产/角色/预设/项目/积分/能力矩阵/SSE/试用/回调/AI改写）从零测试补到 67 个用例（`7c14564`..`ad65040` 共 7 个提交）
+- 删掉死列 `assets.moderation_status`（迁移 00015，写了从没读过，真正在跑的内容安全是 F8.1-F8.4）（`9102ff8`）
+- 新增 CI（`.github/workflows/ci.yml`）：后端起 mysql/redis 服务容器跑 `go test -race`，前端跑 lint + `tsc -b && vite build`；跑这条流水线本身就顺手挖出一个真 bug——`Login.tsx` 一个没用到的 import 在 `tsc -b` 下是硬错误（`51a9929`）
+- `internal/infra/executor/minimax`（真实付费 API 那层）从零测试补到 63 个用例（`0d62614`）
+- 删掉从未 `import` 过的 `@xyflow/react`（F7.2 DAG 可视化确认不做了）；重新验证 SSE <2s 延迟指标（真实 job 上量出转发延迟 53~200 微秒，顺带发现 `cmd/worker`/`cmd/scheduler` 跑的是本会话更早之前缺 `MINIMAX_API_KEY`/密钥的旧进程，重启修复）；确认 Google 登录密钥其实已经配好（`3f4431d`）
+- 独立验证 F6.3 纯首尾帧模式（`buildContent` 层 + `VideoPlugin.Execute` 全链路两个测试）（`2dca3d8`）
+- PromptCompiler 补上 PRD §5.3 步骤 3/4（参考图角色映射、互斥校验），从 `minimax/video.go` 的 ad-hoc 实现搬进 `internal/domain/prompt`（`b51e27f`）
+- 连续发布小热力图重新做（固定 6px 小方块，不是撑满页宽的大日历）：新增 `community_publish_log`（迁移 00016）；开发过程中在浏览器里实测发现一个真时区 bug——前端按本地时区算"今天"再转 UTC，正 UTC 偏移下会差一天，改成全程用 `Date.UTC()` 计算（`311de4d`）
+- 实测验证 scheduler 单实例约束具体坏在哪：`RunControlConsumer` 的 `Concurrency:1` 保证同一 task 的 started/completed 严格按序处理，这个保证只在单进程内成立；真起第二个实例（换端口，同一份 MySQL/Redis）完全正常启动，没有任何报错——危险是完全沉默的（`d5f3c50`）
+- `internal/application/communitysvc`（`311de4d` 内）与 `internal/application/projection`（`3197325`）两个之前零测试、真管钱/管状态机的包补上测试
 
 ---
 
