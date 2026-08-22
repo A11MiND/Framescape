@@ -15,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"aigc-platform/internal/domain/capability"
+	"aigc-platform/internal/domain/prompt"
 	"aigc-platform/internal/infra/executor/assetstore"
 )
 
@@ -149,82 +150,56 @@ type videoRefs struct {
 	ReferenceAudioAssetIDs []string
 }
 
-// buildContent implements §3.2/§10.5's mode mutual-exclusion and conditional
-// ratio rules, then resolves every reference to a mm_file:// content item.
-// Shared by minimax.video and minimax.video.regen — regen submits to the
-// same endpoint with the same content, just resolution forced to 2K (see
-// video_regen.go's VideoRegenConfig doc for why there's no other difference).
+// itemTypeForKind maps prompt.VideoRefItem.Kind to VideoContentItem's own
+// `type` enum — the one piece of provider-wire-format knowledge buildContent
+// still owns, since prompt.CompileVideoRefs stays free of MiniMax's own
+// naming (client.go's package doc: two different wire vocabularies).
+func itemTypeForKind(kind string) string {
+	switch kind {
+	case "video":
+		return "video_url"
+	case "audio":
+		return "audio_url"
+	default:
+		return "image_url"
+	}
+}
+
+// buildContent resolves prompt.CompileVideoRefs' domain-level decision (mode,
+// ratio, ordered ref list — PRD §5.3 steps 3/4, moved into the prompt
+// package so this executor isn't the one deciding it — see that function's
+// own doc) into a real video_generation `content` array: each ref becomes a
+// live mm_file:// reference via refItem, which is genuinely provider-
+// specific I/O and stays here. Shared by minimax.video and
+// minimax.video.regen — regen submits to the same endpoint with the same
+// content, just resolution forced to 2K (see video_regen.go's
+// VideoRegenConfig doc for why there's no other difference).
 func (b *videoBase) buildContent(ctx context.Context, r videoRefs) (content []VideoContentItem, mode string, ratio string, errOut *model.ExecOutputs) {
-	prompt := r.Prompt
-	if rn := []rune(prompt); len(rn) > capability.VideoMaxPromptChars {
-		prompt = string(rn[:capability.VideoMaxPromptChars]) // §3.2 hard cap
+	promptText := prompt.TruncateVideoPrompt(r.Prompt)
+
+	mode, ratio, refItems, err := prompt.CompileVideoRefs(prompt.VideoRefs{
+		Ratio:                  r.Ratio,
+		FirstFrameAssetID:      r.FirstFrameAssetID,
+		LastFrameAssetID:       r.LastFrameAssetID,
+		ReferenceImageAssetIDs: r.ReferenceImageAssetIDs,
+		ReferenceVideoAssetIDs: r.ReferenceVideoAssetIDs,
+		ReferenceAudioAssetIDs: r.ReferenceAudioAssetIDs,
+	})
+	if err != nil {
+		// prompt.CompileVideoRefs' one validation failure (mutual exclusion)
+		// and its bad_params ratio check are both business-rule rejections,
+		// not system errors — ExecCodeFailed either way, same as before
+		// this moved out of this function's own inline checks.
+		return nil, "", "", errOutputs(model.ExecCodeFailed, err.Error())
 	}
 
-	hasFirstLast := r.FirstFrameAssetID != "" || r.LastFrameAssetID != ""
-	hasRef := len(r.ReferenceImageAssetIDs) > 0 || len(r.ReferenceVideoAssetIDs) > 0 || len(r.ReferenceAudioAssetIDs) > 0
-	if hasFirstLast && hasRef {
-		// §3.2's "🔴 最重要的一条硬约束": first_frame/last_frame and any
-		// reference_* role can never coexist in one request. The frontend's
-		// F6.5 disables the conflicting UI entirely; this is the backend
-		// backstop for any caller that bypasses it (§19.4.1: "双保险").
-		return nil, "", "", errOutputs(model.ExecCodeFailed, "mutual_exclusion: first_frame/last_frame cannot combine with reference_image/reference_video/reference_audio")
-	}
-
-	mode = "t2va"
-	switch {
-	case hasFirstLast:
-		mode = "i2va"
-	case hasRef:
-		mode = "r2va"
-	}
-
-	ratio = r.Ratio
-	switch mode {
-	case "t2va":
-		if ratio == "" || ratio == "adaptive" {
-			return nil, "", "", errOutputs(model.ExecCodeFailed, "bad_params: ratio is required and must not be adaptive for t2va")
-		}
-	case "i2va":
-		ratio = "adaptive" // §3.2: "传别的会被忽略" — normalize rather than silently send a value MiniMax ignores
-	case "r2va":
-		if ratio == "" {
-			ratio = "adaptive"
-		}
-	}
-
-	content = []VideoContentItem{{Type: "text", Text: prompt}}
-	add := func(assetID, itemType, role string) bool {
-		if assetID == "" {
-			return true
-		}
-		item, err := b.refItem(ctx, assetID, itemType, role)
+	content = []VideoContentItem{{Type: "text", Text: promptText}}
+	for _, item := range refItems {
+		resolved, err := b.refItem(ctx, item.AssetBizID, itemTypeForKind(item.Kind), item.Role)
 		if err != nil {
-			errOut = errOutputs(model.ExecCodeError, err.Error())
-			return false
+			return nil, "", "", errOutputs(model.ExecCodeError, err.Error())
 		}
-		content = append(content, item)
-		return true
-	}
-	if !add(r.FirstFrameAssetID, "image_url", "first_frame") {
-		return nil, "", "", errOut
-	}
-	if !add(r.LastFrameAssetID, "image_url", "last_frame") {
-		return nil, "", "", errOut
-	}
-	for _, id := range r.ReferenceImageAssetIDs {
-		if !add(id, "image_url", "reference_image") {
-			return nil, "", "", errOut
-		}
-	}
-	for _, id := range r.ReferenceVideoAssetIDs {
-		if !add(id, "video_url", "reference_video") {
-			return nil, "", "", errOut
-		}
-	}
-	for _, id := range r.ReferenceAudioAssetIDs {
-		if !add(id, "audio_url", "reference_audio") {
-			return nil, "", "", errOut
-		}
+		content = append(content, resolved)
 	}
 	return content, mode, ratio, nil
 }

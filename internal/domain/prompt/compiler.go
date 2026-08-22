@@ -2,14 +2,16 @@
 // a structured spec — base text plus resolved characters and presets — into
 // the single prompt string MiniMax actually receives, plus the seed to use.
 //
-// This is the W4 subset of the full 7-step compiler PRD §5.3 describes.
-// Steps 1 (characters), 2 (presets), and 5 (length trim) are implemented
-// here, since those are the ones pure image generation needs. Steps 3
-// (refs→role mapping) and 4 (first_frame/reference_image mutual exclusion)
-// only apply once video generation exists (W5/W6); step 6 (capability
+// Steps 1 (characters), 2 (presets), and 5 (length trim) live in Compile
+// below, for image generation. Steps 3 (refs→role mapping) and 4
+// (first_frame/reference_image mutual exclusion) are CompileVideoRefs in
+// video_refs.go, for video generation — that logic used to live ad-hoc in
+// internal/infra/executor/minimax/video.go's own buildContent, moved here
+// once video generation existed so this package is genuinely the one place
+// PRD §5.3's steps live, not just steps 1/2/5. Step 6 (capability
 // validation) and step 7 (asset dedup) are handled elsewhere — dedup by
 // internal/infra/executor/minimax's file-upload cache (provider_files),
-// capability checks by the Capability Matrix once it lands.
+// capability checks by the Capability Matrix.
 package prompt
 
 import "sort"
