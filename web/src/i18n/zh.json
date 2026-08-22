@@ -139,7 +139,10 @@
       "current_zero": "今天发布一次，开始你的连续发布记录",
       "current": "已连续发布 {{count}} 天",
       "milestone": "{{days}} 天 · +{{credits}} 积分",
-      "capUsed": "本月已用 {{used}}/{{cap}} 次"
+      "capUsed": "本月已用 {{used}}/{{cap}} 次",
+      "heatmap": "近 12 周",
+      "heatmapPublished": "{{date}} 已发布",
+      "heatmapEmpty": "{{date}} 未发布"
     }
   },
   "workflow": {

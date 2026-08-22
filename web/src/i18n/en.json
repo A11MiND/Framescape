@@ -139,7 +139,10 @@
       "current_zero": "Publish once today to start your streak",
       "current": "{{count}}-day streak",
       "milestone": "{{days}} days · +{{credits}} credits",
-      "capUsed": "{{used}}/{{cap}} used this month"
+      "capUsed": "{{used}}/{{cap}} used this month",
+      "heatmap": "Last 12 weeks",
+      "heatmapPublished": "Published on {{date}}",
+      "heatmapEmpty": "No publish on {{date}}"
     }
   },
   "workflow": {

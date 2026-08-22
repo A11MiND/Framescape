@@ -50,12 +50,22 @@ type Awarded struct {
 	Credits int
 }
 
+// historyDays bounds GetStatus's PublishedDates window — 84 days makes a
+// 7 (day-of-week) x 12 (week) heatmap grid, the smallest layout that still
+// reads as "weeks" rather than a single ambiguous strip of squares (§07 gap:
+// the full-calendar version tried once was reverted for being enormous on
+// the page; this is the same per-day fact rendered as a compact fixed-size
+// heatmap instead of month-grid cells stretched to fill the page width).
+const historyDays = 84
+
 // Status is GET /community/streak's own read model — current_streak plus
 // enough about each milestone's this-month usage for the frontend to show
-// "3/4 used this month" instead of just a number.
+// "3/4 used this month" instead of just a number, plus the last
+// historyDays' worth of published-or-not per day for the compact heatmap.
 type Status struct {
-	CurrentStreak int
-	Milestones    []MilestoneStatus
+	CurrentStreak  int
+	Milestones     []MilestoneStatus
+	PublishedDates []string // "2006-01-02", ascending, only days actually published
 }
 
 type MilestoneStatus struct {
@@ -104,6 +114,17 @@ func (s *Service) RecordPublish(ctx context.Context, userID uint64) ([]Awarded, 
 			ON DUPLICATE KEY UPDATE current_streak = VALUES(current_streak), last_publish_date = VALUES(last_publish_date)`,
 			userID, currentStreak, today); err != nil {
 			return fmt.Errorf("upsert community_streaks: %w", err)
+		}
+		// The heatmap's per-day fact — separate from community_streaks above,
+		// which only ever remembers the running length, not which specific
+		// days it was built from. ON DUPLICATE KEY is defense in depth, not
+		// the primary guard (the early "already counted today" return above
+		// already stops a same-day double-call from getting here twice).
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO community_publish_log (user_id, publish_date) VALUES (?, ?)
+			ON DUPLICATE KEY UPDATE publish_date = VALUES(publish_date)`,
+			userID, today); err != nil {
+			return fmt.Errorf("insert community_publish_log: %w", err)
 		}
 
 		for _, m := range streakMilestones {
@@ -176,7 +197,7 @@ func (s *Service) GetStatus(ctx context.Context, userID uint64) (Status, error) 
 		}
 	}
 
-	out := Status{CurrentStreak: currentStreak}
+	out := Status{CurrentStreak: currentStreak, PublishedDates: []string{}}
 	for _, m := range streakMilestones {
 		used := 0
 		if m.monthlyCap > 0 {
@@ -190,6 +211,26 @@ func (s *Service) GetStatus(ctx context.Context, userID uint64) (Status, error) 
 		out.Milestones = append(out.Milestones, MilestoneStatus{
 			Days: m.days, Credits: m.credits, MonthlyCap: m.monthlyCap, UsedThisMonth: used,
 		})
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT publish_date FROM community_publish_log
+		WHERE user_id = ? AND publish_date >= DATE_SUB(?, INTERVAL ? DAY)
+		ORDER BY publish_date ASC`,
+		userID, today, historyDays-1)
+	if err != nil {
+		return Status{}, fmt.Errorf("read community_publish_log: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var d time.Time
+		if err := rows.Scan(&d); err != nil {
+			return Status{}, fmt.Errorf("scan community_publish_log: %w", err)
+		}
+		out.PublishedDates = append(out.PublishedDates, d.Format("2006-01-02"))
+	}
+	if err := rows.Err(); err != nil {
+		return Status{}, fmt.Errorf("iterate community_publish_log: %w", err)
 	}
 	return out, nil
 }

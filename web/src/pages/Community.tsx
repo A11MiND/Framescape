@@ -142,10 +142,13 @@ export default function Community() {
 // StreakPanel surfaces handleCommunityStreak's read model — GetStatus's own
 // doc covers the milestone/cap rules this just renders. A milestone with
 // monthly_cap: 0 (currently only the 30-day one) never shows a used/cap
-// line since there's no cap to report. (A full calendar view was tried
-// here and reverted — `grid-cols-7` + `aspect-square` cells stretched to
-// fill this page's max-w-5xl width, making every day cell enormous; product
-// call was to drop the calendar rather than fix its sizing.)
+// line since there's no cap to report. (A full calendar view was tried here
+// once and reverted — grid-cols-7 + aspect-square cells stretched to fill
+// this page's max-w-5xl width, making every day cell enormous; the product
+// call was to drop it rather than fix the sizing at the time. PublishHeatmap
+// below is the same per-day idea brought back with that fixed: real pixel
+// sizes instead of a stretched grid, small enough to sit inline here as one
+// more chip alongside the milestones instead of its own page section.)
 function StreakPanel({ streak }: { streak: CommunityStreak }) {
   const { t } = useTranslation()
   return (
@@ -172,6 +175,59 @@ function StreakPanel({ streak }: { streak: CommunityStreak }) {
             )}
           </div>
         ))}
+      </div>
+      <PublishHeatmap publishedDates={streak.published_dates} />
+    </div>
+  )
+}
+
+// PublishHeatmap: a GitHub-contributions-style grid, deliberately tiny
+// (6px cells, 1px gap — the whole thing is under 90px wide) so it reads as
+// one more compact chip next to the milestones rather than a page section.
+// 12 columns of weeks x 7 rows of weekdays covers published_dates' own
+// 84-day window (communitysvc.historyDays) exactly.
+function PublishHeatmap({ publishedDates }: { publishedDates: string[] }) {
+  const { t } = useTranslation()
+  const published = new Set(publishedDates)
+
+  // communitysvc's own doc: streaks are computed on UTC calendar days
+  // (matches the DSN's loc=UTC), not the browser's local timezone — building
+  // this in local time and only converting to UTC at the very end (the
+  // first version of this did exactly that via `new Date().toISOString()`)
+  // silently shifts "today" by a day for any positive UTC offset, so
+  // "already published today" would never light up its own cell. Every date
+  // here is instead computed as a UTC calendar day from the start.
+  const days: { date: string; inSet: boolean }[] = []
+  const now = new Date()
+  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  const oneDayMs = 24 * 60 * 60 * 1000
+  for (let i = 83; i >= 0; i--) {
+    const iso = new Date(todayUTC - i * oneDayMs).toISOString().slice(0, 10)
+    days.push({ date: iso, inSet: published.has(iso) })
+  }
+  // Pad the front so the grid always ends on today and starts on a Sunday —
+  // CSS grid-flow:column fills column-by-column, so a partial leading week
+  // needs explicit empty cells rather than the calendar just starting mid-column.
+  const leadingPad = days.length > 0 ? new Date(days[0].date + 'T00:00:00Z').getUTCDay() : 0
+  const cells: ({ date: string; inSet: boolean } | null)[] = [...Array(leadingPad).fill(null), ...days]
+
+  return (
+    <div className="ml-auto" title={t('community.streak.heatmap')}>
+      <div
+        className="grid grid-flow-col gap-[1.5px]"
+        style={{ gridTemplateRows: 'repeat(7, 6px)', gridAutoColumns: '6px' }}
+      >
+        {cells.map((cell, i) =>
+          cell ? (
+            <div
+              key={cell.date}
+              title={t(cell.inSet ? 'community.streak.heatmapPublished' : 'community.streak.heatmapEmpty', { date: cell.date })}
+              className={`h-[6px] w-[6px] rounded-[1px] ${cell.inSet ? 'bg-violet-500' : 'bg-zinc-800'}`}
+            />
+          ) : (
+            <div key={`pad-${i}`} className="h-[6px] w-[6px]" />
+          ),
+        )}
       </div>
     </div>
   )

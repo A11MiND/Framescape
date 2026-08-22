@@ -180,7 +180,11 @@ func (s *Server) handleCommunityStreak(c *gin.Context) {
 			"used_this_month": m.UsedThisMonth,
 		})
 	}
-	c.JSON(http.StatusOK, gin.H{"current_streak": status.CurrentStreak, "milestones": milestones})
+	c.JSON(http.StatusOK, gin.H{
+		"current_streak":  status.CurrentStreak,
+		"milestones":      milestones,
+		"published_dates": status.PublishedDates,
+	})
 }
 
 // resolveProjectID turns a project biz_id into its numeric id, scoped to

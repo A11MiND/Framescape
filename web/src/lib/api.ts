@@ -204,6 +204,10 @@ export interface StreakMilestone {
 export interface CommunityStreak {
   current_streak: number
   milestones: StreakMilestone[]
+  // Last 84 days actually published, ascending "2006-01-02" strings — backs
+  // the compact heatmap (StreakPanel's own doc covers why this is small
+  // fixed-size squares now, not the full calendar tried and reverted once).
+  published_dates: string[]
 }
 
 export interface Project {

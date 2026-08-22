@@ -144,6 +144,7 @@ MiniMax 没有"放大"这个原语，所谓"升级到 2K"其实是重新按 2K �
 - F9.2 社区 feed 浏览，游客也能看（本次会话放开，之前要登录）✅
 - F9.3 "我发布的"自筛选 + 内联撤销 ✅
 - F9.4 连续发布积分奖励：连续 3/10/30 天各奖励 10/50/100 积分，3 天奖励每自然月最多 4 次（且必须真正中断过才算下一次达成）、10 天奖励每自然月最多 1 次、30 天不设上限 ✅
+- F9.5 逐日发布小热力图 ✅ 之前做过一版完整日历，`grid-cols-7`+`aspect-square` 撑满页宽导致每格巨大，撤了；这版换成固定 6px 小方块（12 周×7 天，跟 GitHub 贡献图一个思路），嵌在连续发布面板里当一个小 chip，不单开页面区块。`community_publish_log`（迁移 00016）新增，只存"这天发布过"这一个事实，不影响 `community_streaks` 已有的连续天数计算逻辑
 
 ---
 
@@ -181,7 +182,7 @@ MiniMax 没有"放大"这个原语，所谓"升级到 2K"其实是重新按 2K �
 | `characters` / `presets` / `projects` | F3/F4 + 资产分组 |
 | `provider_files` | MiniMax 文件 ID 缓存（避免重复上传） |
 | `moderation_records` | F8.4 审核留痕 |
-| `community_streaks` / `community_streak_rewards` | 连续发布：跑动计数器 + 每月奖励发放审计（不含逐日历史，见 §9 已知缺口） |
+| `community_streaks` / `community_streak_rewards` / `community_publish_log` | 连续发布：跑动计数器 + 每月奖励发放审计 + 逐日发布记录（F9.5 小热力图） |
 | `phone_verification_codes` / `email_verification_codes` | 验证码存储（本次会话新增） |
 | `aether_task_runs` / `aether_workflow_runs` | Aether 自己的编排状态，不直接读写 |
 | `goose_db_version` | 迁移版本追踪，14 个迁移文件 |
@@ -272,7 +273,6 @@ GET  /community/feed
 1. **`DEV_PLAN.md` 落后多个功能提交**，不能再当作最新进度的准确来源。
 2. **Scheduler 只能单实例**，水平扩容需要先做 leader 选举，目前完全没做。
 3. **手机号验证码 / 邮箱验证码两条认证路径代码已完整，但生产密钥都还没配**（`SMS_API_KEY` / `EMAIL_PROVIDER_API_KEY`），配置好之前这两条路径对用户可见但不可用，会提示"尚未开放"。Google 登录已配好真实 `GOOGLE_CLIENT_ID` 并端到端验证过，不在此列。
-4. **社区连续发布只有"当前连续天数"这个滚动计数器，没有完整的逐日历史记录**——之前做过一版日历可视化，验证方向后又因为产品判断（想要的是极简样式，不是日历）撤掉了，连带支撑它的表也删了。
 
 ---
 
