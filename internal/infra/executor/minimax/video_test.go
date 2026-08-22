@@ -169,6 +169,55 @@ func TestBuildContentI2VAForcesAdaptiveRatio(t *testing.T) {
 	}
 }
 
+// TestBuildContentPureFirstLastFrame is F6.3's own verification: "仅首尾帧"
+// (first_frame AND last_frame together, no other reference) has always run
+// live inside video.sequence's shot chain, but had never been independently
+// checked in isolation — this pins i2va mode, both items landing with the
+// right roles in the right order, and the ratio forced to adaptive exactly
+// as the single-first-frame case above.
+func TestBuildContentPureFirstLastFrame(t *testing.T) {
+	b := &videoBase{}
+	uploadClient, uploadClose := jsonServer(t, func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte(`{"file":{"file_id":11},"base_resp":{"status_code":0}}`))
+	})
+	defer uploadClose()
+	firstURL, firstClose := servePNG(t)
+	defer firstClose()
+	lastURL, lastClose := servePNG(t)
+	defer lastClose()
+	reader := newFakeReader()
+	reader.set("first", firstURL)
+	reader.set("last", lastURL)
+	b.client = uploadClient
+	b.reader = reader
+	b.cache = newFakeFileCache()
+
+	content, mode, ratio, errOut := b.buildContent(context.Background(), videoRefs{
+		Prompt: "a sunrise", Ratio: "16:9", FirstFrameAssetID: "first", LastFrameAssetID: "last",
+	})
+	if errOut != nil {
+		t.Fatalf("errOut = %+v, want nil", errOut)
+	}
+	if mode != "i2va" {
+		t.Errorf("mode = %q, want i2va", mode)
+	}
+	if ratio != "adaptive" {
+		t.Errorf("ratio = %q, want forced to adaptive", ratio)
+	}
+	if len(content) != 3 {
+		t.Fatalf("content = %+v, want exactly 3 items (text, first_frame, last_frame)", content)
+	}
+	if content[1].Role != "first_frame" || content[2].Role != "last_frame" {
+		t.Errorf("roles = [%q, %q], want [first_frame, last_frame] in that order", content[1].Role, content[2].Role)
+	}
+	if content[1].ImageURL == nil || content[1].ImageURL.URL != "mm_file://11" {
+		t.Errorf("first_frame url = %+v, want mm_file://11", content[1].ImageURL)
+	}
+	if content[2].ImageURL == nil || content[2].ImageURL.URL != "mm_file://11" {
+		t.Errorf("last_frame url = %+v, want mm_file://11 (same fake upload response for both)", content[2].ImageURL)
+	}
+}
+
 func TestBuildContentR2VADefaultsRatioToAdaptive(t *testing.T) {
 	b := &videoBase{}
 	// Reference-video mode needs refItem, which needs a real client/cache —
@@ -394,6 +443,69 @@ func TestVideoRegenPluginForces2K(t *testing.T) {
 	}
 	if len(sink.materialized) != 1 || sink.materialized[0].Meta["regen_of_asset_id"] != "orig-asset" {
 		t.Errorf("materialized meta = %+v, want regen_of_asset_id=orig-asset", sink.materialized[0].Meta)
+	}
+}
+
+// TestVideoPluginExecutePureFirstLastFrame is F6.3's full-pipeline
+// counterpart to TestBuildContentPureFirstLastFrame — the same "仅首尾帧"
+// input run all the way through VideoPlugin.Execute (submit -> wait ->
+// materialize), not just the content-building step, confirming the whole
+// path a real video.single i2va job takes actually completes successfully.
+func TestVideoPluginExecutePureFirstLastFrame(t *testing.T) {
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	mux.HandleFunc("/v1/files/upload", func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte(`{"file":{"file_id":22},"base_resp":{"status_code":0}}`))
+	})
+	mux.HandleFunc("/frame.png", func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte("fake-bytes"))
+	})
+	var gotContent []VideoContentItem
+	var gotRatio string
+	mux.HandleFunc("/v2/video_generation", func(w http.ResponseWriter, req *http.Request) {
+		var body VideoGenerationRequest
+		_ = json.NewDecoder(req.Body).Decode(&body)
+		gotContent = body.Content
+		gotRatio = body.Ratio
+		w.Write([]byte(`{"task_id":"vt-f6.3","base_resp":{"status_code":0}}`))
+	})
+	mux.HandleFunc("/v2/query/video_generation/vt-f6.3", func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte(`{"task":{"id":"vt-f6.3","status":"succeeded","content":{"url":"` + srv.URL + `/v.mp4"},"resolution":"768P","duration":5,"usage":{"output_seconds":5}}}`))
+	})
+	mux.HandleFunc("/v.mp4", func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte("fake-mp4-bytes"))
+	})
+	client := NewClient(srv.URL, "test-api-key")
+
+	reader := newFakeReader()
+	reader.set("first-asset", srv.URL+"/frame.png")
+	reader.set("last-asset", srv.URL+"/frame.png")
+	sink := &fakeSink{}
+	plugin := NewVideoPlugin(client, sink, reader, newFakeFileCache(), nil, "", nil)
+
+	req := execRequest(t, "task-1", map[string]any{
+		"prompt": "a sunrise turning into sunset", "duration": "5", "resolution": "768P",
+		"first-frame-asset-id": "first-asset", "last-frame-asset-id": "last-asset",
+	})
+	out, err := plugin.Execute(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if out.Code != 0 {
+		t.Fatalf("Code = %d, Message = %q, want success", out.Code, out.Message)
+	}
+	if gotRatio != "adaptive" {
+		t.Errorf("ratio sent upstream = %q, want adaptive (i2va forces it)", gotRatio)
+	}
+	if len(gotContent) != 3 || gotContent[1].Role != "first_frame" || gotContent[2].Role != "last_frame" {
+		t.Errorf("content sent upstream = %+v, want [text, first_frame, last_frame]", gotContent)
+	}
+	if len(sink.materialized) != 1 {
+		t.Fatalf("sink got %d MaterializeBytes calls, want 1", len(sink.materialized))
+	}
+	if sink.materialized[0].Meta["mode"] != "i2va" {
+		t.Errorf("materialized meta mode = %v, want i2va", sink.materialized[0].Meta["mode"])
 	}
 }
 
