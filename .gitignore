@@ -12,3 +12,8 @@
 .DS_Store
 
 # Vendored aether is checked in deliberately (§2.3 闸门二) — do not ignore it.
+
+# Internal planning/record docs — kept locally, not pushed.
+/DEV_PLAN.md
+/AIGC生成平台-PRD-v1.0.md
+/docs/
