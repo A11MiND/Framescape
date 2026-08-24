@@ -29,7 +29,15 @@ import (
 	"aigc-platform/internal/pkg/logger"
 )
 
-const tileSize = 768 // each panel is resized to a tileSize x tileSize square before tiling
+// tileSize: each panel is resized to a tileSize x tileSize square before
+// tiling. Was 768 — a plain downscale for most MiniMax image-01 output
+// (typically >=1024 on a side for a square ratio), needlessly softening
+// detail in the composed grid before it was ever shown to anyone
+// ("四格漫画最终合成出来的图片应该大一点", found live). 1024 matches that
+// native resolution rather than fighting it — scaleToSquare still handles
+// anything actually smaller without introducing new upscale artifacts
+// beyond what a smaller source already has.
+const tileSize = 1024
 
 type ComposeConfig struct {
 	AssetIDs []string `json:"asset-ids"`

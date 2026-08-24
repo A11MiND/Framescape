@@ -318,7 +318,11 @@ func buildComic4Workflow(plans []panelPlan, staticSourceAssetID string) []byte {
 				map[string]any{"name": "layout", "type": "string"},
 				map[string]any{"name": "user-id", "type": "string"},
 			}},
-			"timeout": "1m",
+			// Previously had no retry at all — a single transient blip here
+			// discarded all N already-generated (and already-paid-for) panels
+			// with zero recovery, found live off a real comic4 job whose
+			// panels all succeeded but the job still failed.
+			"retry": map[string]any{"limit": 2}, "timeout": "1m",
 		}},
 		map[string]any{"task": map[string]any{
 			"name": "collect-refs", "executor": map[string]any{"type": "local.collect_refs"},
