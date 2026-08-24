@@ -160,6 +160,13 @@ export interface AssetResponse {
   source?: string
   meta?: Record<string, unknown>
   job_biz_id?: string
+  // Extracted from meta server-side (assetToJSON's own doc) so every list
+  // view can show it without needing the full meta blob (seed/model/
+  // minimax_task_id mean nothing to a caller here).
+  prompt?: string
+  // Only present on the ?is_public=true listAssets call (handleListAssets'
+  // own doc) — nobody needs a like count on their own private library grid.
+  like_count?: number
 }
 
 // TrashAsset is handleListTrash's own projection (assetToJSON's fields
@@ -189,6 +196,8 @@ export interface CommunityAsset {
   resolution_tag: string
   published_at: string
   prompt?: string
+  like_count: number
+  liked: boolean
 }
 
 // StreakMilestone/CommunityStreak mirror handleCommunityStreak's response —
@@ -472,6 +481,8 @@ export const api = {
     request<void>('PATCH', `/assets/${bizId}`, projectId ? { project_id: projectId } : { clear_project: true }),
   setAssetPublic: (bizId: string, isPublic: boolean) =>
     request<void>('PATCH', `/assets/${bizId}`, { is_public: isPublic }),
+  likeAsset: (bizId: string) => request<{ liked: boolean; like_count: number }>('POST', `/assets/${bizId}/like`),
+  unlikeAsset: (bizId: string) => request<{ liked: boolean; like_count: number }>('DELETE', `/assets/${bizId}/like`),
   listCommunityFeed: (limit?: number) =>
     request<{ assets: CommunityAsset[] }>('GET', limit ? `/community/feed?limit=${limit}` : '/community/feed'),
   getCommunityStreak: () => request<CommunityStreak>('GET', '/community/streak'),

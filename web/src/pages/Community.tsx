@@ -8,6 +8,25 @@ import AppShell from '../components/AppShell'
 
 type Tab = 'feed' | 'mine'
 
+// Plain stroke heart, filled when liked — same reasoning as every other
+// icon in this codebase (no emoji-range codepoints, see CLAUDE.md's own
+// icon-glyph convention).
+function HeartIcon({ filled, className }: { filled: boolean; className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M10 17.2s-6.8-4.1-8.6-8.2C.4 6 1.9 3 5 3c2 0 3.6 1.2 5 3.2C11.4 4.2 13 3 15 3c3.1 0 4.6 3 3.6 6-1.8 4.1-8.6 8.2-8.6 8.2z" />
+    </svg>
+  )
+}
+
 // §07's "社區功能：看別人做的作品，也可以發佈出去" ask — a masonry feed of
 // every published asset across every account (handleCommunityFeed's own
 // doc), same visual language as Assets.tsx's library grid but deliberately
@@ -46,6 +65,21 @@ export default function Community() {
     mutationFn: (bizId: string) => api.setAssetPublic(bizId, false),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['community', 'mine'] })
+      qc.invalidateQueries({ queryKey: ['community', 'feed'] })
+    },
+  })
+
+  // Toggling happens from the lightbox, not the grid card — the card is
+  // itself a <button> (opens the lightbox), and a like button nested inside
+  // it would be an invalid button-in-button. `active` is a plain snapshot
+  // taken at click time (not wired to the feed query), so it's updated here
+  // directly for an immediately-responsive count/heart in the open lightbox;
+  // the feed query is invalidated too so leaving and reopening it, or the
+  // grid's own like-count badge, stay correct as well.
+  const toggleLike = useMutation({
+    mutationFn: (a: CommunityAsset) => (a.liked ? api.unlikeAsset(a.biz_id) : api.likeAsset(a.biz_id)),
+    onSuccess: (res) => {
+      setActive((cur) => (cur ? { ...cur, liked: res.liked, like_count: res.like_count } : cur))
       qc.invalidateQueries({ queryKey: ['community', 'feed'] })
     },
   })
@@ -96,6 +130,22 @@ export default function Community() {
                       {a.resolution_tag}
                     </span>
                   )}
+                  {/* Toggling lives in the lightbox (this card is itself a
+                      <button>, so a nested like button would be invalid
+                      HTML) — this is just the count, same fixed-on-fixed-bg
+                      neutral-* pairing as the lightbox below, since it sits
+                      on the media itself, not this card's own themed
+                      background. */}
+                  {a.like_count > 0 && (
+                    <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-neutral-200">
+                      <HeartIcon filled={a.liked} className="h-3 w-3" />
+                      {a.like_count}
+                    </span>
+                  )}
+                  {/* Previously only shown after clicking through to the
+                      lightbox — the prompt is the whole point of "看别人做
+                      的作品", found live off "community 不展示提示词". */}
+                  {a.prompt && <p className="line-clamp-2 px-2 py-1.5 text-xs text-zinc-400">{a.prompt}</p>}
                 </button>
               ))}
             </div>
@@ -119,19 +169,53 @@ export default function Community() {
           onClick={() => setActive(null)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6"
         >
-          <div onClick={(e) => e.stopPropagation()} className="max-h-full max-w-3xl space-y-3">
+          {/* max-h-full alone constrained this div but never gave it its own
+              scroll region — a long prompt (video.sequence concatenates
+              every shot's own text into one string) had nothing capping it,
+              so the modal just grew past the viewport instead of scrolling
+              ("太大了", found live off exactly that kind of multi-shot
+              prompt). overflow-y-auto here plus a capped, independently
+              scrollable prompt block below keep the image the fixed,
+              dominant element regardless of how long the prompt is. */}
+          <div onClick={(e) => e.stopPropagation()} className="max-h-full max-w-3xl space-y-3 overflow-y-auto">
             {active.type === 'video' ? (
               <video src={active.public_url} controls autoPlay className="max-h-[75vh] w-full rounded-xl bg-black object-contain" />
             ) : (
               <img src={active.public_url} alt="" className="max-h-[75vh] w-full rounded-xl object-contain" />
             )}
-            {active.prompt && <p className="text-sm text-zinc-300">{active.prompt}</p>}
-            <button
-              onClick={() => setActive(null)}
-              className="rounded-lg border border-zinc-700 px-4 py-1.5 text-sm text-zinc-300 transition hover:border-zinc-500"
-            >
-              {t('common.close')}
-            </button>
+            {/* This modal's bg-black/80 overlay is a deliberately fixed,
+                non-theme-reactive background (an image/video viewer stays
+                dark regardless of site theme) — CLAUDE.md's own documented
+                pitfall: pairing that with theme-reactive zinc-* text means
+                light theme's zinc-scale override (meant for light-background
+                elements) flips this text dark too, on a background that
+                never got lighter — illegible, found live ("浅色版根本看不清
+                楚字"). neutral-* stays fixed right along with the background. */}
+            {active.prompt && (
+              <p className="max-h-32 overflow-y-auto whitespace-pre-wrap text-sm text-neutral-300">{active.prompt}</p>
+            )}
+            <div className="flex items-center gap-3">
+              {!isGuest && (
+                <button
+                  onClick={() => toggleLike.mutate(active)}
+                  disabled={toggleLike.isPending}
+                  className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition disabled:opacity-50 ${
+                    active.liked
+                      ? 'border-red-700 text-red-400 hover:border-red-500'
+                      : 'border-neutral-700 text-neutral-300 hover:border-neutral-500'
+                  }`}
+                >
+                  <HeartIcon filled={active.liked} className="h-4 w-4" />
+                  {active.like_count}
+                </button>
+              )}
+              <button
+                onClick={() => setActive(null)}
+                className="rounded-lg border border-neutral-700 px-4 py-1.5 text-sm text-neutral-300 transition hover:border-neutral-500"
+              >
+                {t('common.close')}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -249,6 +333,14 @@ function MineCard({ asset, onUnpublish, unpublishing }: { asset: AssetResponse; 
           {asset.resolution_tag}
         </span>
       )}
+      {/* Read-only here — liking your own work isn't a real action, this is
+          just letting an owner see how their own published piece is doing. */}
+      {!!asset.like_count && (
+        <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-neutral-200">
+          <HeartIcon filled className="h-3 w-3" />
+          {asset.like_count}
+        </span>
+      )}
       <button
         onClick={onUnpublish}
         disabled={unpublishing}
@@ -256,6 +348,10 @@ function MineCard({ asset, onUnpublish, unpublishing }: { asset: AssetResponse; 
       >
         {t('community.unpublish')}
       </button>
+      {/* This tab had no way to see the prompt at all before — listAssets'
+          lean projection never carried meta/prompt (assetToJSON's own doc),
+          found live off "community 不展示提示词". */}
+      {asset.prompt && <p className="line-clamp-2 px-2 py-1.5 text-xs text-zinc-400">{asset.prompt}</p>}
     </div>
   )
 }
