@@ -180,12 +180,13 @@
     "deleteFailed": "删除失败，请重试",
     "deleting": "删除中…",
     "deleteJob": "删除记录",
-    "reconnecting": "实时连接不稳定，重新连接中…",
     "creditSettled": "已结算",
     "creditHeld": "已持有",
+    "creditRefunded": "已退还",
     "creditEstimated": "预估",
     "notFound": "找不到这个作业",
-    "assetMissing": "素材缺失"
+    "assetMissing": "素材缺失",
+    "viewAsset": "查看素材 →"
   },
   "phase": {
     "created": "待创建",
@@ -231,6 +232,7 @@
     "generating": "生成中，请勿关闭页面…",
     "elapsed": "已用时 {{time}}",
     "minSec": "{{min}}分{{sec}}秒",
+    "stillWorking": "仍在处理中，可能正在自动重试，请耐心等待",
     "stage": {
       "image": {
         "sketch": "起稿",
@@ -334,7 +336,9 @@
   },
   "errors": {
     "unknown": "未知错误",
-    "moderationBlocked": "描述涉及敏感内容，未扣除积分"
+    "moderationBlocked": "描述涉及敏感内容，未扣除积分",
+    "watchdogTimeout": "生成服务响应较慢，系统已自动重试但仍未在时限内完成，积分已退还",
+    "providerInsufficientBalance": "生成未能开始：服务商账户余额暂时不足，这不是你账户的问题，未使用的积分已退还，请稍后重试"
   },
   "suggestions": {
     "toVideo": "转成视频",
@@ -441,6 +445,7 @@
       "likeIt": "喜欢这张？登录后才能保存到素材库"
     },
     "generationFailed": "生成失败：{{error}}",
+    "retryGeneration": "重新生成",
     "suggestionsLabel": "猜你想接着做：",
     "emptyResult": "结果会显示在这里",
     "guessWhat": "猜你想生成：",
@@ -515,6 +520,7 @@
   "notifications": {
     "title": "通知",
     "awaitingDecision": "等待你决策",
+    "recentlyFailed": "最近失败",
     "recentlyDone": "最近完成",
     "none": "暂无"
   },

@@ -180,12 +180,13 @@
     "deleteFailed": "Delete failed, please retry",
     "deleting": "Deleting…",
     "deleteJob": "Delete record",
-    "reconnecting": "Live connection unstable, reconnecting…",
     "creditSettled": "Settled",
     "creditHeld": "Held",
+    "creditRefunded": "Refunded",
     "creditEstimated": "Estimated",
     "notFound": "This job can't be found",
-    "assetMissing": "Asset missing"
+    "assetMissing": "Asset missing",
+    "viewAsset": "View asset →"
   },
   "phase": {
     "created": "Created",
@@ -231,6 +232,7 @@
     "generating": "Generating, please keep this page open…",
     "elapsed": "Elapsed {{time}}",
     "minSec": "{{min}}m {{sec}}s",
+    "stillWorking": "Still working — this may be an automatic retry in progress, please hold on",
     "stage": {
       "image": {
         "sketch": "Sketching",
@@ -334,7 +336,9 @@
   },
   "errors": {
     "unknown": "Unknown error",
-    "moderationBlocked": "The description touches sensitive content — no credits were charged"
+    "moderationBlocked": "The description touches sensitive content — no credits were charged",
+    "watchdogTimeout": "The generation service was slow to respond — we retried automatically but it still didn't finish in time. Credits were refunded.",
+    "providerInsufficientBalance": "Generation couldn't start — our provider account is temporarily out of balance. This isn't a problem with your account; unused credits were refunded. Please try again later."
   },
   "suggestions": {
     "toVideo": "Turn into video",
@@ -441,6 +445,7 @@
       "likeIt": "Like this one? Sign in to save it to your asset library"
     },
     "generationFailed": "Generation failed: {{error}}",
+    "retryGeneration": "Try again",
     "suggestionsLabel": "What's next:",
     "emptyResult": "Results will appear here",
     "guessWhat": "You might want to generate:",
@@ -515,6 +520,7 @@
   "notifications": {
     "title": "Notifications",
     "awaitingDecision": "Awaiting your decision",
+    "recentlyFailed": "Recently failed",
     "recentlyDone": "Recently finished",
     "none": "Nothing here"
   },
