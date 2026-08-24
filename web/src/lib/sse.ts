@@ -5,6 +5,19 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8080/api/v1'
 interface SSEHandlers {
   onOpen?: () => void
   onEvent?: (event: string, data: unknown) => void
+  // Fires for every frame received, heartbeats included — sse.go's own
+  // 15s heartbeat exists specifically to prove the connection is still
+  // alive through long quiet stretches (a video generation routinely goes
+  // minutes with no real node/job event), but it was only ever wired
+  // through as a bare comment (no `data:` line), which onEvent below
+  // explicitly skips. useJobStream's watchdog only reset its "still alive"
+  // clock from onEvent/onOpen, so it never saw the heartbeats meant to
+  // prove exactly that, and flagged "reconnecting" on every single
+  // generation quiet for more than 30s — the connection was never actually
+  // unstable. onHeartbeat exists so useJobStream can tell the difference
+  // between "no frames at all" (genuinely dead) and "frames, just no new
+  // job data" (alive and normal).
+  onHeartbeat?: () => void
   onError?: () => void
 }
 
@@ -49,7 +62,10 @@ export function subscribeJobEvents(bizId: string, handlers: SSEHandlers): () => 
             if (line.startsWith('event:')) event = line.slice(6).trim()
             else if (line.startsWith('data:')) data += line.slice(5).trim()
           }
-          if (!data) continue // comment frames (": heartbeat") carry no data line
+          if (!data) {
+            handlers.onHeartbeat?.()
+            continue // comment frames (": heartbeat") carry no data line
+          }
           let parsed: unknown = data
           try {
             parsed = JSON.parse(data)

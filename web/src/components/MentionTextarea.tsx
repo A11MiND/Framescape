@@ -163,6 +163,27 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, MentionTextareaPr
   const ref = useRef<HTMLTextAreaElement>(null)
   const overlayRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+
+  // rows={3} was a fixed height with no way to grow — a multi-panel comic4
+  // story just scrolled inside a tiny box. The overlay above needs no
+  // matching logic: it's `absolute inset-0` inside this `relative` wrapper,
+  // so it already stretches to match whatever height the in-flow textarea
+  // below takes. Capped so a truly pathological paste doesn't push the rest
+  // of the page down indefinitely — but the first cap (320px) was itself
+  // too tight for perfectly ordinary content: a single detailed cinematic
+  // shot description (video.sequence's own real use case) already clips
+  // mid-sentence against it with no visible scroll affordance (macOS hides
+  // scrollbars until actively scrolled, same root cause as
+  // NotificationCenter's dropdown), reading as "this still doesn't work"
+  // rather than "scroll for more" (found live, screenshot showed exactly
+  // that clipped-mid-word look). 600px comfortably fits shot text this long
+  // without needing to discover an invisible internal scrollbar at all.
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 600)}px`
+  }, [value])
   const rewrite = useMutation({
     mutationFn: () => api.rewritePrompt(value),
     onSuccess: (res) => onChange(res.text),
@@ -272,7 +293,7 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, MentionTextareaPr
           if (overlayRef.current) overlayRef.current.scrollTop = e.currentTarget.scrollTop
         }}
         rows={rows}
-        className={`relative w-full resize-none rounded-xl border border-zinc-800 bg-transparent p-4 text-transparent caret-zinc-100 outline-none focus:border-violet-500 ${className}`}
+        className={`relative w-full resize-none overflow-y-auto rounded-xl border border-zinc-800 bg-transparent p-4 text-transparent caret-zinc-100 outline-none focus:border-violet-500 ${className}`}
       />
       {enableRewrite && (
         <button

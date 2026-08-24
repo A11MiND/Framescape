@@ -5,6 +5,24 @@
 // echo back the specific flagged phrase — never shown to the user verbatim.
 const MODERATION_PREFIX = 'sensitive_content:'
 
+// Aether's own literal OnTaskTimeout message (engine.go) — fires when a
+// task's configured `timeout` is exceeded, after any configured retries
+// are already exhausted. Shown verbatim to a real user otherwise (found
+// live off a failed image.comic4 panel), with no indication retries had
+// already happened silently in the background.
+const WATCHDOG_TIMEOUT_MESSAGE = 'task deadline exceeded (watchdog)'
+
+// minimax.image/minimax.video's own convention (image.go/video.go) for a
+// hard, synchronous rejection from MiniMax's own API — the platform's own
+// MiniMax account balance is insufficient, so MiniMax never even started
+// generating; this is not the end user's in-app balance (studio.
+// insufficientBalance already covers that, checked client-side before
+// submit) and not a timeout with something to recover — there is nothing on
+// MiniMax's side to retrieve. Shown verbatim (raw provider JSON) otherwise,
+// which read as "the API took my money and gave me nothing" — found live
+// off a real failed video.sequence shot.
+const PROVIDER_INSUFFICIENT_BALANCE_PREFIX = 'insufficient_balance:'
+
 // Aether's own generic aggregator messages (engine_sched.go) — every
 // container-level node (the top-level "main" DAG, and any Loop container
 // like image.comic4's "panels" or image.sequence's "shots") carries one of
@@ -28,6 +46,8 @@ const GENERIC_AGGREGATE_ERRORS = new Set([
 export function displayNodeError(raw: string | undefined | null, t: (key: string) => string): string {
   if (!raw) return t('errors.unknown')
   if (raw.startsWith(MODERATION_PREFIX)) return t('errors.moderationBlocked')
+  if (raw === WATCHDOG_TIMEOUT_MESSAGE) return t('errors.watchdogTimeout')
+  if (raw.startsWith(PROVIDER_INSUFFICIENT_BALANCE_PREFIX)) return t('errors.providerInsufficientBalance')
   return raw
 }
 

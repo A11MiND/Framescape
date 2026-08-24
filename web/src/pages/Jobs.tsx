@@ -1,11 +1,19 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { statusToPhase, WORKFLOW_LABEL_KEY, resolveTab } from '../lib/jobResult'
 import AppShell from '../components/AppShell'
 import PhaseBadge from '../components/PhaseBadge'
+
+// Same exclusion-list definition of "still going" JobDetail's own `running`
+// uses — matching it here rather than an inclusion list of known in-flight
+// statuses, so this doesn't silently stop covering a status this file
+// doesn't already know about.
+function isRunning(status: string): boolean {
+  return status !== 'succeeded' && status !== 'failed' && status !== 'cancelled'
+}
 
 const FILTERS = [
   { value: '', labelKey: 'jobs.filter.all' },
@@ -21,10 +29,26 @@ const FILTERS = [
 // first consumer.
 export default function Jobs() {
   const { t, i18n } = useTranslation()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [status, setStatus] = useState('')
   const [projectId, setProjectId] = useState('')
   const projects = useQuery({ queryKey: ['projects'], queryFn: api.listProjects })
   const qc = useQueryClient()
+
+  // Studio navigates here right after submitting, with no inline result of
+  // its own to show — this is now the very first place a new job appears
+  // for the user, so it needs to be findable, not just present somewhere in
+  // the list. Captured once via the useState initializer (not read fresh
+  // from location.state every render) so it survives the state-clearing
+  // navigate() below for the rest of this page view.
+  const [highlightBizId] = useState<string | undefined>(
+    () => (location.state as { highlightBizId?: string } | null)?.highlightBizId,
+  )
+  useEffect(() => {
+    if (highlightBizId) navigate('.', { replace: true, state: {} })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const query = useInfiniteQuery({
     queryKey: ['jobs', status, projectId],
@@ -32,6 +56,11 @@ export default function Jobs() {
       api.listJobs({ status, cursor: pageParam, limit: 20, projectId: projectId || undefined }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.next_cursor,
+    // Previously static — a running job's status/node progress only ever
+    // updated on a manual refresh. Submitting from Studio now lands here
+    // instead of showing anything inline, so this is the one place that
+    // progress needs to actually be visible without the user doing anything.
+    refetchInterval: 5_000,
   })
 
   // Soft-delete only (jobsvc.Service.Delete's own doc) — same "no confirm
@@ -59,6 +88,17 @@ export default function Jobs() {
       hour: '2-digit',
       minute: '2-digit',
     })
+  }
+
+  // "预估时间" isn't derivable here (JobSummary carries no spec/params to
+  // estimate from, see api.ts's own doc on why the list endpoint is
+  // deliberately a lighter projection) — elapsed-since-submitted is the
+  // honest substitute: real, not estimated, and re-derived on every 5s poll
+  // above rather than needing its own ticking timer.
+  function formatElapsed(iso: string) {
+    const seconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
+    if (seconds < 60) return t('generationProgress.elapsed', { time: `${seconds}s` })
+    return t('generationProgress.elapsed', { time: t('generationProgress.minSec', { min: Math.floor(seconds / 60), sec: seconds % 60 }) })
   }
 
   return (
@@ -109,7 +149,9 @@ export default function Jobs() {
                 className={`group flex items-center gap-4 rounded-xl border px-4 py-3 transition ${
                   j.status === 'suspended'
                     ? 'animate-pulse border-amber-500/60 bg-amber-500/5 hover:border-amber-400'
-                    : 'border-zinc-800 bg-zinc-900/60 hover:border-zinc-700'
+                    : j.biz_id === highlightBizId
+                      ? 'border-violet-500/60 bg-violet-500/5 hover:border-violet-400'
+                      : 'border-zinc-800 bg-zinc-900/60 hover:border-zinc-700'
                 }`}
               >
                 <PhaseBadge phase={statusToPhase(j.status)} />
@@ -126,7 +168,7 @@ export default function Jobs() {
                     {label}
                     {j.node_total > 0 && ` · ${t('jobs.nodesDone', { done: j.node_done, total: j.node_total })}`}
                     {' · '}
-                    {formatTime(j.created_at)}
+                    {isRunning(j.status) ? formatElapsed(j.created_at) : formatTime(j.created_at)}
                   </p>
                 </div>
                 <div className="shrink-0 text-right font-mono text-xs text-zinc-500">

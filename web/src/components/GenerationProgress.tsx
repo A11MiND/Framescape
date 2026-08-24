@@ -28,14 +28,28 @@ const STAGE_KEYS: Record<'image' | 'video', { key: string; at: number }[]> = {
   ],
 }
 
-export default function GenerationProgress({ kind }: { kind: 'image' | 'video' }) {
+// startedAt (a real timestamp, e.g. the job's earliest node.started_at) is
+// optional — when given, elapsed is computed from real wall-clock time
+// against it every tick, so navigating away from JobDetail and back doesn't
+// reset the clock to 0 (found live: a job showing "已用时 11s" right after
+// being reopened, when the underlying task had actually been running much
+// longer). Falls back to counting up from mount only when no real timestamp
+// is available yet (e.g. the very first tick before any node has started).
+export default function GenerationProgress({ kind, startedAt }: { kind: 'image' | 'video'; startedAt?: string | null }) {
   const { t } = useTranslation()
-  const [elapsed, setElapsed] = useState(0)
+  const startedAtMs = startedAt ? new Date(startedAt).getTime() : null
+  const [mountElapsed, setMountElapsed] = useState(0)
+  const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
-    const timer = setInterval(() => setElapsed((e) => e + 1), 1000)
+    const timer = setInterval(() => {
+      setMountElapsed((e) => e + 1)
+      setNow(Date.now())
+    }, 1000)
     return () => clearInterval(timer)
   }, [])
+
+  const elapsed = startedAtMs != null ? Math.max(0, Math.floor((now - startedAtMs) / 1000)) : mountElapsed
 
   function formatElapsed(seconds: number): string {
     if (seconds < 60) return `${seconds}s`
@@ -44,6 +58,13 @@ export default function GenerationProgress({ kind }: { kind: 'image' | 'video' }
 
   const stages = STAGE_KEYS[kind]
   const currentIndex = stages.reduce((idx, stage, i) => (elapsed >= stage.at ? i : idx), 0)
+  // Past the happy-path window, the checklist just sits pinned on its last
+  // stage with no explanation — often because a step actually failed once
+  // and Aether is silently retrying it (retry is task-level and invisible
+  // to the frontend, see jobsvc's task templates). Surfacing that honestly
+  // beats leaving a checklist that looks frozen.
+  const lastStageAt = stages[stages.length - 1].at
+  const stillWorking = elapsed > lastStageAt + Math.max(15, lastStageAt * 0.2)
 
   return (
     <div className="flex flex-col items-center gap-4 text-zinc-400">
@@ -52,7 +73,7 @@ export default function GenerationProgress({ kind }: { kind: 'image' | 'video' }
           {[0, 1, 2, 3, 4].map((i) => (
             <span
               key={i}
-              className="animate-bar-wave h-full w-1 rounded-full bg-sky-500"
+              className="animate-bar-wave h-full w-1 rounded-full bg-violet-500"
               style={{ animationDelay: `${i * 0.12}s` }}
             />
           ))}
@@ -68,7 +89,7 @@ export default function GenerationProgress({ kind }: { kind: 'image' | 'video' }
             <li
               key={stage.key}
               className={`flex items-center gap-2 transition-colors ${
-                done ? 'text-emerald-400' : active ? 'text-sky-400' : 'text-zinc-600'
+                done ? 'text-emerald-400' : active ? 'text-violet-400' : 'text-zinc-600'
               }`}
             >
               <span className="w-4 text-center">{done ? '✓' : active ? '⟳' : '○'}</span>
@@ -77,6 +98,7 @@ export default function GenerationProgress({ kind }: { kind: 'image' | 'video' }
           )
         })}
       </ul>
+      {stillWorking && <p className="text-center text-xs text-amber-500">{t('generationProgress.stillWorking')}</p>}
     </div>
   )
 }

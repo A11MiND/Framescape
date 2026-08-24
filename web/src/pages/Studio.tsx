@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, keepPreviousData } from '@tanstack/react-query'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { api, ApiError, type Spec, type WorkflowName, type JobResponse } from '../lib/api'
+import { api, ApiError, type Spec, type WorkflowName } from '../lib/api'
 import {
   estimateImageCredits,
   estimatePerNodeImageCredits,
@@ -14,15 +14,12 @@ import {
   estimateStorySplitCredits,
 } from '../lib/pricing'
 import { videoSingleSchema, RATIO_VALUES } from '../lib/videoSpec'
-import { resultAssetIds, resolveTab, WORKFLOW_LABEL_KEY, type Tab } from '../lib/jobResult'
-import { displayNodeError, firstSpecificError } from '../lib/errors'
-import { suggestActions, type SuggestedAction } from '../lib/suggestions'
+import { resolveTab, WORKFLOW_LABEL_KEY, type Tab } from '../lib/jobResult'
+import { type SuggestedAction } from '../lib/suggestions'
 import { shotMode, SHOT_MODE_LABEL_KEY, SHOT_MODE_CLASS, type ShotMode } from '../lib/shotPlan'
 import { useToast } from '../components/Toast'
 import AppShell from '../components/AppShell'
 import { AssetPicker } from '../components/AssetPicker'
-import PreviewGate from '../components/PreviewGate'
-import GenerationProgress from '../components/GenerationProgress'
 import PresetCarousel from '../components/PresetCarousel'
 import AnimatedNumber from '../components/AnimatedNumber'
 import { MentionTextarea } from '../components/MentionTextarea'
@@ -30,9 +27,7 @@ import { CharacterSlotPicker } from '../components/CharacterSlotPicker'
 import HomeFeed from '../components/HomeFeed'
 import { useAuthStore } from '../lib/authStore'
 import { getDeviceId } from '../lib/deviceId'
-import { useJobStream } from '../hooks/useJobStream'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
-import { estimateWaitSeconds, formatWaitMinutes } from '../lib/durationEstimate'
 
 // PRD §19.4.1's full creation studio ("工坊"), now mounted at `/` per
 // §19.3 instead of behind a login wall — this is the single biggest
@@ -106,52 +101,6 @@ function TabIcon({ tab, className }: { tab: Tab; className?: string }) {
           <rect x="2.5" y="3" width="15" height="14" rx="1.5" />
           <path d="M2.5 6.7h15M2.5 13.3h15" />
           <path d="M8 8.7l4 1.8-4 1.8z" />
-        </svg>
-      )
-  }
-}
-
-// suggestActions' own SuggestedAction used to carry an emoji glyph per
-// action (clapper board, repeat arrows, smiling face, sparkles, up arrow)
-// — moved here as plain stroke SVGs, same reasoning as TabIcon just above.
-function SuggestionIcon({ kind, className }: { kind: SuggestedAction['kind']; className?: string }) {
-  const common = { viewBox: '0 0 20 20', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, className }
-  switch (kind) {
-    case 'to-video':
-      return (
-        <svg {...common}>
-          <rect x="2.5" y="5" width="10.5" height="10" rx="1.5" />
-          <path d="M13 8.3l4.5-2.3v8l-4.5-2.3" />
-        </svg>
-      )
-    case 'more-batch':
-      return (
-        <svg {...common}>
-          <path d="M4 8a6 6 0 0 1 10.5-3.5M16 12a6 6 0 0 1-10.5 3.5" />
-          <path d="M14.5 4.5v3.5H11M5.5 15.5V12H9" />
-        </svg>
-      )
-    case 'save-character':
-    case 'save-frame-character':
-      return (
-        <svg {...common}>
-          <circle cx="10" cy="6.5" r="3" />
-          <path d="M4 17c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" />
-        </svg>
-      )
-    case 'to-sequence':
-      return (
-        <svg {...common}>
-          <rect x="1.75" y="8.25" width="3.5" height="3.5" rx="0.8" />
-          <rect x="8.25" y="8.25" width="3.5" height="3.5" rx="0.8" />
-          <rect x="14.75" y="8.25" width="3.5" height="3.5" rx="0.8" />
-          <path d="M5.25 10h3M11.75 10h3" />
-        </svg>
-      )
-    case 'upgrade-2k':
-      return (
-        <svg {...common}>
-          <path d="M10 16V4M5.5 8.5L10 4l4.5 4.5" />
         </svg>
       )
   }
@@ -265,7 +214,6 @@ export default function Studio() {
   const MAX_CHARACTER_SLOTS = 6
   const [characterSlotIds, setCharacterSlotIds] = useState<string[]>([])
   const [presetIds, setPresetIds] = useState<string[]>([])
-  const [bizId, setBizId] = useState<string | null>(null)
   const [projectId, setProjectId] = useState('')
   const [styleFilter, setStyleFilter] = useState('')
   const [savingPreset, setSavingPreset] = useState(false)
@@ -353,7 +301,6 @@ export default function Studio() {
     // which matches no format card and populates no fields below.
     const workflowName = resolveTab(prefill.workflowName)
     setTab(workflowName)
-    setBizId(null)
 
     const boundIds = (spec.characters ?? []).map((c) => c.character_id)
     setCharacterSlotIds(boundIds)
@@ -413,6 +360,34 @@ export default function Studio() {
 
     // Clear the router state so refreshing or navigating back here later
     // doesn't silently re-apply a stale prefill over new edits.
+    navigate('.', { replace: true, state: {} })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state])
+
+  // JobDetail's "猜你想接着做" suggestion chips (suggestActions, §19.4.2) —
+  // now that Studio no longer tracks a job to compute them from, JobDetail
+  // computes the same suggestions off its own already-loaded job and, for
+  // the ones that need actual compose-form input (as opposed to a plain
+  // resubmit or a navigate to /characters, both handled directly there),
+  // sends the chosen action back here the same way prefillJob/
+  // prefillCharacterId above do.
+  useEffect(() => {
+    const suggestion = (location.state as { prefillSuggestion?: SuggestedAction } | null)?.prefillSuggestion
+    if (!suggestion) return
+    switch (suggestion.kind) {
+      case 'to-video':
+        setTab('video.single')
+        setRefModeAndClear('firstLast')
+        setFirstFrameAssetId(suggestion.sourceAssetId)
+        break
+      case 'to-sequence':
+        setTab('video.sequence')
+        setVsShots(toShotItems(suggestion.shots))
+        break
+      case 'upgrade-2k':
+        setResolution('2K')
+        break
+    }
     navigate('.', { replace: true, state: {} })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state])
@@ -668,63 +643,19 @@ export default function Studio() {
       const idemKey = crypto.randomUUID()
       return api.createJob(tab as WorkflowName, buildSpec(), idemKey, projectId || undefined)
     },
+    // Previously stayed on this page tracking the new job inline (bizId +
+    // useJobStream). Moved to the Jobs list per feedback off a real inline
+    // progress block: it's not what a user wants to look at right after
+    // submitting, and it blocked starting the next generation. Studio's own
+    // job here is just composing and submitting — /jobs (already built,
+    // already polls, already shows per-node progress and retry lineage) is
+    // where tracking, waiting, failure, and retry all live now.
     onSuccess: (res) => {
-      setBizId(res.biz_id)
       me.refetch()
+      navigate('/jobs', { state: { highlightBizId: res.biz_id } })
     },
     onError: () => pushToast(t('studio.errors.submitFailed'), () => createJob.mutate()),
   })
-
-  const jobStream = useJobStream(bizId)
-  const job = jobStream.data as JobResponse | undefined
-
-  // F7.4: mirrors JobDetail's own cancelJob mutation (same endpoint, same
-  // "no optimistic update, just refetch" reasoning — see that file's doc).
-  const cancelJob = useMutation({
-    mutationFn: () => api.cancelJob(bizId!),
-    onSuccess: () => jobStream.refetch(),
-    onError: () => pushToast(t('jobDetail.cancelFailed'), () => cancelJob.mutate()),
-  })
-
-  useEffect(() => {
-    if (jobStream.isError) {
-      pushToast(t('jobDetail.connectionUnstable'), () => jobStream.refetch())
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobStream.isError, jobStream.refetch, pushToast])
-
-  const assetIds = resultAssetIds(job, tab)
-  const running = !!bizId && job?.status !== 'succeeded' && job?.status !== 'failed'
-  const gateNode = job?.nodes.find((n) => n.name === 'gate')
-  const gateSuspended = tab === 'video.sequence' && gateNode?.phase === 'Suspended'
-  const suggestions = job && job.status === 'succeeded' ? suggestActions(job, tab, assetIds, t) : []
-
-  function applySuggestion(action: SuggestedAction) {
-    switch (action.kind) {
-      case 'to-video':
-        setBizId(null)
-        setTab('video.single')
-        setRefModeAndClear('firstLast')
-        setFirstFrameAssetId(action.sourceAssetId)
-        break
-      case 'more-batch':
-        createJob.mutate()
-        break
-      case 'save-character':
-      case 'save-frame-character':
-        navigate('/characters', { state: { prefillAssetId: action.sourceAssetId } })
-        break
-      case 'to-sequence':
-        setBizId(null)
-        setTab('video.sequence')
-        setVsShots(toShotItems(action.shots))
-        break
-      case 'upgrade-2k':
-        setBizId(null)
-        setResolution('2K')
-        break
-    }
-  }
 
   return (
     <AppShell>
@@ -1381,7 +1312,6 @@ export default function Studio() {
                   onClick={() => createJob.mutate()}
                   disabled={
                     createJob.isPending ||
-                    running ||
                     insufficientBalance ||
                     (tab === 'video.single' && !videoValidation.success) ||
                     // The amber "识别到 N 格" hint just above already computes
@@ -1398,7 +1328,7 @@ export default function Studio() {
                   }
                   className="rounded-full bg-violet-500 px-5 py-2 text-sm font-medium text-white transition hover:bg-violet-400 disabled:opacity-50"
                 >
-                  {createJob.isPending ? t('studio.submitting') : running ? t('studio.generating') : t('studio.generate')}
+                  {createJob.isPending ? t('studio.submitting') : t('studio.generate')}
                 </button>
               </>
             ) : (
@@ -1474,15 +1404,12 @@ export default function Studio() {
           )}
         </div>
 
-        {bizId && (
-          <Link to={`/jobs/${bizId}`} className="text-sm text-violet-400 hover:text-violet-300">
-            {t('studio.viewGraph')}
-          </Link>
-        )}
-
         {/* ── Results ─────────────────────────────────────────── */}
+        {/* Studio only composes and submits now — waiting, failure, and
+            success all live on /jobs (Jobs.tsx) once a job exists. This
+            section is idle-browsing content shown while there isn't one. */}
         <div className="min-h-80 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-          {!bizId && !isGuest && (
+          {!isGuest && (
             <HomeFeed
               presets={presets.data?.presets ?? []}
               onPickFragment={(fragment) => (tab === 'video.single' ? setVText(fragment) : setText(fragment))}
@@ -1491,7 +1418,7 @@ export default function Studio() {
             />
           )}
 
-          {!bizId && isGuest && (
+          {isGuest && (
             <div className="mx-auto max-w-md space-y-3 text-center">
               {!trialImageUrl && !trialError && <p className="text-sm text-zinc-400">{t('studio.trial.intro')}</p>}
               {trialError && <p className="text-sm text-red-400">{trialError}</p>}
@@ -1499,73 +1426,6 @@ export default function Studio() {
                 <div className="pt-2">
                   <img src={trialImageUrl} alt="" className="mx-auto rounded-lg" />
                   <p className="mt-2 text-xs text-zinc-500">{t('studio.trial.likeIt')}</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {gateSuspended && bizId && job && (
-            <PreviewGate bizId={bizId} job={job} duration={vsDuration} onResumed={() => jobStream.refetch()} />
-          )}
-
-          {running && !gateSuspended && (
-            <div className="flex min-h-64 flex-col items-center justify-center gap-3">
-              <GenerationProgress kind={tab.startsWith('video') ? 'video' : 'image'} />
-              <p className="text-xs text-zinc-500">
-                {t('studio.estimatedWait', {
-                  minutes: formatWaitMinutes(
-                    estimateWaitSeconds(tab, {
-                      n,
-                      shots: tab === 'image.sequence' ? shots.filter((s) => s.trim()).length : vsShots.filter((s) => s.text.trim()).length,
-                      durationSeconds: tab === 'video.single' ? duration : vsDuration,
-                      resolution,
-                    }),
-                  ),
-                })}
-              </p>
-              {jobStream.streamState === 'reconnecting' && (
-                <p className="text-xs text-amber-500">{t('jobDetail.reconnecting')}</p>
-              )}
-              <button
-                onClick={() => cancelJob.mutate()}
-                disabled={cancelJob.isPending}
-                className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-400 transition hover:border-red-500 hover:text-red-400 disabled:opacity-50"
-              >
-                {cancelJob.isPending ? t('jobDetail.cancelling') : t('jobDetail.cancelJob')}
-              </button>
-            </div>
-          )}
-
-          {job?.status === 'failed' && (
-            <p className="text-center text-red-400">
-              {t('studio.generationFailed', { error: displayNodeError(job && firstSpecificError(job.nodes), t) })}
-            </p>
-          )}
-
-          {job?.status === 'succeeded' && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                {assetIds.map((id) => (
-                  <div key={id} className="text-center">
-                    <p className="mb-1 font-mono text-xs text-zinc-500">{id}</p>
-                    <GeneratedMedia assetId={id} />
-                  </div>
-                ))}
-              </div>
-
-              {suggestions.length > 0 && (
-                <div className="flex flex-wrap items-center justify-center gap-2 border-t border-zinc-800 pt-4">
-                  <span className="text-xs text-zinc-500">{t('studio.suggestionsLabel')}</span>
-                  {suggestions.map((s) => (
-                    <button
-                      key={s.kind}
-                      onClick={() => applySuggestion(s)}
-                      className="flex items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-200 transition hover:border-violet-500 hover:text-violet-300"
-                    >
-                      <SuggestionIcon kind={s.kind} className="h-3.5 w-3.5" />
-                      {s.label}
-                    </button>
-                  ))}
                 </div>
               )}
             </div>
@@ -1786,22 +1646,4 @@ function ShotList({
       </button>
     </div>
   )
-}
-
-// F2.4/F2.5 asset detail (full version — filters, "以此再生成" — is a later
-// pass); this is the minimal lookup so Studio renders what the executor
-// actually materialized, not a client-side stand-in. video.single's result
-// is a video asset, so this renders <video> or <img> based on what came back.
-function GeneratedMedia({ assetId }: { assetId: string }) {
-  const { data } = useQuery({
-    queryKey: ['asset', assetId],
-    queryFn: () => api.getAsset(assetId),
-  })
-  if (!data) {
-    return <div className="h-64 w-64 animate-pulse rounded-lg bg-zinc-800" />
-  }
-  if (data.type === 'video') {
-    return <video src={data.public_url} controls className="h-64 w-64 rounded-lg bg-black object-contain" />
-  }
-  return <img src={data.public_url} alt="generated" className="h-64 w-64 rounded-lg object-cover" />
 }

@@ -10,7 +10,13 @@ const PHASE_STYLE: Record<string, { labelKey: string; icon: string; className: s
   Created: { labelKey: 'phase.created', icon: '○', className: 'text-zinc-400 border-zinc-700 bg-zinc-800/50' },
   Ready: { labelKey: 'phase.ready', icon: '○', className: 'text-zinc-400 border-zinc-700 bg-zinc-800/50' },
   Pending: { labelKey: 'phase.pending', icon: '○', className: 'text-zinc-400 border-zinc-700 bg-zinc-800/50' },
-  Running: { labelKey: 'phase.running', icon: '⟳', className: 'text-sky-400 border-sky-600 bg-sky-500/10', pulse: true },
+  // Was sky (blue) — the only place in the whole app using that color, and
+  // the reason it needed its own light-theme correction that nothing
+  // remembered to add (found live: "颜色不太对齐"). violet is already the
+  // brand accent and already means "this one, active/current" everywhere
+  // else (selected tab, selected preset, ...), so "running" reusing it is
+  // more consistent, not less — and it's already correctly theme-corrected.
+  Running: { labelKey: 'phase.running', icon: '⟳', className: 'text-violet-400 border-violet-600 bg-violet-500/10', pulse: true },
   Suspended: {
     labelKey: 'phase.suspended',
     // Was the pause-symbol codepoint (U+23F8) — its default presentation
@@ -39,7 +45,7 @@ export default function PhaseBadge({ phase }: { phase: string }) {
   const s = phaseStyle(phase)
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${s.className} ${s.pulse ? 'animate-pulse' : ''}`}
+      className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs ${s.className} ${s.pulse ? 'animate-pulse' : ''}`}
     >
       <span>{s.icon}</span>
       {t(s.labelKey)}

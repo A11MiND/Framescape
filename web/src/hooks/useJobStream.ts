@@ -51,6 +51,15 @@ export function useJobStream(bizId: string | null | undefined) {
         setStreamState('live')
         queryClient.invalidateQueries({ queryKey: ['job', bizId] })
       },
+      // Same "still alive" signal as onEvent, minus the query invalidation
+      // (a heartbeat carries no job data, there's nothing to refetch) — see
+      // sse.ts's own doc on why this exists: without it, any generation
+      // quiet for more than 30s (routine for video) falsely read as a
+      // flaky connection when it was never actually one.
+      onHeartbeat: () => {
+        lastFrameAt.current = Date.now()
+        setStreamState((cur) => (cur === 'reconnecting' ? 'live' : cur))
+      },
       onError: () => setStreamState('polling'),
     })
 
