@@ -250,3 +250,43 @@ type Project struct {
 }
 
 func (Project) TableName() string { return "projects" }
+
+// VideoOrphanTask tracks a MiniMax video-generation task_id across Aether
+// retries of the same DAG node (internal/infra/executor/minimax's video.go
+// own doc on submitWaitMaterialize) — a wait-timeout used to just abandon
+// the task_id forever, so a retry paid for and waited on a brand new
+// MiniMax generation while the original task might still complete (and had
+// already been billed for by MiniMax) unseen. Keyed by task_run_id: Aether
+// reuses the same TaskRun row across every retry of one node (engine.go's
+// onTaskCompleted retry path updates RetryCount in place rather than
+// allocating a new run), so it's already the correct unique identity for
+// "this node instance" — no risk of colliding across two different loop
+// iterations the way a bare task/template name could. The executor checks
+// here before creating a new task, and resolves the row once a terminal
+// result is reached via either path.
+type VideoOrphanTask struct {
+	ID            uint64 `gorm:"primaryKey"`
+	TaskRunID     string `gorm:"column:task_run_id"`
+	MinimaxTaskID string `gorm:"column:minimax_task_id"`
+	// nil while a task from a prior attempt might still be worth checking
+	// on; set once a terminal result (success or failure, from either the
+	// normal or the recovery path) has actually been reached for this node.
+	ResolvedAt *time.Time `gorm:"column:resolved_at"`
+	CreatedAt  time.Time  `gorm:"column:created_at"`
+}
+
+func (VideoOrphanTask) TableName() string { return "video_orphan_tasks" }
+
+// AssetLike backs Community's like button (migration 00018) — one row per
+// (asset, user), the unique key both enforcing "once per person per work"
+// and making like/unlike idempotent. Counts are computed on read
+// (COUNT(*) ... GROUP BY asset_id) rather than a denormalized counter, so
+// there's no column here for a running total — see the migration's own doc.
+type AssetLike struct {
+	ID        uint64    `gorm:"primaryKey"`
+	AssetID   uint64    `gorm:"column:asset_id"`
+	UserID    uint64    `gorm:"column:user_id"`
+	CreatedAt time.Time `gorm:"column:created_at"`
+}
+
+func (AssetLike) TableName() string { return "asset_likes" }

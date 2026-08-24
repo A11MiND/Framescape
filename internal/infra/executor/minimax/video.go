@@ -31,6 +31,26 @@ const (
 	videoMaxWait      = 25 * time.Minute // deliberately under Aether's 30m task timeout (§10.3)
 )
 
+// OrphanTaskStore persists a MiniMax video task_id across Aether retries of
+// the same node — see VideoOrphanTask's own doc in
+// internal/infra/persistence/models.go for why this exists (a wait-timeout
+// used to abandon the task_id forever, wasting whatever MiniMax billed for
+// it if the generation went on to succeed unseen) and why task_run_id is
+// the right key. Optional (nil disables recovery, falling back to the old
+// always-create-a-new-task behavior) so tests and any caller without a DB
+// handle don't need a fake implementation.
+type OrphanTaskStore interface {
+	// Put records a newly-created MiniMax task as pending recovery.
+	Put(ctx context.Context, taskRunID, minimaxTaskID string) error
+	// Get returns the still-unresolved MiniMax task_id left over from a
+	// prior attempt at this exact node, if any (ok=false if none).
+	Get(ctx context.Context, taskRunID string) (minimaxTaskID string, ok bool, err error)
+	// Resolve marks the row done — called once a terminal result has
+	// actually been reached, regardless of which path found it, so it's
+	// never checked again.
+	Resolve(ctx context.Context, taskRunID string) error
+}
+
 // videoBase holds the dependencies and submit/wait/materialize pipeline
 // shared by minimax.video and minimax.video.regen (video.go / video_regen.go)
 // — both submit to the same /v2/video_generation endpoint and only differ in
@@ -43,6 +63,7 @@ type videoBase struct {
 	redis       *redis.Client // optional: nil disables callback fast-path, falls back to pure polling
 	callbackURL string        // optional: only set on the request if this deployment has a public endpoint MiniMax can reach
 	limiter     *VideoLimiter // optional: nil means unbounded, see VideoLimiter.Acquire
+	orphans     OrphanTaskStore // optional: nil disables orphan-task recovery, see its own doc
 }
 
 // VideoConfig is minimax.video's declared input contract (Aether kebab-case
@@ -85,11 +106,12 @@ type VideoPlugin struct {
 // NewVideoPlugin's redis/callbackURL are both optional (pass nil/"" to run
 // polling-only, the only mode exercisable from a dev machine behind NAT —
 // MiniMax cannot reach a callback URL that isn't publicly routable). limiter
-// may also be nil (unbounded) — see VideoLimiter.Acquire.
-func NewVideoPlugin(client *Client, sink assetstore.Sink, reader assetstore.Reader, cache FileCache, redisClient *redis.Client, callbackURL string, limiter *VideoLimiter) *VideoPlugin {
+// may also be nil (unbounded, see VideoLimiter.Acquire), as may orphans (nil
+// disables orphan-task recovery, see OrphanTaskStore's own doc).
+func NewVideoPlugin(client *Client, sink assetstore.Sink, reader assetstore.Reader, cache FileCache, redisClient *redis.Client, callbackURL string, limiter *VideoLimiter, orphans OrphanTaskStore) *VideoPlugin {
 	return &VideoPlugin{base: &videoBase{
 		client: client, sink: sink, reader: reader, cache: cache,
-		redis: redisClient, callbackURL: callbackURL, limiter: limiter,
+		redis: redisClient, callbackURL: callbackURL, limiter: limiter, orphans: orphans,
 	}}
 }
 
@@ -256,15 +278,41 @@ func (b *videoBase) submitWaitMaterialize(ctx context.Context, req *executor.Exe
 		defer release()
 	}
 
-	created, err := b.client.CreateVideoTask(ctx, mmReq)
-	if err != nil {
-		return classifyVideoError(err), nil
+	// A retry of this exact node (same TaskRunID, see OrphanTaskStore's own
+	// doc) may have a MiniMax task left over from a prior attempt that we
+	// gave up waiting on but never checked back on — recover it instead of
+	// paying for and waiting on a brand new one. req.RetryCount == 0 skips
+	// the lookup entirely: a first attempt can't have a prior task yet.
+	var taskID string
+	if b.orphans != nil && req.RetryCount > 0 {
+		if pending, ok, err := b.orphans.Get(ctx, req.TaskRunID); err == nil && ok {
+			taskID = pending
+		}
 	}
-	taskID := created.TaskID
+
+	if taskID == "" {
+		created, err := b.client.CreateVideoTask(ctx, mmReq)
+		if err != nil {
+			return classifyVideoError(err), nil
+		}
+		taskID = created.TaskID
+		if b.orphans != nil {
+			// Best-effort: a tracking-write failure shouldn't fail a
+			// generation that otherwise has every chance of succeeding —
+			// it only means this specific attempt won't be recoverable if
+			// the wait below times out, no worse than before this fix.
+			_ = b.orphans.Put(ctx, req.TaskRunID, taskID)
+		}
+	}
 
 	task, waitErr := b.wait(ctx, taskID)
 	if waitErr != nil {
 		return errOutputs(model.ExecCodeTimeout, "wait_timeout: "+waitErr.Error()), nil
+	}
+	if b.orphans != nil {
+		// Reached a terminal MiniMax status one way or another — nothing
+		// left to recover on a future retry, whatever happens from here.
+		_ = b.orphans.Resolve(ctx, req.TaskRunID)
 	}
 
 	switch task.Task.Status {

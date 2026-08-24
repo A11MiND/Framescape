@@ -61,10 +61,10 @@ type VideoRegenPlugin struct {
 	base *videoBase
 }
 
-func NewVideoRegenPlugin(client *Client, sink assetstore.Sink, reader assetstore.Reader, cache FileCache, redisClient *redis.Client, callbackURL string, limiter *VideoLimiter) *VideoRegenPlugin {
+func NewVideoRegenPlugin(client *Client, sink assetstore.Sink, reader assetstore.Reader, cache FileCache, redisClient *redis.Client, callbackURL string, limiter *VideoLimiter, orphans OrphanTaskStore) *VideoRegenPlugin {
 	return &VideoRegenPlugin{base: &videoBase{
 		client: client, sink: sink, reader: reader, cache: cache,
-		redis: redisClient, callbackURL: callbackURL, limiter: limiter,
+		redis: redisClient, callbackURL: callbackURL, limiter: limiter, orphans: orphans,
 	}}
 }
 

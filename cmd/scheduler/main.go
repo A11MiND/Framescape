@@ -84,8 +84,10 @@ func main() {
 	must(registry.Register(minimax.NewImagePlugin(minimaxClient, sink, sink)), log)
 	must(registry.Register(minimax.NewFileUploadPlugin(minimaxClient, sink, fileCache)), log)
 	videoLimiter := minimax.NewVideoLimiter(redisClient, "default", config.MiniMaxVideoConcurrency())
-	must(registry.Register(minimax.NewVideoPlugin(minimaxClient, sink, sink, fileCache, redisClient, config.MiniMaxCallbackURL(), videoLimiter)), log)
-	must(registry.Register(minimax.NewVideoRegenPlugin(minimaxClient, sink, sink, fileCache, redisClient, config.MiniMaxCallbackURL(), videoLimiter)), log)
+	// orphans: nil — this registry's plugins are never Execute()'d here (see
+	// the comment above), so there's nothing to recover on the scheduler side.
+	must(registry.Register(minimax.NewVideoPlugin(minimaxClient, sink, sink, fileCache, redisClient, config.MiniMaxCallbackURL(), videoLimiter, nil)), log)
+	must(registry.Register(minimax.NewVideoRegenPlugin(minimaxClient, sink, sink, fileCache, redisClient, config.MiniMaxCallbackURL(), videoLimiter, nil)), log)
 	must(registry.Register(minimax.NewPromptEnhancePlugin(minimaxClient, sink, fileCache)), log)
 	must(registry.Register(local.NewComposePlugin(sink, sink)), log)
 	must(registry.Register(local.NewExtractFramesPlugin(sink, sink)), log)

@@ -284,7 +284,7 @@ func TestVideoPluginExecuteHappyPath(t *testing.T) {
 	})
 
 	sink := &fakeSink{}
-	plugin := NewVideoPlugin(client, sink, newFakeReader(), newFakeFileCache(), nil, "", nil)
+	plugin := NewVideoPlugin(client, sink, newFakeReader(), newFakeFileCache(), nil, "", nil, nil)
 	req := execRequest(t, "task-1", map[string]any{
 		"prompt": "a cat", "duration": "5", "resolution": "768P", "ratio": "16:9", "user-id": "3",
 	})
@@ -313,6 +313,90 @@ func TestVideoPluginExecuteHappyPath(t *testing.T) {
 	}
 }
 
+// TestVideoPluginExecute_RecordsOrphanThenResolves covers the normal (first
+// attempt) path with a real OrphanTaskStore wired in: Put must be called
+// with the real MiniMax task_id as soon as it's created (not just once
+// everything else also succeeds — the whole point is surviving a timeout
+// that happens after this point), and Resolve once a terminal MiniMax
+// status is actually reached.
+func TestVideoPluginExecute_RecordsOrphanThenResolves(t *testing.T) {
+	client, mux, srv := videoTaskServer(t, "vt-3")
+	defer srv.Close()
+	mux.HandleFunc("/v2/query/video_generation/vt-3", func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte(`{"task":{"id":"vt-3","status":"succeeded","content":{"url":"` + srv.URL + `/v.mp4"},"resolution":"768P","duration":5,"usage":{"output_seconds":5}}}`))
+	})
+	mux.HandleFunc("/v.mp4", func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte("fake-mp4-bytes"))
+	})
+
+	orphans := newFakeOrphanStore()
+	plugin := NewVideoPlugin(client, &fakeSink{}, newFakeReader(), newFakeFileCache(), nil, "", nil, orphans)
+	req := execRequest(t, "task-orphan-1", map[string]any{
+		"prompt": "a cat", "duration": "5", "resolution": "768P", "ratio": "16:9",
+	})
+
+	out, err := plugin.Execute(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if out.Code != 0 {
+		t.Fatalf("Code = %d, Message = %q, want success", out.Code, out.Message)
+	}
+	if len(orphans.puts) != 1 || orphans.puts[0] != "vt-3" {
+		t.Errorf("Put calls = %v, want exactly one with vt-3", orphans.puts)
+	}
+	if len(orphans.resolved) != 1 || orphans.resolved[0] != "task-orphan-1" {
+		t.Errorf("Resolve calls = %v, want exactly one with task-orphan-1", orphans.resolved)
+	}
+}
+
+// TestVideoPluginExecute_RecoversOrphanedTaskOnRetry is the actual bug fix:
+// a retry (RetryCount > 0) of a node that left an unresolved MiniMax task_id
+// behind must check on that task instead of creating a brand new one — the
+// /v2/video_generation handler here fails the test outright if it's ever
+// called, since a correct recovery never reaches it.
+func TestVideoPluginExecute_RecoversOrphanedTaskOnRetry(t *testing.T) {
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	mux.HandleFunc("/v2/video_generation", func(w http.ResponseWriter, req *http.Request) {
+		t.Fatal("CreateVideoTask must not be called when a recoverable orphan task exists")
+	})
+	mux.HandleFunc("/v2/query/video_generation/vt-recovered", func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte(`{"task":{"id":"vt-recovered","status":"succeeded","content":{"url":"` + srv.URL + `/v.mp4"},"resolution":"768P","duration":5,"usage":{"output_seconds":5}}}`))
+	})
+	mux.HandleFunc("/v.mp4", func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte("fake-mp4-bytes"))
+	})
+	client := NewClient(srv.URL, "test-api-key")
+
+	orphans := newFakeOrphanStore()
+	if err := orphans.Put(context.Background(), "task-orphan-2", "vt-recovered"); err != nil {
+		t.Fatalf("seed orphan: %v", err)
+	}
+	putsBeforeExecute := len(orphans.puts)
+
+	plugin := NewVideoPlugin(client, &fakeSink{}, newFakeReader(), newFakeFileCache(), nil, "", nil, orphans)
+	req := execRequest(t, "task-orphan-2", map[string]any{
+		"prompt": "a cat", "duration": "5", "resolution": "768P", "ratio": "16:9",
+	})
+	req.RetryCount = 1
+
+	out, err := plugin.Execute(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if out.Code != 0 {
+		t.Fatalf("Code = %d, Message = %q, want success (recovered)", out.Code, out.Message)
+	}
+	if len(orphans.puts) != putsBeforeExecute {
+		t.Errorf("Put calls after Execute = %v, want no new ones — the orphan should have been recovered, not replaced", orphans.puts)
+	}
+	if len(orphans.resolved) != 1 || orphans.resolved[0] != "task-orphan-2" {
+		t.Errorf("Resolve calls = %v, want exactly one with task-orphan-2", orphans.resolved)
+	}
+}
+
 func TestVideoPluginExecuteFailedStatus(t *testing.T) {
 	client, mux, srv := videoTaskServer(t, "vt-2")
 	defer srv.Close()
@@ -320,7 +404,7 @@ func TestVideoPluginExecuteFailedStatus(t *testing.T) {
 		w.Write([]byte(`{"task":{"id":"vt-2","status":"failed","error":{"code":"content_moderation","message":"rejected"}}}`))
 	})
 
-	plugin := NewVideoPlugin(client, &fakeSink{}, newFakeReader(), newFakeFileCache(), nil, "", nil)
+	plugin := NewVideoPlugin(client, &fakeSink{}, newFakeReader(), newFakeFileCache(), nil, "", nil, nil)
 	req := execRequest(t, "task-1", map[string]any{"prompt": "x", "duration": "5", "resolution": "768P", "ratio": "16:9"})
 	out, err := plugin.Execute(context.Background(), req)
 	if err != nil {
@@ -341,7 +425,7 @@ func TestVideoPluginExecuteCancelledStatus(t *testing.T) {
 		w.Write([]byte(`{"task":{"id":"vt-3","status":"cancelled"}}`))
 	})
 
-	plugin := NewVideoPlugin(client, &fakeSink{}, newFakeReader(), newFakeFileCache(), nil, "", nil)
+	plugin := NewVideoPlugin(client, &fakeSink{}, newFakeReader(), newFakeFileCache(), nil, "", nil, nil)
 	req := execRequest(t, "task-1", map[string]any{"prompt": "x", "duration": "5", "resolution": "768P", "ratio": "16:9"})
 	out, err := plugin.Execute(context.Background(), req)
 	if err != nil {
@@ -359,7 +443,7 @@ func TestVideoPluginExecuteCreateTaskHTTPError(t *testing.T) {
 	})
 	defer closeFn()
 
-	plugin := NewVideoPlugin(client, &fakeSink{}, newFakeReader(), newFakeFileCache(), nil, "", nil)
+	plugin := NewVideoPlugin(client, &fakeSink{}, newFakeReader(), newFakeFileCache(), nil, "", nil, nil)
 	req := execRequest(t, "task-1", map[string]any{"prompt": "x", "duration": "5", "resolution": "768P", "ratio": "16:9"})
 	out, err := plugin.Execute(context.Background(), req)
 	if err != nil {
@@ -389,7 +473,7 @@ func TestVideoPluginExecuteNoCapacity(t *testing.T) {
 	})
 	defer closeFn()
 
-	plugin := NewVideoPlugin(client, &fakeSink{}, newFakeReader(), newFakeFileCache(), nil, "", limiter)
+	plugin := NewVideoPlugin(client, &fakeSink{}, newFakeReader(), newFakeFileCache(), nil, "", limiter, nil)
 	req := execRequest(t, "my-task", map[string]any{"prompt": "x", "duration": "5", "resolution": "768P", "ratio": "16:9"})
 	out, err := plugin.Execute(context.Background(), req)
 	if err != nil {
@@ -424,7 +508,7 @@ func TestVideoRegenPluginForces2K(t *testing.T) {
 	})
 
 	sink := &fakeSink{}
-	plugin := NewVideoRegenPlugin(client, sink, newFakeReader(), newFakeFileCache(), nil, "", nil)
+	plugin := NewVideoRegenPlugin(client, sink, newFakeReader(), newFakeFileCache(), nil, "", nil, nil)
 	req := execRequest(t, "task-1", map[string]any{
 		"prompt": "x", "duration": "5", "resolution": "768P", "ratio": "16:9", "base-video-asset-id": "orig-asset",
 	})
@@ -482,7 +566,7 @@ func TestVideoPluginExecutePureFirstLastFrame(t *testing.T) {
 	reader.set("first-asset", srv.URL+"/frame.png")
 	reader.set("last-asset", srv.URL+"/frame.png")
 	sink := &fakeSink{}
-	plugin := NewVideoPlugin(client, sink, reader, newFakeFileCache(), nil, "", nil)
+	plugin := NewVideoPlugin(client, sink, reader, newFakeFileCache(), nil, "", nil, nil)
 
 	req := execRequest(t, "task-1", map[string]any{
 		"prompt": "a sunrise turning into sunset", "duration": "5", "resolution": "768P",

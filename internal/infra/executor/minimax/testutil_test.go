@@ -149,6 +149,42 @@ func (c *fakeFileCache) Put(ctx context.Context, assetBizID, fileID, purpose str
 	return nil
 }
 
+// fakeOrphanStore is an in-memory OrphanTaskStore — mirrors
+// GormVideoOrphanStore's real semantics (one row per taskRunID, Get only
+// returns an unresolved one) closely enough to exercise video.go's recovery
+// logic without a real DB.
+type fakeOrphanStore struct {
+	mu       sync.Mutex
+	pending  map[string]string // taskRunID -> minimaxTaskID, absent once resolved
+	puts     []string          // minimaxTaskID values Put was called with, in order
+	resolved []string          // taskRunID values Resolve was called with, in order
+}
+
+func newFakeOrphanStore() *fakeOrphanStore { return &fakeOrphanStore{pending: map[string]string{}} }
+
+func (s *fakeOrphanStore) Put(ctx context.Context, taskRunID, minimaxTaskID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pending[taskRunID] = minimaxTaskID
+	s.puts = append(s.puts, minimaxTaskID)
+	return nil
+}
+
+func (s *fakeOrphanStore) Get(ctx context.Context, taskRunID string) (string, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	id, ok := s.pending[taskRunID]
+	return id, ok, nil
+}
+
+func (s *fakeOrphanStore) Resolve(ctx context.Context, taskRunID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.pending, taskRunID)
+	s.resolved = append(s.resolved, taskRunID)
+	return nil
+}
+
 // jsonServer stands in for MiniMax itself: handler decides the response per
 // request, so tests can express "fails once, then succeeds", "returns
 // terminal status on the very first poll", etc. directly. Never hits the

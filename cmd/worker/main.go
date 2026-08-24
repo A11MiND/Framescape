@@ -46,6 +46,7 @@ func main() {
 	}
 	sink := persistence.NewGormAssetSinkWithStorage(db, objectStore)
 	fileCache := persistence.NewGormFileCache(db)
+	videoOrphans := persistence.NewGormVideoOrphanStore(db)
 	redisClient := cache.NewClient(config.RedisAddr())
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		log.Fatal("ping redis", zap.Error(err))
@@ -59,8 +60,8 @@ func main() {
 	must(registry.Register(minimax.NewImagePlugin(minimaxClient, sink, sink)), log)
 	must(registry.Register(minimax.NewFileUploadPlugin(minimaxClient, sink, fileCache)), log)
 	videoLimiter := minimax.NewVideoLimiter(redisClient, "default", config.MiniMaxVideoConcurrency())
-	must(registry.Register(minimax.NewVideoPlugin(minimaxClient, sink, sink, fileCache, redisClient, config.MiniMaxCallbackURL(), videoLimiter)), log)
-	must(registry.Register(minimax.NewVideoRegenPlugin(minimaxClient, sink, sink, fileCache, redisClient, config.MiniMaxCallbackURL(), videoLimiter)), log)
+	must(registry.Register(minimax.NewVideoPlugin(minimaxClient, sink, sink, fileCache, redisClient, config.MiniMaxCallbackURL(), videoLimiter, videoOrphans)), log)
+	must(registry.Register(minimax.NewVideoRegenPlugin(minimaxClient, sink, sink, fileCache, redisClient, config.MiniMaxCallbackURL(), videoLimiter, videoOrphans)), log)
 	must(registry.Register(minimax.NewPromptEnhancePlugin(minimaxClient, sink, fileCache)), log)
 	must(registry.Register(local.NewComposePlugin(sink, sink)), log)
 	must(registry.Register(local.NewExtractFramesPlugin(sink, sink)), log)
