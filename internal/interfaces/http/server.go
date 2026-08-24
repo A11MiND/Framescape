@@ -105,6 +105,8 @@ func (s *Server) Router() *gin.Engine {
 		authed.GET("/assets/:bizID", s.handleGetAsset)
 		authed.PATCH("/assets/:bizID", s.handleUpdateAsset)
 		authed.DELETE("/assets/:bizID", s.handleDeleteAsset)
+		authed.POST("/assets/:bizID/like", s.handleLikeAsset)
+		authed.DELETE("/assets/:bizID/like", s.handleUnlikeAsset)
 		authed.GET("/assets/trash", s.handleListTrash)
 		authed.POST("/assets/:bizID/restore", s.handleRestoreAsset)
 		authed.POST("/assets/trash/empty", s.handleEmptyTrash)

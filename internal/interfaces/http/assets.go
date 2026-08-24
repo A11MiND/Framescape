@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+	"gorm.io/gorm/clause"
 
 	"aigc-platform/internal/application/upkeep"
 	"aigc-platform/internal/infra/persistence"
@@ -106,13 +107,44 @@ func (s *Server) handleListAssets(c *gin.Context) {
 		}
 	}
 
+	// Like counts only matter on the "我发布的" tab (?is_public=true) — an
+	// owner wants to see how their own published work is doing; nobody
+	// needs a like count on their own private library grid. Same
+	// batch-then-attach shape as project_id above, computed only when this
+	// filter is actually active so the plain library-grid call (this
+	// handler's much more common caller) never pays for it.
+	var likeCounts map[uint64]int64
+	if c.Query("is_public") == "true" {
+		assetIDs := make([]uint64, len(rows))
+		for i, a := range rows {
+			assetIDs[i] = a.ID
+		}
+		likeCounts = make(map[uint64]int64, len(assetIDs))
+		if len(assetIDs) > 0 {
+			var counts []struct {
+				AssetID uint64
+				Count   int64
+			}
+			_ = s.db.WithContext(c.Request.Context()).Model(&persistence.AssetLike{}).
+				Select("asset_id, COUNT(*) as count").Where("asset_id IN ?", assetIDs).
+				Group("asset_id").Scan(&counts).Error
+			for _, r := range counts {
+				likeCounts[r.AssetID] = r.Count
+			}
+		}
+	}
+
 	out := make([]gin.H, 0, len(rows))
 	for _, a := range rows {
 		projectBizID := ""
 		if a.ProjectID != nil {
 			projectBizID = projectBizByID[*a.ProjectID]
 		}
-		out = append(out, assetToJSON(a, projectBizID))
+		row := assetToJSON(a, projectBizID)
+		if likeCounts != nil {
+			row["like_count"] = likeCounts[a.ID]
+		}
+		out = append(out, row)
 	}
 	c.JSON(http.StatusOK, gin.H{"assets": out})
 }
@@ -138,6 +170,39 @@ func (s *Server) handleCommunityFeed(c *gin.Context) {
 		return
 	}
 
+	// Batched (two queries total, not one per row) — same reasoning as the
+	// project_id batch-resolve just below in handleListAssets. userID(c)
+	// safely reads back 0 for a guest caller (this route sits on the
+	// unauthenticated v1 group, migration 00010's own doc), and 0 never
+	// matches a real user_id, so likedByMe just stays empty for a guest
+	// rather than needing its own guest branch.
+	assetIDs := make([]uint64, len(rows))
+	for i, a := range rows {
+		assetIDs[i] = a.ID
+	}
+	likeCounts := make(map[uint64]int64, len(assetIDs))
+	likedByMe := make(map[uint64]bool, len(assetIDs))
+	if len(assetIDs) > 0 {
+		var counts []struct {
+			AssetID uint64
+			Count   int64
+		}
+		_ = s.db.WithContext(c.Request.Context()).Model(&persistence.AssetLike{}).
+			Select("asset_id, COUNT(*) as count").Where("asset_id IN ?", assetIDs).
+			Group("asset_id").Scan(&counts).Error
+		for _, r := range counts {
+			likeCounts[r.AssetID] = r.Count
+		}
+		if uid := userID(c); uid != 0 {
+			var likedIDs []uint64
+			_ = s.db.WithContext(c.Request.Context()).Model(&persistence.AssetLike{}).
+				Where("asset_id IN ? AND user_id = ?", assetIDs, uid).Pluck("asset_id", &likedIDs).Error
+			for _, id := range likedIDs {
+				likedByMe[id] = true
+			}
+		}
+	}
+
 	out := make([]gin.H, 0, len(rows))
 	for _, a := range rows {
 		var meta map[string]any
@@ -154,7 +219,9 @@ func (s *Server) handleCommunityFeed(c *gin.Context) {
 			"published_at":   a.PublishedAt,
 			// prompt only — meta can carry seed/model/minimax_task_id too,
 			// none of which mean anything to another viewer.
-			"prompt": meta["prompt"],
+			"prompt":     meta["prompt"],
+			"like_count": likeCounts[a.ID],
+			"liked":      likedByMe[a.ID],
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{"assets": out})
@@ -185,6 +252,59 @@ func (s *Server) handleCommunityStreak(c *gin.Context) {
 		"milestones":      milestones,
 		"published_dates": status.PublishedDates,
 	})
+}
+
+// handleLikeAsset is POST /assets/:bizID/like (migration 00018) — liking
+// only ever makes sense for something visible in Community, so this is
+// scoped to is_public=true rather than caller-owns-it (the reverse of every
+// other asset-mutating handler in this file): you're liking someone else's
+// (or, harmlessly, your own) published work, not managing your own asset.
+// OnConflict DoNothing makes a duplicate like from the same caller a no-op,
+// not an error — the unique key (asset_id, user_id) is what actually
+// enforces "once per person per work".
+func (s *Server) handleLikeAsset(c *gin.Context) {
+	var assetID uint64
+	err := s.db.WithContext(c.Request.Context()).Model(&persistence.Asset{}).
+		Where("biz_id = ? AND is_public = ? AND deleted_at IS NULL", c.Param("bizID"), true).
+		Pluck("id", &assetID).Error
+	if err != nil || assetID == 0 {
+		c.JSON(http.StatusNotFound, errBody("not_found", "asset not found"))
+		return
+	}
+	row := persistence.AssetLike{AssetID: assetID, UserID: userID(c), CreatedAt: time.Now()}
+	if err := s.db.WithContext(c.Request.Context()).Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "like asset"))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"liked": true, "like_count": s.assetLikeCount(c.Request.Context(), assetID)})
+}
+
+// handleUnlikeAsset is DELETE /assets/:bizID/like — deliberately not scoped
+// to is_public=true unlike handleLikeAsset above: a caller must always be
+// able to remove their own like even if the asset was unpublished
+// afterward, not get stuck unable to undo it.
+func (s *Server) handleUnlikeAsset(c *gin.Context) {
+	var assetID uint64
+	err := s.db.WithContext(c.Request.Context()).Model(&persistence.Asset{}).
+		Where("biz_id = ? AND deleted_at IS NULL", c.Param("bizID")).
+		Pluck("id", &assetID).Error
+	if err != nil || assetID == 0 {
+		c.JSON(http.StatusNotFound, errBody("not_found", "asset not found"))
+		return
+	}
+	if err := s.db.WithContext(c.Request.Context()).
+		Where("asset_id = ? AND user_id = ?", assetID, userID(c)).
+		Delete(&persistence.AssetLike{}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "unlike asset"))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"liked": false, "like_count": s.assetLikeCount(c.Request.Context(), assetID)})
+}
+
+func (s *Server) assetLikeCount(ctx context.Context, assetID uint64) int64 {
+	var count int64
+	_ = s.db.WithContext(ctx).Model(&persistence.AssetLike{}).Where("asset_id = ?", assetID).Count(&count).Error
+	return count
 }
 
 // resolveProjectID turns a project biz_id into its numeric id, scoped to
@@ -368,6 +488,10 @@ func (s *Server) handleRestoreAsset(c *gin.Context) {
 // that's fine here (the user explicitly asked to empty trash, not casually
 // clicked something).
 func (s *Server) handleEmptyTrash(c *gin.Context) {
+	if s.objects == nil {
+		c.JSON(http.StatusServiceUnavailable, errBody("unavailable", "object storage not configured"))
+		return
+	}
 	ctx := c.Request.Context()
 	var rows []persistence.Asset
 	if err := s.db.WithContext(ctx).Where("user_id = ? AND deleted_at IS NOT NULL", userID(c)).Find(&rows).Error; err != nil {
@@ -602,7 +726,19 @@ func sanitizeExt(filename string) string {
 // projectBizID is the caller-resolved biz_id for a.ProjectID (empty if
 // unassigned) — resolved by the caller, not here, so handleListAssets can
 // batch it once per page instead of once per row.
+// prompt was never on this projection at all (only assetDetailJSON's own
+// meta, unlike handleCommunityFeed's per-row projection which already pulls
+// meta["prompt"] out the same way) — the "我发布的" tab (handleListAssets
+// with ?is_public=true) is this handler's own caller, so it inherited that
+// gap and had structurally no way to show a published video/image's prompt
+// at all, found live off "community 不展示提示词". Same minimal-exposure
+// shape as handleCommunityFeed: just the prompt string, not the rest of
+// meta (seed/model/minimax_task_id mean nothing to a caller here either).
 func assetToJSON(a persistence.Asset, projectBizID string) gin.H {
+	var meta map[string]any
+	if len(a.Meta) > 0 {
+		_ = json.Unmarshal(a.Meta, &meta)
+	}
 	return gin.H{
 		"biz_id":         a.BizID,
 		"type":           a.Type,
@@ -614,6 +750,7 @@ func assetToJSON(a persistence.Asset, projectBizID string) gin.H {
 		"created_at":     a.CreatedAt,
 		"project_id":     projectBizID,
 		"is_public":      a.IsPublic,
+		"prompt":         meta["prompt"],
 	}
 }
 
