@@ -41,3 +41,20 @@ FROM alpine:3.20 AS cli
 RUN apk add --no-cache ca-certificates
 COPY --from=build /out/cli /usr/local/bin/cli
 ENTRYPOINT ["/usr/local/bin/cli"]
+
+# ---- Frontend: Vite build served by nginx, fronting the whole stack ----
+FROM node:20-alpine AS web-build
+WORKDIR /src/web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ .
+# Relative path — nginx proxies /api/ to the api service on the same
+# origin, so the browser never needs an absolute backend URL baked in.
+ARG VITE_API_BASE=/api/v1
+ENV VITE_API_BASE=$VITE_API_BASE
+RUN npm run build
+
+FROM nginx:1.27-alpine AS web
+COPY --from=web-build /src/web/dist /usr/share/nginx/html
+COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80

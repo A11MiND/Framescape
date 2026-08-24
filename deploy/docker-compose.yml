@@ -4,37 +4,34 @@ services:
   mysql:
     image: mysql:8.0
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}"
       MYSQL_DATABASE: aigc
-    ports:
-      - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 5s
       timeout: 5s
       retries: 20
+    restart: unless-stopped
 
   redis:
     image: redis:7
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 20
+    restart: unless-stopped
 
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+      # Root creds double as the S3 access/secret key pair the Go services
+      # already authenticate with — same vars, one source of truth.
+      MINIO_ROOT_USER: "${MINIO_ACCESS_KEY:?Set MINIO_ACCESS_KEY in .env}"
+      MINIO_ROOT_PASSWORD: "${MINIO_SECRET_KEY:?Set MINIO_SECRET_KEY in .env}"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -42,6 +39,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    restart: unless-stopped
 
   migrate:
     build:
@@ -49,7 +47,7 @@ services:
       dockerfile: deploy/Dockerfile
       target: migrate
     environment:
-      MYSQL_DSN: "root:root@tcp(mysql:3306)/aigc?parseTime=true&loc=UTC&charset=utf8mb4"
+      MYSQL_DSN: "root:${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}@tcp(mysql:3306)/aigc?parseTime=true&loc=UTC&charset=utf8mb4"
     depends_on:
       mysql:
         condition: service_healthy
@@ -62,13 +60,14 @@ services:
       target: scheduler
     env_file: ../.env
     environment:
-      MYSQL_DSN: "root:root@tcp(mysql:3306)/aigc?parseTime=true&loc=UTC&charset=utf8mb4"
+      MYSQL_DSN: "root:${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}@tcp(mysql:3306)/aigc?parseTime=true&loc=UTC&charset=utf8mb4"
       REDIS_ADDR: "redis:6379"
       MINIO_ENDPOINT: "minio:9000"
-      # Public asset URLs are served to the browser on the host, not another
-      # container — must stay a host-reachable address, unlike the other
-      # docker-network-internal endpoints above.
-      MINIO_PUBLIC_BASE_URL: "http://localhost:9000/aigc-assets"
+      # Public asset URLs are served to the browser through the nginx `web`
+      # origin, not the docker network — PUBLIC_BASE_URL is whatever address
+      # actually reaches the `web` service (bare IP/localhost behind a
+      # Cloudflare quick tunnel, a real domain later).
+      MINIO_PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-http://localhost}/aigc-assets"
       SCHEDULER_ADDR: ":8090"
     depends_on:
       mysql:
@@ -79,6 +78,7 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    restart: unless-stopped
 
   worker:
     build:
@@ -87,10 +87,17 @@ services:
       target: worker
     env_file: ../.env
     environment:
-      MYSQL_DSN: "root:root@tcp(mysql:3306)/aigc?parseTime=true&loc=UTC&charset=utf8mb4"
+      MYSQL_DSN: "root:${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}@tcp(mysql:3306)/aigc?parseTime=true&loc=UTC&charset=utf8mb4"
       REDIS_ADDR: "redis:6379"
       MINIO_ENDPOINT: "minio:9000"
-      MINIO_PUBLIC_BASE_URL: "http://localhost:9000/aigc-assets"
+      MINIO_PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-http://localhost}/aigc-assets"
+    # ffprobe/ffmpeg (internal/infra/executor/local) fetch the asset's stored
+    # PublicURL directly — the same URL a browser on the host uses. When
+    # PUBLIC_BASE_URL is host-relative ("http://localhost"), that resolves to
+    # this container itself without this mapping, not the host's published
+    # nginx port.
+    extra_hosts:
+      - "localhost:host-gateway"
     depends_on:
       mysql:
         condition: service_healthy
@@ -100,6 +107,7 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    restart: unless-stopped
 
   api:
     build:
@@ -108,12 +116,15 @@ services:
       target: api
     env_file: ../.env
     environment:
-      MYSQL_DSN: "root:root@tcp(mysql:3306)/aigc?parseTime=true&loc=UTC&charset=utf8mb4"
+      MYSQL_DSN: "root:${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}@tcp(mysql:3306)/aigc?parseTime=true&loc=UTC&charset=utf8mb4"
       REDIS_ADDR: "redis:6379"
       SCHEDULER_URL: "http://scheduler:8090"
       API_ADDR: ":8080"
-    ports:
-      - "8080:8080"
+      # cmd/api has its own MinIO client (direct asset upload, trash purge) —
+      # without these it silently falls back to config.go's 127.0.0.1:9000
+      # default, unreachable from inside this container.
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-http://localhost}/aigc-assets"
     depends_on:
       mysql:
         condition: service_healthy
@@ -123,6 +134,22 @@ services:
         condition: service_completed_successfully
       scheduler:
         condition: service_started
+    restart: unless-stopped
+
+  # Single public entrypoint: serves the built frontend and reverse-proxies
+  # /api and /aigc-assets to the api/minio containers over the docker
+  # network — nothing else needs a host port published.
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: web
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+      - minio
+    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:latest

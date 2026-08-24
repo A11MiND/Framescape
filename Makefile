@@ -44,19 +44,21 @@ test:
 lint:
 	cd web && npx oxlint
 
-# --- Docker (deploy/docker-compose.yml): api/scheduler/worker/migrate run as
-# containers alongside mysql/redis/minio, built from deploy/Dockerfile. The
-# frontend is intentionally not containerized here — `make web` above still
-# covers it, same as local dev. ---
+# --- Docker (deploy/docker-compose.yml): api/scheduler/worker/migrate/web
+# (nginx-fronted frontend) run as containers alongside mysql/redis/minio,
+# built from deploy/Dockerfile. --env-file is required here because Compose
+# only auto-loads .env from the compose file's own directory (deploy/), not
+# the invocation cwd (repo root) — without it, the required MYSQL_ROOT_PASSWORD/
+# MINIO_ACCESS_KEY/etc substitutions in docker-compose.yml fail to resolve. ---
 
 docker-build:
-	docker compose -f deploy/docker-compose.yml build
+	docker compose -f deploy/docker-compose.yml --env-file .env build
 
 docker-up:
-	docker compose -f deploy/docker-compose.yml up -d
+	docker compose -f deploy/docker-compose.yml --env-file .env up -d
 
 docker-down:
-	docker compose -f deploy/docker-compose.yml down
+	docker compose -f deploy/docker-compose.yml --env-file .env down
 
 docker-logs:
-	docker compose -f deploy/docker-compose.yml logs -f
+	docker compose -f deploy/docker-compose.yml --env-file .env logs -f
