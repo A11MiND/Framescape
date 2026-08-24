@@ -422,6 +422,18 @@ W7 收口之后，产品又长了 33 个提交（`18dc114`..`HEAD`）没有被�
 - 实测验证 scheduler 单实例约束具体坏在哪：`RunControlConsumer` 的 `Concurrency:1` 保证同一 task 的 started/completed 严格按序处理，这个保证只在单进程内成立；真起第二个实例（换端口，同一份 MySQL/Redis）完全正常启动，没有任何报错——危险是完全沉默的（`d5f3c50`）
 - `internal/application/communitysvc`（`311de4d` 内）与 `internal/application/projection`（`3197325`）两个之前零测试、真管钱/管状态机的包补上测试
 
+**2026-08-23～24 会话（真实验证过，含现网部署与云端排障）**——把上一批会话遗留在工作区、一直没提交的改动整理清楚并入库，同时把整套服务真实部署上了一条 Cloudflare Tunnel 临时公网地址供外部测试：
+- 视频生成任务的孤儿恢复：`video.go` 之前只要本地等待超时（`videoMaxWait` 25 分钟）就永久放弃已创建的 MiniMax `task_id`，Aether 重试时直接开一个新任务——如果原任务在 MiniMax 那边后来还是成功了（且已经计费），结果和费用都被静默浪费。新增 `video_orphan_tasks`（迁移 00017），按 `task_run_id`（Aether 同一节点的每次重试复用同一个 TaskRun 行）记录未解决的 task_id，重试时先查这张表，能接上就不用重新起任务（`fc006e3`）
+- comic4 合成步骤补上 `retry: limit 2`（之前完全没有重试，一次瞬时抖动就把 N 个已经生成、已经计费的分镜全部作废——真实 job 上发现的）；四格漫画拼图分辨率 768→1024，对齐 MiniMax image-01 的原生输出，不再无谓降采样（`75d1d4f`）
+- Community 点赞功能：`asset_likes`（迁移 00018），(asset, user) 唯一键，点赞数按需 COUNT 而不是冗余计数列；顺带修了 `handleEmptyTrash` 一处真实的空指针 panic——对象存储客户端初始化失败时 `s.objects` 是 nil，这个 handler 是本文件里唯一一个没有判空就直接调用的（`02b564b`）
+- Studio 不再就地追踪已提交的作业（阻塞下一次生成、提交后也不是用户想盯着看的东西），改成提交后跳转到 `/jobs`；JobDetail 成为进度/取消/预览闸门/结果/重试建议唯一的落地页。顺带修了一个真实的 SSE 心跳 bug：`sse.go` 每 15s 发的心跳一直只是裸注释帧（没有 `data:` 行），前端 `onEvent` 直接跳过，导致 `useJobStream` 的 watchdog 从来没见过心跳，只要生成过程安静超过 30s 就误判"reconnecting"（连接其实一直是好的）（`0f12573`）
+- Community 点赞按钮 + 通知中心补上"最近失败"分组（之前只追踪 suspended/succeeded，用户切走页面后作业失败是完全没有提示的）；顺带修了通知下拉框一个真实的溢出 bug——Rail 用 `lg:flex-1` 把这颗铃铛推到侧边栏最底部，下拉框却锚在 `lg:top-0` 往下长，直接冲出浏览器窗口底部、连滚动条都没地方挂（从整窗截图里看出来的）（`3926866`）
+- 上面几批改动配套的 i18n 字符串（`715fb9e`）
+- 把 `deploy/docker-compose.yml` 从本地开发用配置改成能真实上公网的样子：MySQL/MinIO 密码从硬编码的 `root/root`、`minioadmin/minioadmin` 改成从 `.env` 读取必填项；mysql/redis/minio/api 不再把端口直接发布到宿主机；新增 `web` 服务（nginx 反代 `/api` 和 `/aigc-assets`，独立 Vite 构建阶段），整套服务收敛到一个公网入口；worker 加 `extra_hosts: localhost:host-gateway`，因为它自己的 ffprobe/ffmpeg 调用直接请求资产的 `PublicURL`（跟浏览器用的是同一个），需要能从容器内解析到宿主机（`ba7bc1b`）
+- 真实上线过程中现场排查、修复的三个 bug（均为部署环境问题，不是代码逻辑本身的 bug，但足够隐蔽，记一笔）：worker 容器内 ffprobe 请求 `http://localhost/...` 时 `localhost` 指向容器自己而非宿主机，导致抽帧全部失败，报错还把真实原因（connection refused）吞掉了只剩 `exit status 1`；`cmd/api` 自己的 MinIO 客户端一直没在 compose 里配 `MINIO_ENDPOINT`，退回到 `127.0.0.1:9000` 默认值，容器内连不通；最根本的一个——`PUBLIC_BASE_URL` 设成 `http://localhost` 只在部署者自己机器上能用，换成任何外部测试者的浏览器（通过 HTTPS 隧道访问）都会被 Chrome 的 Private Network Access 直接拦掉（mixed content + CORS loopback 拒绝），改成隧道的真实公网 HTTPS 地址才对
+- Cloudflare quick tunnel 在这条网络上不稳定：默认 QUIC/UDP 协议完全连不上边缘节点，换 `--protocol http2`（走 TCP）后才连上；即便如此中途还是断过一次（`Unauthorized: Tunnel not found`，quick tunnel 断线后无法用同一隧道恢复，只能整个重开换新地址）——每次换地址都要同步 `.env` 的 `PUBLIC_BASE_URL`、重建 scheduler/worker/api 三个容器、并把数据库里所有 asset 的 `public_url` 批量改指到新地址，写了个一键脚本（scratchpad 里，未入库）自动化这一串操作
+- 仓库改名对齐既定决定：产品英文名是 Framescape（帧境，§296 已有记录），本次会话把整理后的完整历史推到新仓库 `github.com/A11MiND/Framescape`
+
 ---
 
 *本计划随 PRD 更新而更新；PRD 现为 v1.0（`AIGC生成平台-PRD-v1.0.md`），下次有实质性功能变化时补充 §15，不需要再回去核对已经作废的 v0.2 章节号。*
