@@ -73,7 +73,7 @@ export function AssetPicker({
             type="button"
             disabled={disabled}
             onClick={() => setExpanded((v) => !v)}
-            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-dashed border-zinc-700 text-xs text-zinc-500 transition hover:border-zinc-500 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg border border-dashed border-zinc-700 text-xs text-zinc-500 transition hover:border-zinc-500 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {expanded ? t('assetPicker.collapse') : t('assetPicker.choose')}
           </button>
@@ -82,7 +82,7 @@ export function AssetPicker({
           type="button"
           disabled={disabled || upload.isPending}
           onClick={() => fileInputRef.current?.click()}
-          className="flex h-14 w-14 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-zinc-700 text-xs text-zinc-500 transition hover:border-violet-500 hover:text-violet-300 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex h-20 w-20 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-zinc-700 text-xs text-zinc-500 transition hover:border-violet-500 hover:text-violet-300 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {upload.isPending ? (
             <span className="animate-pulse">{t('assetPicker.uploading')}</span>
@@ -156,9 +156,9 @@ function Thumbnail({
       }`}
     >
       {type === 'image' ? (
-        <img src={asset.public_url} alt="" className="h-14 w-14 object-cover" />
+        <img src={asset.public_url} alt="" className="h-20 w-20 object-cover" />
       ) : (
-        <video src={asset.public_url} className="h-14 w-14 object-cover" muted />
+        <video src={asset.public_url} className="h-20 w-20 object-cover" muted />
       )}
     </button>
   )

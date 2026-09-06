@@ -622,6 +622,20 @@ type completeAssetRequest struct {
 	DurationMs int    `json:"duration_ms"`
 }
 
+// maxUploadBytesByType is F2.1's server-side backstop against an
+// arbitrarily large presigned PUT (nginx's own client_max_body_size caps
+// the request but is a single flat ceiling across every asset type,
+// generous enough to fit the largest legitimate video). Checked here,
+// against what the object store actually recorded, rather than at
+// upload-url time — the presign step can't itself bound how many bytes a
+// PUT sends. Generous by design: this rejects abuse (multi-GB junk), not
+// ordinary phone photos/videos.
+var maxUploadBytesByType = map[string]int64{
+	"image": 20 << 20,  // 20MB
+	"video": 512 << 20, // 512MB
+	"audio": 50 << 20,  // 50MB
+}
+
 // handleCompleteAsset is POST /api/v1/assets/{bizID}/complete: the second
 // half of F2.1's direct-upload flow. Nothing is persisted at upload-url
 // time — this is what actually confirms the browser's PUT landed
@@ -650,6 +664,22 @@ func (s *Server) handleCompleteAsset(c *gin.Context) {
 	info, err := s.objects.Stat(c.Request.Context(), req.StorageKey)
 	if err != nil {
 		c.JSON(http.StatusUnprocessableEntity, errBody("upload_missing", "object not found — upload it first"))
+		return
+	}
+
+	// The mime declared at upload-url time only ever gated which key prefix
+	// (typ) got handed out — nothing before this point has checked it
+	// against what the browser actually PUT. Reject a mismatch now, before
+	// a row citing the wrong type ever exists, rather than trusting the
+	// client's original declaration.
+	if assetTypeFromMime(info.Mime) != typ {
+		_ = s.objects.Delete(c.Request.Context(), req.StorageKey)
+		c.JSON(http.StatusUnprocessableEntity, errBody("mime_mismatch", fmt.Sprintf("uploaded content-type %q doesn't match declared type %q", info.Mime, typ)))
+		return
+	}
+	if max, ok := maxUploadBytesByType[typ]; ok && info.SizeBytes > max {
+		_ = s.objects.Delete(c.Request.Context(), req.StorageKey)
+		c.JSON(http.StatusRequestEntityTooLarge, errBody("upload_too_large", fmt.Sprintf("%d bytes exceeds the %d byte limit for %s uploads", info.SizeBytes, max, typ)))
 		return
 	}
 

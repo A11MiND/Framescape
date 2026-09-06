@@ -1,5 +1,5 @@
 .PHONY: build build-api build-scheduler build-worker build-cli build-migrate \
-	docker-up docker-down docker-logs docker-build \
+	docker-up docker-down docker-logs docker-build docker-restart-app \
 	migrate run-api run-scheduler run-worker web test lint
 
 # --- Local (non-Docker) dev: matches the manual three-process workflow used
@@ -62,3 +62,13 @@ docker-down:
 
 docker-logs:
 	docker compose -f deploy/docker-compose.yml --env-file .env logs -f
+
+# api/scheduler/worker all bake PUBLIC_BASE_URL (via MINIO_PUBLIC_BASE_URL)
+# into their own env at container-start time — none of them re-read .env
+# while running. Run this after PUBLIC_BASE_URL changes in .env (e.g. a new
+# Cloudflare quick tunnel address) instead of restarting just scheduler/
+# worker: a forgotten api restart leaves it handing out asset public_urls
+# built from the previous, now-dead address, even though uploads/dispatch
+# themselves keep working fine.
+docker-restart-app:
+	docker compose -f deploy/docker-compose.yml --env-file .env up -d --force-recreate api scheduler worker

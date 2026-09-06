@@ -116,10 +116,15 @@ func (s *Service) createImageComic4(ctx context.Context, userID uint64, spec Spe
 		return nil, err
 	}
 
+	// resolveSharedSeed's own doc covers why every panel needs the same
+	// seed, including when neither spec.Seed nor a bound character set one.
+	seed := resolveSharedSeed(characters, spec.Seed)
+	seedStr := formatSeed(seed)
+
 	plans := make([]panelPlan, len(panelTexts))
 	for i, text := range panelTexts {
-		compiled := prompt.Compile(prompt.Input{Text: text, Characters: characters, Presets: presets, Seed: spec.Seed})
-		plans[i] = panelPlan{Index: i + 1, Prompt: compiled.Prompt, RawText: text, Seed: formatSeed(compiled.Seed)}
+		compiled := prompt.Compile(prompt.Input{Text: text, Characters: characters, Presets: presets, Seed: seed})
+		plans[i] = panelPlan{Index: i + 1, Prompt: compiled.Prompt, RawText: text, Seed: seedStr}
 	}
 
 	wfJSON := buildComic4Workflow(plans, spec.SourceImageAssetID)

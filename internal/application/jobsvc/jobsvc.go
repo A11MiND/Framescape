@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"slices"
 	"strconv"
 	"time"
@@ -818,6 +819,24 @@ func formatSeed(seed *int64) string {
 		return ""
 	}
 	return strconv.FormatInt(*seed, 10)
+}
+
+// resolveSharedSeed is image.comic4/image.sequence's shared "同 seed" rule:
+// every panel/shot in one batch embeds the same seed so they draw from the
+// same visual anchor. explicit (spec.Seed) and a bound character's fixed
+// seed both win via prompt.Compile's own resolution rule; when neither is
+// set, this fills in a fresh random seed rather than leaving every
+// panel/shot to get an independently-random one from MiniMax — batches with
+// no bound character used to come back looking unrelated for exactly that
+// reason (the chained subject_reference other panels/shots use only carries
+// over one prior image, never the generator's own random state).
+func resolveSharedSeed(characters []prompt.Character, explicit *int64) *int64 {
+	seed := prompt.Compile(prompt.Input{Characters: characters, Seed: explicit}).Seed
+	if seed == nil {
+		s := rand.Int64N(1 << 31)
+		seed = &s
+	}
+	return seed
 }
 
 // nonNil turns a nil slice into an empty one so it JSON-marshals to `[]`

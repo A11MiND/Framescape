@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -26,13 +27,30 @@ type Config struct {
 
 type Store struct {
 	client *minio.Client
-	cfg    Config
+	// presignClient signs PresignPut URLs — see PresignPut's doc for why
+	// this must be a separate client from the one above whenever cfg.Endpoint
+	// (used for every other, server-to-server call) isn't itself
+	// browser-reachable, which is exactly the docker-compose case
+	// ("minio:9000") that same doc flags.
+	presignClient *minio.Client
+	cfg           Config
 }
+
+// awsRegion is fixed rather than autodetected: minio-go otherwise discovers
+// a bucket's region lazily via a live GetBucketLocation call the first time
+// it's needed for SigV4 signing, and PresignPut must never depend on that —
+// it's meant to be pure local HMAC computation, no network round trip, and
+// especially not one to presignClient's (browser-facing, possibly currently
+// unreachable from the server itself) host. This MinIO deployment is never
+// given MINIO_REGION/MINIO_SITE_REGION (checked: neither docker-compose.yml
+// nor .env sets either), so it runs on MinIO's own default, "us-east-1".
+const awsRegion = "us-east-1"
 
 func New(ctx context.Context, cfg Config) (*Store, error) {
 	client, err := minio.New(cfg.Endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
 		Secure: cfg.UseSSL,
+		Region: awsRegion,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("construct minio client: %w", err)
@@ -51,7 +69,34 @@ func New(ctx context.Context, cfg Config) (*Store, error) {
 		}
 	}
 
-	return &Store{client: client, cfg: cfg}, nil
+	presignClient := client
+	if presignEndpoint, presignSSL, ok := parsePublicEndpoint(cfg.PublicBaseURL); ok && presignEndpoint != cfg.Endpoint {
+		pc, err := minio.New(presignEndpoint, &minio.Options{
+			Creds:  credentials.NewStaticV4(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
+			Secure: presignSSL,
+			Region: awsRegion,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("construct presign-only minio client for %q: %w", presignEndpoint, err)
+		}
+		presignClient = pc
+	}
+
+	return &Store{client: client, presignClient: presignClient, cfg: cfg}, nil
+}
+
+// parsePublicEndpoint pulls the host (and scheme) a browser can actually
+// reach out of PublicBaseURL, e.g. "https://example.trycloudflare.com/aigc-assets"
+// -> ("example.trycloudflare.com", true, true). ok is false for anything
+// that doesn't parse as an absolute http(s) URL, so New falls back to
+// signing with cfg.Endpoint (today's behavior) rather than silently using a
+// broken host.
+func parsePublicEndpoint(publicBaseURL string) (host string, useSSL bool, ok bool) {
+	u, err := url.Parse(publicBaseURL)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return "", false, false
+	}
+	return u.Host, u.Scheme == "https", true
 }
 
 // Put uploads bytes under key and returns the object's public URL.
@@ -94,19 +139,15 @@ func (s *Store) Stat(ctx context.Context, key string) (ObjectInfo, error) {
 }
 
 // PresignPut returns a time-limited URL the browser can PUT bytes to
-// directly (F2.1: "预签名直传，不经过 Go 服务"). Built from the same client
-// (and therefore the same cfg.Endpoint) Put() uses — the SigV4 signature
-// binds to the Host it was signed for, so unlike PublicBaseURL used to
-// build public_url strings, this can't be rewritten to a different host
-// after the fact without invalidating the signature. cfg.Endpoint must
-// therefore be reachable by the browser for direct upload to work (true of
-// this project's default local-dev config, where it's the same
-// 127.0.0.1:9000 the browser already talks to for public_url downloads;
-// not true of docker-compose's api service, which points Endpoint at the
-// container-internal "minio:9000" — direct upload needs that overridden to
-// a browser-reachable host before it's used outside local dev).
+// directly (F2.1: "预签名直传，不经过 Go 服务"). The SigV4 signature binds to
+// whatever host it was signed for, so this deliberately uses presignClient
+// (host derived from cfg.PublicBaseURL — the same address browsers already
+// use for public_url downloads) rather than the client's own cfg.Endpoint.
+// In docker-compose, Endpoint is the container-internal "minio:9000",
+// unreachable from outside the docker network; New falls back to signing
+// with Endpoint only if PublicBaseURL doesn't parse to a usable host.
 func (s *Store) PresignPut(ctx context.Context, key string, expiry time.Duration) (string, error) {
-	u, err := s.client.PresignedPutObject(ctx, s.cfg.Bucket, key, expiry)
+	u, err := s.presignClient.PresignedPutObject(ctx, s.cfg.Bucket, key, expiry)
 	if err != nil {
 		return "", fmt.Errorf("presign put %q: %w", key, err)
 	}

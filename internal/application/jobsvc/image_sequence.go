@@ -90,10 +90,10 @@ func (s *Service) createImageSequence(ctx context.Context, userID uint64, spec S
 	}
 
 	// Resolve the seed once (F5.5: "同 seed") — every shot embeds it, same
-	// reasoning as Create's image.comic4 branch. An empty-Text compile is
-	// enough to run the compiler's own seed-resolution rule (explicit
-	// spec.Seed, else the first bound character's fixed seed).
-	seed := prompt.Compile(prompt.Input{Characters: characters, Seed: spec.Seed}).Seed
+	// reasoning as Create's image.comic4 branch. resolveSharedSeed's own
+	// doc covers the fallback for when neither spec.Seed nor a bound
+	// character set one.
+	seed := resolveSharedSeed(characters, spec.Seed)
 	seedStr := formatSeed(seed)
 
 	plans := make([]imageShotPlan, len(spec.Shots))
