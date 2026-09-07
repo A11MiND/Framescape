@@ -379,6 +379,11 @@ export interface AdminOverview {
   jobs_by_status: Record<string, number>
   credits_recharged: number
   credits_consumed: number
+  // Real MiniMax-reported ¥ cost (admin.go's costYuanExpr doc) — unlike the
+  // two credits_* fields above, this carries no §12.2 margin and no
+  // credits-per-¥ conversion, so it's the actual "how much have we spent"
+  // answer, not a proxy for it.
+  total_cost_yuan: number
 }
 
 export interface AdminUser {
@@ -386,9 +391,11 @@ export interface AdminUser {
   email: string | null
   phone: string | null
   is_admin: boolean
+  is_active: boolean
   balance: number
   held: number
   credits_spent: number
+  cost_yuan: number
   job_count: number
   created_at: string
 }
@@ -397,6 +404,7 @@ export interface AdminUsageDay {
   day: string
   jobs: number
   credits_consumed: number
+  cost_yuan: number
 }
 
 export const api = {
@@ -627,4 +635,10 @@ export const api = {
     }),
   adminSetAdmin: (bizId: string, isAdmin: boolean) =>
     request<{ biz_id: string; is_admin: boolean }>('POST', `/admin/users/${bizId}/admin`, { is_admin: isAdmin }),
+  // Returns temp_password exactly once — see handleAdminCreateUser's own
+  // doc for why this can't be retrieved again after this call returns.
+  adminCreateUser: (email: string) =>
+    request<{ biz_id: string; email: string; temp_password: string }>('POST', '/admin/users', { email }),
+  adminSetActive: (bizId: string, isActive: boolean) =>
+    request<{ biz_id: string; is_active: boolean }>('POST', `/admin/users/${bizId}/active`, { is_active: isActive }),
 }

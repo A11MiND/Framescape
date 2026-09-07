@@ -14,16 +14,46 @@
 package httpapi
 
 import (
+	"crypto/rand"
 	"net/http"
 	"sort"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 
 	"aigc-platform/internal/infra/persistence"
 	"aigc-platform/internal/pkg/id"
 )
+
+// costYuanExpr pulls the real, MiniMax-reported yuan cost out of a commit
+// row's remark (creditsvc.Commit's own remarkPayload — {"kind": "commit",
+// "amount": N, "cost_yuan": X}) — this is what MiniMax's own API response
+// said this specific call actually cost, not a price-table estimate. Every
+// use of this constant is scoped to `direction = 'commit'` rows; every
+// other direction's remark JSON has no cost_yuan key.
+//
+// The CASE/JSON_VALID split exists because MySQL's JSON_EXTRACT throws a
+// hard error (3141) on a non-JSON string input — it does NOT return NULL
+// the way a missing key would — and this codebase's own history has real
+// commit rows predating remarkPayload's JSON encoding, still holding the
+// old plain-English format ("committed N credits (cost X.XXXX yuan)": see
+// credits.go's parseRemark doc). Confirmed against this project's actual
+// dev data: about a third of all commit rows are still that old format, so
+// skipping them via a bare JSON_VALID guard (rather than this fallback)
+// would silently under-report real historical spend by a similar margin,
+// not just miss a few edge-case rows. REGEXP_SUBSTR pulls the one
+// decimal-point number out of that sentence (the credits count before it
+// is always a bare integer, no decimal point, so `[0-9]+\.[0-9]+` can only
+// match the cost) — verified by summing each branch separately against
+// live data and confirming they add up to the combined query's own total.
+const costYuanExpr = `COALESCE(SUM(
+	CASE
+		WHEN JSON_VALID(remark) THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(remark, '$.cost_yuan')) AS DECIMAL(14,4))
+		ELSE CAST(REGEXP_SUBSTR(remark, '[0-9]+\\.[0-9]+') AS DECIMAL(14,4))
+	END
+), 0)`
 
 // handleAdminOverview is GET /api/v1/admin/overview: the dashboard's top
 // summary strip — total users, jobs by status, and the two credit totals
@@ -60,11 +90,21 @@ func (s *Server) handleAdminOverview(c *gin.Context) {
 		Select("COALESCE(SUM(amount), 0)").Scan(&negConsumed)
 	totalConsumed = -negConsumed
 
+	// Real yuan MiniMax has actually charged this account — costYuanExpr's
+	// own doc covers why this is a truer "how much has this cost us"
+	// answer than the credits figures above (those carry §12.2's 2x margin
+	// and a unit conversion, not a 1:1 view of real spend).
+	var totalCostYuan float64
+	s.db.WithContext(ctx).Model(&persistence.CreditLedger{}).
+		Where("direction = ?", "commit").
+		Select(costYuanExpr).Scan(&totalCostYuan)
+
 	c.JSON(http.StatusOK, gin.H{
 		"user_count":        userCount,
 		"jobs_by_status":    jobsByStatus,
 		"credits_recharged": totalRecharged,
 		"credits_consumed":  totalConsumed,
+		"total_cost_yuan":   totalCostYuan,
 	})
 }
 
@@ -77,9 +117,11 @@ type adminUserRow struct {
 	Email        *string   `json:"email"`
 	Phone        *string   `json:"phone"`
 	IsAdmin      bool      `json:"is_admin"`
+	IsActive     bool      `json:"is_active"`
 	Balance      int       `json:"balance"`
 	Held         int       `json:"held"`
 	CreditsSpent int       `json:"credits_spent"`
+	CostYuan     float64   `json:"cost_yuan"`
 	JobCount     int       `json:"job_count"`
 	CreatedAt    time.Time `json:"created_at"`
 }
@@ -141,6 +183,18 @@ func (s *Server) handleAdminListUsers(c *gin.Context) {
 		spentByUser[r.UserID] = -r.N // commit amounts are negative, see handleAdminOverview's own doc
 	}
 
+	var costRows []struct {
+		UserID uint64
+		Yuan   float64
+	}
+	s.db.WithContext(ctx).Model(&persistence.CreditLedger{}).
+		Where("user_id IN ? AND direction = ?", userIDs, "commit").
+		Select("user_id, " + costYuanExpr + " as yuan").Group("user_id").Scan(&costRows)
+	costByUser := map[uint64]float64{}
+	for _, r := range costRows {
+		costByUser[r.UserID] = r.Yuan
+	}
+
 	var jobCountRows []struct {
 		UserID uint64
 		N      int64
@@ -161,9 +215,11 @@ func (s *Server) handleAdminListUsers(c *gin.Context) {
 			Email:        u.Email,
 			Phone:        u.Phone,
 			IsAdmin:      u.IsAdmin,
+			IsActive:     u.IsActive,
 			Balance:      acct.Balance,
 			Held:         acct.Held,
 			CreditsSpent: int(spentByUser[u.ID]),
+			CostYuan:     costByUser[u.ID],
 			JobCount:     int(jobCountByUser[u.ID]),
 			CreatedAt:    u.CreatedAt,
 		})
@@ -270,6 +326,117 @@ func (s *Server) handleAdminSetAdmin(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"biz_id": target.BizID, "is_admin": *req.IsAdmin})
 }
 
+type createUserRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+// tempPasswordAlphabet excludes visually-ambiguous characters (0/O, 1/l/I)
+// — this password is meant to be read off a screen by one person and typed
+// by another (the whole reason handleAdminCreateUser exists: an admin
+// provisioning an account for a colleague without handing over their own
+// email), so every character needs to be unambiguous out loud or on a
+// low-res screen.
+const tempPasswordAlphabet = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+// generateTempPassword returns a 14-character random password — long
+// enough to clear handleChangePassword's/registerRequest's own min=8 with
+// real margin, short enough to still be readable and typeable by hand.
+func generateTempPassword() (string, error) {
+	b := make([]byte, 14)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	for i, v := range b {
+		b[i] = tempPasswordAlphabet[int(v)%len(tempPasswordAlphabet)]
+	}
+	return string(b), nil
+}
+
+// handleAdminCreateUser is POST /api/v1/admin/users: lets an admin
+// provision an account for someone they don't want to hand their own
+// login to — e.g. a colleague who needs access but shouldn't need the
+// admin's personal email. Generates a random temporary password server-
+// side and returns it exactly once in this response; it is never logged
+// or stored anywhere in plaintext (bcrypt-hashed into the same
+// PasswordHash column handleRegister writes, via the same s.createAccount
+// helper) — if the admin loses it, the new account's own
+// PATCH /me/password (or another admin re-running this against the same
+// email, which 409s instead — see below) is the only recovery path,
+// deliberately no different from a normal user forgetting their own
+// password.
+func (s *Server) handleAdminCreateUser(c *gin.Context) {
+	var req createUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
+		return
+	}
+
+	tempPassword, err := generateTempPassword()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "generate password"))
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(tempPassword), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "hash password"))
+		return
+	}
+	hashStr := string(hash)
+	user := persistence.User{BizID: id.New(), Email: &req.Email, PasswordHash: &hashStr, IsActive: true}
+	if err := s.createAccount(&user); err != nil {
+		c.JSON(http.StatusConflict, errBody("email_taken", "email already registered"))
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"biz_id":        user.BizID,
+		"email":         req.Email,
+		"temp_password": tempPassword,
+	})
+}
+
+type setActiveRequest struct {
+	IsActive *bool `json:"is_active" binding:"required"`
+}
+
+// handleAdminSetActive is POST /api/v1/admin/users/{bizID}/active:
+// deactivating blocks that account from authenticating starting on its
+// very next request (requireAuth's own doc), without deleting anything —
+// their jobs/assets/credit history all stay intact, and reactivating
+// restores access with no other side effect. Refuses to let an admin
+// deactivate their own account: not a security boundary (any other admin
+// could still do it, or this same admin from a second session), just a
+// guard against a near-certain misclick locking someone out of the
+// session they're actively using.
+func (s *Server) handleAdminSetActive(c *gin.Context) {
+	ctx := c.Request.Context()
+	bizID := c.Param("bizID")
+
+	var req setActiveRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
+		return
+	}
+
+	var target persistence.User
+	if err := s.db.WithContext(ctx).First(&target, "biz_id = ?", bizID).Error; err != nil {
+		c.JSON(http.StatusNotFound, errBody("not_found", "user not found"))
+		return
+	}
+
+	if !*req.IsActive && target.ID == userID(c) {
+		c.JSON(http.StatusConflict, errBody("self_deactivate", "cannot deactivate your own account"))
+		return
+	}
+
+	if err := s.db.WithContext(ctx).Model(&persistence.User{}).Where("id = ?", target.ID).
+		Update("is_active", *req.IsActive).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "update active flag"))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"biz_id": target.BizID, "is_active": *req.IsActive})
+}
+
 // handleAdminUsage is GET /api/v1/admin/usage?days=30: per-day job counts
 // and credits consumed for the trailing N days (default/cap 90) — the
 // dashboard's usage-over-time view. Two separate GROUP BY queries (jobs by
@@ -302,6 +469,15 @@ func (s *Server) handleAdminUsage(c *gin.Context) {
 		Select("DATE(created_at) as day, COALESCE(SUM(amount), 0) as n").
 		Group("DATE(created_at)").Order("day").Scan(&creditRows)
 
+	var costRows []struct {
+		Day  string
+		Yuan float64
+	}
+	s.db.WithContext(ctx).Model(&persistence.CreditLedger{}).
+		Where("created_at >= ? AND direction = ?", since, "commit").
+		Select("DATE(created_at) as day, " + costYuanExpr + " as yuan").
+		Group("DATE(created_at)").Order("day").Scan(&costRows)
+
 	jobsByDay := map[string]int64{}
 	for _, r := range jobRows {
 		jobsByDay[r.Day] = r.N
@@ -309,6 +485,10 @@ func (s *Server) handleAdminUsage(c *gin.Context) {
 	creditsByDay := map[string]int64{}
 	for _, r := range creditRows {
 		creditsByDay[r.Day] = -r.N // commit amounts are negative
+	}
+	costByDay := map[string]float64{}
+	for _, r := range costRows {
+		costByDay[r.Day] = r.Yuan
 	}
 
 	daysOut := make([]gin.H, 0, len(jobRows)+len(creditRows))
@@ -329,6 +509,7 @@ func (s *Server) handleAdminUsage(c *gin.Context) {
 			"day":              day,
 			"jobs":             jobsByDay[day],
 			"credits_consumed": creditsByDay[day],
+			"cost_yuan":        costByDay[day],
 		})
 	}
 

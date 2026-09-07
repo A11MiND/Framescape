@@ -1,9 +1,11 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"aigc-platform/internal/application/jobsvc"
@@ -256,4 +258,191 @@ func TestHandleAdminUsage(t *testing.T) {
 	if totalJobs < 1 {
 		t.Errorf("usage days total jobs = %d, want >= 1 (seeded job should show up today)", totalJobs)
 	}
+}
+
+// TestHandleAdminOverview_RealCostYuan is the regression/correctness test
+// for costYuanExpr's JSON_EXTRACT SQL — seeds a real commit-shaped
+// credit_ledger row (via creditsvc.Hold+Commit directly, the same two
+// calls jobsvc's own settlement path makes) with a known cost_yuan, then
+// confirms handleAdminOverview's total_cost_yuan sums it back out
+// correctly. Without this, a broken JSON path expression would silently
+// report 0 for every real MiniMax spend — exactly the kind of thing an
+// admin actually asking "how much have we spent" needs to be able to
+// trust.
+func TestHandleAdminOverview_RealCostYuan(t *testing.T) {
+	s, _ := newFullTestServer(t)
+	r := s.Router()
+	adminToken, adminUID := registerAndFund(t, s, 100)
+	makeAdmin(t, s, adminUID)
+
+	ctx := context.Background()
+	if err := s.credits.Hold(ctx, adminUID, "test:overview-cost:hold", "job", "test-job", 50, "job", "image.single"); err != nil {
+		t.Fatalf("hold: %v", err)
+	}
+	if _, err := s.credits.Commit(ctx, adminUID, "test:overview-cost:commit", "test-task-run", 1.2345); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	rec := doJSON(t, r, http.MethodGet, "/api/v1/admin/overview", nil, adminToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		TotalCostYuan float64 `json:"total_cost_yuan"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.TotalCostYuan < 1.2345 {
+		t.Errorf("total_cost_yuan = %v, want >= 1.2345 (seeded commit's real cost)", body.TotalCostYuan)
+	}
+}
+
+func TestHandleAdminCreateUser(t *testing.T) {
+	s, _ := newFullTestServer(t)
+	r := s.Router()
+	adminToken, adminUID := registerAndFund(t, s, 0)
+	makeAdmin(t, s, adminUID)
+
+	newEmail := uniqueEmail(t)
+	rec := doJSON(t, r, http.MethodPost, "/api/v1/admin/users", map[string]any{"email": newEmail}, adminToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		BizID        string `json:"biz_id"`
+		Email        string `json:"email"`
+		TempPassword string `json:"temp_password"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Email != newEmail {
+		t.Errorf("email = %q, want %q", body.Email, newEmail)
+	}
+	if len(body.TempPassword) < 8 {
+		t.Fatalf("temp_password = %q, want len >= 8 (registerRequest's own min)", body.TempPassword)
+	}
+
+	// The whole point: the returned temp password must actually work
+	// against the real login endpoint, and the new account must not be an
+	// admin or start deactivated.
+	loginRec := doJSON(t, r, http.MethodPost, "/api/v1/auth/login",
+		loginRequest{Email: newEmail, Password: body.TempPassword}, "")
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login with temp password: status = %d, body = %s", loginRec.Code, loginRec.Body.String())
+	}
+	newToken := decodeTokens(t, loginRec).AccessToken
+	meRec := doJSON(t, r, http.MethodGet, "/api/v1/me", nil, newToken)
+	var me struct {
+		IsAdmin bool `json:"is_admin"`
+	}
+	_ = json.Unmarshal(meRec.Body.Bytes(), &me)
+	if me.IsAdmin {
+		t.Error("admin-created account came back is_admin=true, want false")
+	}
+}
+
+func TestHandleAdminCreateUser_DuplicateEmailConflict(t *testing.T) {
+	s, _ := newFullTestServer(t)
+	r := s.Router()
+	adminToken, adminUID := registerAndFund(t, s, 0)
+	makeAdmin(t, s, adminUID)
+
+	taken := uniqueEmail(t)
+	doJSON(t, r, http.MethodPost, "/api/v1/auth/register", registerRequest{Email: taken, Password: "correct-horse"}, "")
+
+	rec := doJSON(t, r, http.MethodPost, "/api/v1/admin/users", map[string]any{"email": taken}, adminToken)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d, body = %s", rec.Code, http.StatusConflict, rec.Body.String())
+	}
+}
+
+func TestHandleAdminSetActive(t *testing.T) {
+	s, _ := newFullTestServer(t)
+	r := s.Router()
+	adminToken, adminUID := registerAndFund(t, s, 0)
+	makeAdmin(t, s, adminUID)
+	targetToken, targetUID := registerAndFund(t, s, 0)
+	var targetBizID string
+	s.db.Table("users").Where("id = ?", targetUID).Select("biz_id").Scan(&targetBizID)
+
+	// Deactivate — the target's already-issued access token must stop
+	// working on its very next request (requireAuth's own doc: a fresh DB
+	// read every time, not baked into the JWT).
+	rec := doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/admin/users/%s/active", targetBizID),
+		map[string]any{"is_active": false}, adminToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("deactivate: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	rec = doJSON(t, r, http.MethodGet, "/api/v1/me", nil, targetToken)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("deactivated user's existing token: status = %d, want %d, body = %s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+
+	// Reactivate — the same (never-rotated) token must work again immediately.
+	rec = doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/admin/users/%s/active", targetBizID),
+		map[string]any{"is_active": true}, adminToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reactivate: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	rec = doJSON(t, r, http.MethodGet, "/api/v1/me", nil, targetToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reactivated user's existing token: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandleAdminSetActive_LoginBlockedWhileDeactivated covers
+// handleLogin's own extra check — a deactivated account must not be able
+// to mint a fresh token pair at all, not just have existing tokens
+// rejected downstream.
+func TestHandleAdminSetActive_LoginBlockedWhileDeactivated(t *testing.T) {
+	s, _ := newFullTestServer(t)
+	r := s.Router()
+	adminToken, adminUID := registerAndFund(t, s, 0)
+	makeAdmin(t, s, adminUID)
+
+	email := uniqueEmail(t)
+	regRec := doJSON(t, r, http.MethodPost, "/api/v1/auth/register", registerRequest{Email: email, Password: "correct-horse"}, "")
+	targetUID := parseUID(t, regRec)
+	var targetBizID string
+	s.db.Table("users").Where("id = ?", targetUID).Select("biz_id").Scan(&targetBizID)
+
+	doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/admin/users/%s/active", targetBizID),
+		map[string]any{"is_active": false}, adminToken)
+
+	rec := doJSON(t, r, http.MethodPost, "/api/v1/auth/login", loginRequest{Email: email, Password: "correct-horse"}, "")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("login while deactivated: status = %d, want %d, body = %s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+}
+
+func TestHandleAdminSetActive_RefusesSelfDeactivate(t *testing.T) {
+	s, _ := newFullTestServer(t)
+	r := s.Router()
+	adminToken, adminUID := registerAndFund(t, s, 0)
+	makeAdmin(t, s, adminUID)
+	var adminBizID string
+	s.db.Table("users").Where("id = ?", adminUID).Select("biz_id").Scan(&adminBizID)
+
+	rec := doJSON(t, r, http.MethodPost, fmt.Sprintf("/api/v1/admin/users/%s/active", adminBizID),
+		map[string]any{"is_active": false}, adminToken)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d, body = %s", rec.Code, http.StatusConflict, rec.Body.String())
+	}
+}
+
+// parseUID pulls the user ID out of a register/login response's access
+// token — admin_test.go's other helpers all seed via registerAndFund,
+// which already returns uid; this is for the one test above that needs the
+// email held fixed (so login can be attempted with it later) rather than
+// letting registerAndFund pick one internally.
+func parseUID(t *testing.T, rec *httptest.ResponseRecorder) uint64 {
+	t.Helper()
+	tp := decodeTokens(t, rec)
+	cl, err := parseToken(testJWTSecret, tp.AccessToken, tokenAccess)
+	if err != nil {
+		t.Fatalf("parse access token: %v", err)
+	}
+	return cl.UserID
 }

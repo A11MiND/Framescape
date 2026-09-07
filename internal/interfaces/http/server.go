@@ -137,6 +137,8 @@ func (s *Server) Router() *gin.Engine {
 		admin.GET("/admin/users", s.handleAdminListUsers)
 		admin.POST("/admin/users/:bizID/credits", s.handleAdminGrantCredits)
 		admin.POST("/admin/users/:bizID/admin", s.handleAdminSetAdmin)
+		admin.POST("/admin/users", s.handleAdminCreateUser)
+		admin.POST("/admin/users/:bizID/active", s.handleAdminSetActive)
 		admin.GET("/admin/usage", s.handleAdminUsage)
 	}
 	return r

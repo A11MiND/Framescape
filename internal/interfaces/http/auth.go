@@ -145,6 +145,15 @@ func (s *Server) handleLogin(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, errBody("invalid_credentials", "email or password incorrect"))
 		return
 	}
+	// requireAuth's own doc covers the real enforcement (checked fresh on
+	// every subsequent request) — this is purely a clearer error message: a
+	// suspended account's password is still correct, so without this check
+	// login would silently "succeed" and only fail confusingly on the very
+	// next click.
+	if !user.IsActive {
+		c.JSON(http.StatusForbidden, errBody("account_suspended", "this account has been deactivated"))
+		return
+	}
 
 	tokens, err := s.issueTokens(user.ID)
 	if err != nil {

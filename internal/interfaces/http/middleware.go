@@ -12,7 +12,15 @@ import (
 const ctxUserIDKey = "user_id"
 
 // requireAuth validates the Bearer access token and stashes the user ID on
-// the Gin context for handlers to read via userID(c).
+// the Gin context for handlers to read via userID(c). Also rejects a
+// deactivated account (users.is_active) on every request — same "fresh DB
+// read, not baked into the JWT" reasoning as requireAdmin below: an access
+// token lives up to 7 days, and an admin suspending someone must take
+// effect on that account's very next request, not wait out the token or
+// force a mass invalidation. The extra lookup runs on every authed
+// endpoint in the app (not just the admin subset requireAdmin guards), so
+// it's a single indexed primary-key SELECT, kept as cheap as this check
+// can be.
 func (s *Server) requireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		h := c.GetHeader("Authorization")
@@ -24,6 +32,15 @@ func (s *Server) requireAuth() gin.HandlerFunc {
 		cl, err := parseToken(s.jwtSecret, raw, tokenAccess)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, errBody("unauthorized", err.Error()))
+			return
+		}
+		var isActive bool
+		if err := s.db.WithContext(c.Request.Context()).
+			Model(&persistence.User{}).
+			Select("is_active").
+			Where("id = ?", cl.UserID).
+			Scan(&isActive).Error; err != nil || !isActive {
+			c.AbortWithStatusJSON(http.StatusForbidden, errBody("account_suspended", "this account has been deactivated"))
 			return
 		}
 		c.Set(ctxUserIDKey, cl.UserID)

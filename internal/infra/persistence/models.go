@@ -17,10 +17,22 @@ type User struct {
 	Email        *string
 	PasswordHash *string `gorm:"column:password_hash"`
 	Phone        *string
-	GoogleSub    *string   `gorm:"column:google_sub"`
-	IsAdmin      bool      `gorm:"column:is_admin"`
-	CreatedAt    time.Time `gorm:"column:created_at"`
-	UpdatedAt    time.Time `gorm:"column:updated_at"`
+	GoogleSub    *string `gorm:"column:google_sub"`
+	IsAdmin      bool    `gorm:"column:is_admin"`
+	// default:true tells GORM to omit this column from an INSERT whenever
+	// the Go value is the zero value (false), rather than writing that
+	// zero value explicitly — GORM's Create otherwise sends every mapped
+	// field verbatim regardless of the column's own SQL DEFAULT, which is
+	// exactly the bug this tag fixes: every account created without
+	// explicitly setting IsActive: true (handleRegister, findOrCreateGoogleUser,
+	// handlePhoneVerify, this admin package's own handleAdminCreateUser)
+	// was silently landing as is_active=false — an unusable, "suspended by
+	// default" account — found via every requireAuth-gated test in this
+	// package failing with account_suspended immediately after adding that
+	// check.
+	IsActive  bool      `gorm:"column:is_active;default:true"`
+	CreatedAt time.Time `gorm:"column:created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at"`
 }
 
 func (User) TableName() string { return "users" }
@@ -198,10 +210,10 @@ func (Character) TableName() string { return "characters" }
 // Preset mirrors the `presets` table (F4). POC only reads these (seeded by
 // migration) — F4.5 (user-defined presets) is P2, not built.
 type Preset struct {
-	ID             uint64 `gorm:"primaryKey"`
-	BizID          string `gorm:"column:biz_id"`
-	Category       string
-	Name           string
+	ID       uint64 `gorm:"primaryKey"`
+	BizID    string `gorm:"column:biz_id"`
+	Category string
+	Name     string
 	// NameEn is only ever populated for seeded system presets (migration
 	// 00009) — a user's own "另存為我的預設" save has no translation, same
 	// as a Character's name never gets one; '' means "fall back to Name".
