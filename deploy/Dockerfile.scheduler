@@ -1,0 +1,17 @@
+# Split out of the old shared deploy/Dockerfile's `scheduler` target — see
+# Dockerfile.api's own doc for why the build stage is duplicated per file
+# rather than shared. cmd/scheduler must stay single-instance (see
+# internal/infra/workflow/aether/broker_asynq.go's own doc on why a second
+# scheduler would silently break RunControlConsumer's ordering guarantee) —
+# on Railway that means never enabling multi-region/extra replicas for this
+# specific service.
+FROM golang:1.25-alpine AS build
+WORKDIR /src
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/scheduler ./cmd/scheduler
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
+COPY --from=build /out/scheduler /usr/local/bin/scheduler
+EXPOSE 8090
+ENTRYPOINT ["/usr/local/bin/scheduler"]

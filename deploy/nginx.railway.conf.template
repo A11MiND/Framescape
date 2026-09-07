@@ -1,0 +1,73 @@
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Railway's private network is DNS-based over IPv6 (docs.railway.com/
+    # guides/private-networking) rather than docker-compose's embedded
+    # 127.0.0.11 resolver. ${NGINX_LOCAL_RESOLVERS} is the official nginx
+    # image's own mechanism for this exact problem (not something specific
+    # to Railway): the entrypoint's 15-local-resolvers.envsh script reads
+    # whatever nameservers are actually in /etc/resolv.conf at container
+    # startup and exports them as this variable, which requires — see
+    # Dockerfile.web — (1) this file living under /etc/nginx/templates/ so
+    # the entrypoint's envsubst step fills the variable in, and (2) the
+    # NGINX_ENTRYPOINT_LOCAL_RESOLVERS env var being set to anything
+    # truthy, since that script is a no-op otherwise. Kept as a
+    # resolver+variable pair (not a bare proxy_pass target) for the same
+    # reason the docker-compose config needed it: nginx resolves a bare
+    # proxy_pass hostname once at startup/reload and never again, so a
+    # redeployed api/minio service landing on a new address would 502
+    # until nginx itself restarted.
+    #
+    # PARTIALLY VERIFIED — confirmed locally that `resolver local=on`
+    # (an nginx 1.25.5+ shortcut) is NOT supported by the nginx:1.27-alpine
+    # image actually used here (`nginx -t` fails: "host not found in
+    # resolver"), which is why this uses the template+envsubst mechanism
+    # instead. Not yet verified against Railway's actual private-network
+    # resolver — if this location block 502s after the first deploy, check
+    # here first.
+    resolver ${NGINX_LOCAL_RESOLVERS};
+
+    # Job-progress SSE stream lives under here — buffering would hold every
+    # event back until nginx's buffer fills or the response ends.
+    location /api/ {
+        set $upstream_api api.railway.internal:8080;
+        proxy_pass http://$upstream_api;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+    }
+
+    # Only needed if MinIO is self-hosted as its own Railway service named
+    # "minio" — delete this block (and MINIO_PUBLIC_BASE_URL's /aigc-assets
+    # path) if switching to a real S3-compatible provider (Cloudflare R2
+    # etc.) instead, whose own public URL serves assets directly with no
+    # need to proxy through this nginx at all.
+    #
+    # client_max_body_size: nginx's own default is 1m, which silently 413s
+    # any presigned-PUT upload over 1MB — nearly every phone photo and every
+    # video. 1024m covers this project's largest allowed upload with
+    # headroom (F2.1's own server-side cap — image 20MB/video 512MB/audio
+    # 50MB — is the real ceiling; this just needs to not be tighter than
+    # that).
+    location /aigc-assets/ {
+        client_max_body_size 1024m;
+        set $upstream_minio minio.railway.internal:9000;
+        proxy_pass http://$upstream_minio;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        try_files $uri /index.html;
+    }
+}

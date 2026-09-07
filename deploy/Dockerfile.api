@@ -1,0 +1,19 @@
+# Split out of the old shared deploy/Dockerfile's `api` target — Railway
+# builds Docker images by Dockerfile path, not by `--target` stage
+# selection within one shared file, so each service needs its own file.
+# The `build` stage is duplicated across every Dockerfile.<service> in this
+# directory rather than shared, for the same reason the original file's own
+# comment gave for not caching `go mod download` separately: third_party/
+# aether is a local `replace` (go.mod), so the module graph needs the full
+# source tree present regardless — there's no cheaper shared base to factor
+# out without pushing an intermediate image to a registry.
+FROM golang:1.25-alpine AS build
+WORKDIR /src
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/api ./cmd/api
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
+COPY --from=build /out/api /usr/local/bin/api
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/api"]

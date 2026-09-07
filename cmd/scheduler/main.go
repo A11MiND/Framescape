@@ -63,7 +63,7 @@ func main() {
 	}
 	mysqlStore := aetherengine.NewMySQLStore(sqlDB)
 
-	redisClient := cache.NewClient(config.RedisAddr())
+	redisClient := cache.NewClient(config.RedisAddr(), config.RedisURL())
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		log.Fatal("ping redis", zap.Error(err))
 	}
@@ -95,7 +95,7 @@ func main() {
 	must(registry.Register(local.NewConcatPlugin(sink, sink)), log)
 	must(registry.Register(local.NewCollectRefsPlugin()), log)
 
-	redisOpt := cache.AsynqRedisOpt(config.RedisAddr())
+	redisOpt := cache.AsynqRedisOpt(config.RedisAddr(), config.RedisURL())
 	asynqBroker := aetherengine.NewAsynqBroker(redisOpt)
 	defer asynqBroker.Close()
 

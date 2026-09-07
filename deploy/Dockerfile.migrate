@@ -1,0 +1,15 @@
+# Split out of the old shared deploy/Dockerfile's `migrate` target — see
+# Dockerfile.api's own doc for why the build stage is duplicated per file
+# rather than shared. Not a long-running Railway service: deploy this once
+# (e.g. `railway up --service migrate` or a one-off `railway run`) against
+# the target MySQL and let it exit — goose migrations are idempotent to
+# re-run, so redeploying this image is always safe.
+FROM golang:1.25-alpine AS build
+WORKDIR /src
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/migrate ./cmd/migrate
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
+COPY --from=build /out/migrate /usr/local/bin/migrate
+ENTRYPOINT ["/usr/local/bin/migrate"]

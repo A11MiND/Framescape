@@ -1,0 +1,26 @@
+# Split out of the old shared deploy/Dockerfile's `web` target, and reads
+# nginx.railway.conf (not nginx.conf — that one still backs docker-compose
+# for local dev, whose api/minio hostnames and DNS setup are genuinely
+# different from Railway's). See nginx.railway.conf's own doc for what
+# still needs live verification on a real Railway deploy.
+FROM node:20-alpine AS web-build
+WORKDIR /src/web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ .
+# Relative path — nginx proxies /api/ to the api service on the same
+# origin, so the browser never needs an absolute backend URL baked in.
+ARG VITE_API_BASE=/api/v1
+ENV VITE_API_BASE=$VITE_API_BASE
+RUN npm run build
+
+FROM nginx:1.27-alpine
+COPY --from=web-build /src/web/dist /usr/share/nginx/html
+# nginx.railway.conf.template's own doc covers why this is a template
+# (not a static conf.d file) and why this env var must be set — both are
+# the official nginx image's own mechanism for resolving proxy_pass
+# variable targets against whatever DNS is actually available at container
+# startup, not something Railway-specific.
+COPY deploy/nginx.railway.conf.template /etc/nginx/templates/default.conf.template
+ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
+EXPOSE 80

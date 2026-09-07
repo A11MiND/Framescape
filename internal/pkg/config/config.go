@@ -35,7 +35,16 @@ func MySQLDSN() string {
 }
 
 // RedisAddr is shared by asynq (queue backend) and Pub/Sub (SSE fan-out).
+// Only used when RedisURL is unset — a bare host:port has no way to carry
+// auth, so it's the local-dev (unauthenticated Redis) path only.
 func RedisAddr() string { return getEnv("REDIS_ADDR", "127.0.0.1:6379") }
+
+// RedisURL is a full "redis://[:password@]host:port[/db]" connection
+// string — set this (Railway's managed Redis exposes it as REDIS_URL) for
+// any deployment where Redis requires authentication; see cache.NewClient/
+// AsynqRedisOpt for why REDIS_ADDR alone can't express that. Empty means
+// "fall back to RedisAddr", same as before this variable existed.
+func RedisURL() string { return getEnv("REDIS_URL", "") }
 
 // WorkerConcurrency bounds how many tasks cmd/worker executes at once.
 func WorkerConcurrency() int { return getEnvInt("WORKER_CONCURRENCY", 8) }

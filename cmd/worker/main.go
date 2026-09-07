@@ -47,7 +47,7 @@ func main() {
 	sink := persistence.NewGormAssetSinkWithStorage(db, objectStore)
 	fileCache := persistence.NewGormFileCache(db)
 	videoOrphans := persistence.NewGormVideoOrphanStore(db)
-	redisClient := cache.NewClient(config.RedisAddr())
+	redisClient := cache.NewClient(config.RedisAddr(), config.RedisURL())
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		log.Fatal("ping redis", zap.Error(err))
 	}
@@ -70,7 +70,7 @@ func main() {
 	must(registry.Register(local.NewCollectRefsPlugin()), log)
 
 	log.Info("worker starting", zap.Int("concurrency", config.WorkerConcurrency()))
-	redisOpt := cache.AsynqRedisOpt(config.RedisAddr())
+	redisOpt := cache.AsynqRedisOpt(config.RedisAddr(), config.RedisURL())
 	if err := aetherengine.RunWorker(ctx, redisOpt, registry, config.WorkerConcurrency()); err != nil && ctx.Err() == nil {
 		log.Fatal("worker stopped", zap.Error(err))
 	}

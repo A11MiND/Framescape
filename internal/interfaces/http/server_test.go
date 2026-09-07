@@ -106,7 +106,7 @@ func registerAndFund(t *testing.T, s *Server, credits int) (accessToken string, 
 // specifically exercises rate limiting must skip itself when this is nil.
 func testRedisClient(t *testing.T) *redis.Client {
 	t.Helper()
-	c := cache.NewClient(config.RedisAddr())
+	c := cache.NewClient(config.RedisAddr(), config.RedisURL())
 	if err := c.Ping(context.Background()).Err(); err != nil {
 		return nil
 	}

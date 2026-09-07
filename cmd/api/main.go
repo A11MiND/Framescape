@@ -45,7 +45,7 @@ func main() {
 	eng := rpc.NewClient(config.SchedulerURL())
 	credits := creditsvc.New(sqlDB)
 	community := communitysvc.New(sqlDB, credits)
-	redisClient := cache.NewClient(config.RedisAddr())
+	redisClient := cache.NewClient(config.RedisAddr(), config.RedisURL())
 	// F1.2's anonymous trial only — see internal/interfaces/http/trial.go's
 	// doc for why cmd/api holds a MiniMax client despite the package doc's
 	// "never talks to MiniMax directly" rule. jobsvc also needs it now, for
