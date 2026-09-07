@@ -12,6 +12,18 @@ COPY web/ .
 # origin, so the browser never needs an absolute backend URL baked in.
 ARG VITE_API_BASE=/api/v1
 ENV VITE_API_BASE=$VITE_API_BASE
+# Google Sign-In's JS SDK needs the client ID in the browser bundle itself
+# (Login.tsx reads import.meta.env.VITE_GOOGLE_CLIENT_ID directly — Vite
+# inlines VITE_-prefixed vars at build time, so this can't be a runtime-only
+# container env var the way the Go services' config works). Railway auto-
+# injects a service's own variables as matching Docker build ARGs (docs.
+# railway.com/guides/dockerfiles) as long as the Dockerfile declares one by
+# the same name — set VITE_GOOGLE_CLIENT_ID on the web service (same value
+# as GOOGLE_CLIENT_ID on api) for this to actually resolve to something.
+# Empty is fine: Login.tsx's own "not configured" message is what renders
+# when it's unset, same as local dev without a .env.
+ARG VITE_GOOGLE_CLIENT_ID=""
+ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
 RUN npm run build
 
 FROM nginx:1.27-alpine

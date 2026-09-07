@@ -1,0 +1,15 @@
+# Self-hosted object storage for Railway — same MinIO image docker-compose
+# runs locally, just deployed as its own Railway service instead of a
+# compose service. Only needed if self-hosting MinIO rather than switching
+# to a real S3-compatible provider (Cloudflare R2 etc.); the app code
+# (internal/infra/storage/minio.go) speaks plain S3 API either way, so
+# switching later is a config change, not a code change.
+#
+# CMD is baked in here (not left to Railway's own start-command config)
+# because Railway's --image-based service creation has no CLI flag to set
+# one — building from this trivial Dockerfile via RAILWAY_DOCKERFILE_PATH
+# is simpler than fighting that gap.
+FROM minio/minio:latest
+EXPOSE 9000 9001
+ENTRYPOINT ["minio"]
+CMD ["server", "/data", "--console-address", ":9001"]
