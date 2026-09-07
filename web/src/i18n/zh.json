@@ -86,6 +86,7 @@
   },
   "admin": {
     "title": "管理后台",
+    "backToApp": "返回应用",
     "users": "用户总数",
     "totalJobs": "作业总数",
     "creditsRecharged": "累计充值积分",

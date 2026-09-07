@@ -86,6 +86,7 @@
   },
   "admin": {
     "title": "Admin",
+    "backToApp": "Back to app",
     "users": "Total users",
     "totalJobs": "Total jobs",
     "creditsRecharged": "Credits recharged",

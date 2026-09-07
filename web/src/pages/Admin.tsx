@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api, ApiError, type AdminUser } from '../lib/api'
-import AppShell from '../components/AppShell'
+import AdminShell from '../components/AdminShell'
 import { useToast } from '../components/Toast'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 
@@ -39,10 +39,8 @@ export default function Admin() {
     new Date(d).toLocaleDateString(i18n.language === 'en' ? 'en-US' : 'zh-CN', { month: '2-digit', day: '2-digit' })
 
   return (
-    <AppShell>
-      <div className="mx-auto max-w-6xl space-y-8 px-6 py-8">
-        <h1 className="text-lg font-medium">{t('admin.title')}</h1>
-
+    <AdminShell>
+      <div className="space-y-8">
         {/* Overview stat tiles */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatTile label={t('admin.users')} value={overview.data?.user_count ?? 0} />
@@ -163,7 +161,7 @@ export default function Admin() {
       </div>
 
       {grantTarget && <GrantCreditsDialog user={grantTarget} onClose={() => setGrantTarget(null)} />}
-    </AppShell>
+    </AdminShell>
   )
 }
 

@@ -248,7 +248,15 @@ func TestAssetTrashLifecycle(t *testing.T) {
 }
 
 func TestHandleEmptyTrash(t *testing.T) {
-	s, _ := newFullTestServer(t)
+	// handleEmptyTrash 503s outright when s.objects is nil (server.go's own
+	// doc) — every asset seeded below has an empty StorageKey, so this
+	// never actually calls s.objects.Delete, but it does need a real,
+	// reachable object store wired in to get past that top-of-handler
+	// check at all. newFullTestServer alone leaves s.objects nil, which is
+	// why this test failed unconditionally wherever a real MinIO was
+	// reachable (local dev, CI) — it never exercised the real 200 path,
+	// only ever hit the 503 degrade branch.
+	s, _ := newFullTestServerWithObjects(t)
 	r := s.Router()
 	token, uid := registerAndFund(t, s, 0)
 	a1 := seedAsset(t, s, uid, "image", "")
