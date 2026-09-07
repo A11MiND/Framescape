@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+
+	"aigc-platform/internal/infra/persistence"
 )
 
 const ctxUserIDKey = "user_id"
@@ -25,6 +27,28 @@ func (s *Server) requireAuth() gin.HandlerFunc {
 			return
 		}
 		c.Set(ctxUserIDKey, cl.UserID)
+		c.Next()
+	}
+}
+
+// requireAdmin chains after requireAuth (needs userID(c) already set) and
+// rejects any caller whose users.is_admin isn't true. Deliberately a fresh
+// DB read on every request rather than something baked into the JWT at
+// login time — an access token lives up to 7 days (accessTTL), and revoking
+// someone's admin rights must take effect on their very next request, not
+// wait for their token to expire or force a mass token invalidation.
+func (s *Server) requireAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var isAdmin bool
+		err := s.db.WithContext(c.Request.Context()).
+			Model(&persistence.User{}).
+			Select("is_admin").
+			Where("id = ?", userID(c)).
+			Scan(&isAdmin).Error
+		if err != nil || !isAdmin {
+			c.AbortWithStatusJSON(http.StatusForbidden, errBody("forbidden", "admin access required"))
+			return
+		}
 		c.Next()
 	}
 }

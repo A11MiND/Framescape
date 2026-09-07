@@ -100,6 +100,19 @@ func registerAndFund(t *testing.T, s *Server, credits int) (accessToken string, 
 	return tp.AccessToken, cl.UserID
 }
 
+// makeAdmin flips a test user's is_admin flag directly via GORM — unlike
+// registerAndFund's ledger-backed credit seeding, there's no HTTP path that
+// can grant the very first admin (handleAdminSetAdmin itself requires an
+// existing admin caller), so a direct DB write is the only option here,
+// same as this migration's own doc on how the real first admin gets
+// bootstrapped in production.
+func makeAdmin(t *testing.T, s *Server, uid uint64) {
+	t.Helper()
+	if err := s.db.Model(&persistence.User{}).Where("id = ?", uid).Update("is_admin", true).Error; err != nil {
+		t.Fatalf("make admin: %v", err)
+	}
+}
+
 // testRedisClient returns a live client only if Redis actually answers —
 // checkVerifyRateLimit already treats a nil s.redis as "no rate limiting"
 // (fail-open by design), so most tests work fine either way; a test that

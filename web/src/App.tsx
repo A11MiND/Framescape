@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import Login from './pages/Login'
 import Studio from './pages/Studio'
 import Characters from './pages/Characters'
@@ -11,11 +12,25 @@ import JobDetail from './pages/JobDetail'
 import Credits from './pages/Credits'
 import Projects from './pages/Projects'
 import Settings from './pages/Settings'
+import Admin from './pages/Admin'
 import { useAuthStore } from './lib/authStore'
+import { api } from './lib/api'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const accessToken = useAuthStore((s) => s.accessToken)
   if (!accessToken) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+
+// Route-level gate on top of RequireAuth — a non-admin who somehow lands on
+// /admin (bookmark, stale link) gets bounced home rather than seeing a page
+// full of 403s. The real access boundary is server-side (requireAdmin,
+// every handler in admin.go) regardless of what this does; this is UX, not
+// security.
+function RequireAdmin({ children }: { children: React.ReactNode }) {
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me })
+  if (me.isLoading) return null
+  if (!me.data?.is_admin) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
@@ -108,6 +123,16 @@ export default function App() {
         element={
           <RequireAuth>
             <Settings />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin"
+        element={
+          <RequireAuth>
+            <RequireAdmin>
+              <Admin />
+            </RequireAdmin>
           </RequireAuth>
         }
       />

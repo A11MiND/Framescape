@@ -97,6 +97,12 @@ func parseRemark(raw string) gin.H {
 // fresh ULID every call, not derived from any client input — each click is
 // a deliberate new top-up, not a retry of a previous one, so nothing here
 // should ever get deduplicated the way job submission does.
+//
+// Registered under the admin-only route group (server.go) — this used to
+// be reachable by any authenticated user, which meant literally anyone
+// could self-serve unlimited free credits. It stays as a quick "top myself
+// up" convenience for admins rather than being retired outright, since
+// handleGrantCredits below already covers granting to an arbitrary user.
 func (s *Server) handleCreditsTopup(c *gin.Context) {
 	uid := userID(c)
 	if err := s.credits.RechargeDemo(c.Request.Context(), uid, "topup:"+id.New(), demoTopupCredits); err != nil {

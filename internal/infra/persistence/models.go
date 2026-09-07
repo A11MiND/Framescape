@@ -18,6 +18,7 @@ type User struct {
 	PasswordHash *string `gorm:"column:password_hash"`
 	Phone        *string
 	GoogleSub    *string   `gorm:"column:google_sub"`
+	IsAdmin      bool      `gorm:"column:is_admin"`
 	CreatedAt    time.Time `gorm:"column:created_at"`
 	UpdatedAt    time.Time `gorm:"column:updated_at"`
 }

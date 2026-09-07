@@ -96,7 +96,8 @@ func TestHandleCreditsLedger(t *testing.T) {
 func TestHandleCreditsTopup(t *testing.T) {
 	s, _ := newFullTestServer(t)
 	r := s.Router()
-	token, _ := registerAndFund(t, s, 0)
+	token, uid := registerAndFund(t, s, 0)
+	makeAdmin(t, s, uid) // admin-only since it was found reachable by any signed-in user, see handleCreditsTopup's own doc
 
 	rec := doJSON(t, r, http.MethodPost, "/api/v1/credits/topup", nil, token)
 	if rec.Code != http.StatusOK {
@@ -122,5 +123,20 @@ func TestHandleCreditsTopup(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &body)
 	if body.Balance != demoTopupCredits*2 {
 		t.Errorf("balance after second topup = %d, want %d", body.Balance, demoTopupCredits*2)
+	}
+}
+
+// TestHandleCreditsTopup_NonAdminForbidden is the regression test for the
+// real gap this admin-only gate closes: before requireAdmin guarded this
+// route, any authenticated user could self-serve unlimited free credits by
+// hitting this endpoint in a loop.
+func TestHandleCreditsTopup_NonAdminForbidden(t *testing.T) {
+	s, _ := newFullTestServer(t)
+	r := s.Router()
+	token, _ := registerAndFund(t, s, 0) // deliberately not made admin
+
+	rec := doJSON(t, r, http.MethodPost, "/api/v1/credits/topup", nil, token)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d, body = %s", rec.Code, http.StatusForbidden, rec.Body.String())
 	}
 }

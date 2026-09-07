@@ -13,6 +13,7 @@ export default function Credits() {
   const { t } = useTranslation()
   const qc = useQueryClient()
   const pushToast = useToast()
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me })
   const balance = useQuery({ queryKey: ['credits', 'balance'], queryFn: api.creditsBalance })
   const ledger = useInfiniteQuery({
     queryKey: ['credits', 'ledger'],
@@ -40,14 +41,21 @@ export default function Credits() {
       <div className="mx-auto max-w-5xl px-6 py-8">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-lg font-medium">{t('credits.title')}</h1>
-          <button
-            onClick={() => topup.mutate()}
-            disabled={topup.isPending}
-            title={t('credits.topupTooltip')}
-            className="rounded-lg bg-violet-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-violet-400 disabled:opacity-50"
-          >
-            {topup.isPending ? t('credits.topupPending') : t('credits.topupButton')}
-          </button>
+          {/* Self-serve top-up used to be reachable by any signed-in user —
+              unlimited free credits with no gate at all. handleCreditsTopup
+              now 403s for anyone but an admin, so the button follows suit:
+              a regular user who can't call the endpoint shouldn't see a
+              button that always fails. */}
+          {me.data?.is_admin && (
+            <button
+              onClick={() => topup.mutate()}
+              disabled={topup.isPending}
+              title={t('credits.topupTooltip')}
+              className="rounded-lg bg-violet-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-violet-400 disabled:opacity-50"
+            >
+              {topup.isPending ? t('credits.topupPending') : t('credits.topupButton')}
+            </button>
+          )}
         </div>
 
         <div className="mb-8 grid grid-cols-2 gap-3">

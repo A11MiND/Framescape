@@ -89,6 +89,7 @@ export interface MeResponse {
   // null for a phone-only account (no email set) — see auth_oauth.go.
   email: string | null
   balance: number
+  is_admin: boolean
 }
 
 export interface Capabilities {
@@ -370,6 +371,34 @@ export interface CreditLedgerEntry {
   created_at: string
 }
 
+// Admin dashboard (internal/interfaces/http/admin.go) — every request here
+// 403s for a non-admin caller, enforced server-side by requireAdmin; the
+// frontend only ever calls these once useMe().data?.is_admin is true.
+export interface AdminOverview {
+  user_count: number
+  jobs_by_status: Record<string, number>
+  credits_recharged: number
+  credits_consumed: number
+}
+
+export interface AdminUser {
+  biz_id: string
+  email: string | null
+  phone: string | null
+  is_admin: boolean
+  balance: number
+  held: number
+  credits_spent: number
+  job_count: number
+  created_at: string
+}
+
+export interface AdminUsageDay {
+  day: string
+  jobs: number
+  credits_consumed: number
+}
+
 export const api = {
   // code is ignored server-side unless config.EmailProviderAPIKey() is set
   // (handleRegister's own doc) — harmless to always send whatever the
@@ -580,4 +609,22 @@ export const api = {
       qs ? `/credits/ledger?${qs}` : '/credits/ledger',
     )
   },
+
+  adminOverview: () => request<AdminOverview>('GET', '/admin/overview'),
+  adminUsage: (days = 30) => request<{ days: AdminUsageDay[] }>('GET', `/admin/usage?days=${days}`),
+  adminListUsers: (opts: { q?: string; cursor?: string; limit?: number } = {}) => {
+    const params = new URLSearchParams()
+    if (opts.q) params.set('q', opts.q)
+    if (opts.cursor) params.set('cursor', opts.cursor)
+    if (opts.limit) params.set('limit', String(opts.limit))
+    const qs = params.toString()
+    return request<{ users: AdminUser[]; next_cursor?: string }>('GET', qs ? `/admin/users?${qs}` : '/admin/users')
+  },
+  adminGrantCredits: (bizId: string, amount: number, remark?: string) =>
+    request<{ balance: number; held: number; credited: number }>('POST', `/admin/users/${bizId}/credits`, {
+      amount,
+      remark,
+    }),
+  adminSetAdmin: (bizId: string, isAdmin: boolean) =>
+    request<{ biz_id: string; is_admin: boolean }>('POST', `/admin/users/${bizId}/admin`, { is_admin: isAdmin }),
 }

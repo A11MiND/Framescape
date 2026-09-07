@@ -120,11 +120,24 @@ func (s *Server) Router() *gin.Engine {
 		authed.DELETE("/presets/:bizID", s.handleDeletePreset)
 		authed.GET("/credits/balance", s.handleCreditsBalance)
 		authed.GET("/credits/ledger", s.handleCreditsLedger)
-		authed.POST("/credits/topup", s.handleCreditsTopup)
 		authed.POST("/projects", s.handleCreateProject)
 		authed.GET("/projects", s.handleListProjects)
 		authed.PATCH("/projects/:bizID", s.handleUpdateProject)
 		authed.DELETE("/projects/:bizID", s.handleDeleteProject)
+
+		// Admin surface — nested under authed so requireAdmin's own DB lookup
+		// (middleware.go) can assume userID(c) is already set. Every route
+		// here needs both middlewares; handleCreditsTopup moved from the
+		// plain authed group above to here (was previously reachable by any
+		// authenticated user — see its own doc for why that was a real gap).
+		admin := authed.Group("")
+		admin.Use(s.requireAdmin())
+		admin.POST("/credits/topup", s.handleCreditsTopup)
+		admin.GET("/admin/overview", s.handleAdminOverview)
+		admin.GET("/admin/users", s.handleAdminListUsers)
+		admin.POST("/admin/users/:bizID/credits", s.handleAdminGrantCredits)
+		admin.POST("/admin/users/:bizID/admin", s.handleAdminSetAdmin)
+		admin.GET("/admin/usage", s.handleAdminUsage)
 	}
 	return r
 }

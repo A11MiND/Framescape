@@ -38,6 +38,13 @@ function PowerIcon({ className }: { className?: string }) {
     </svg>
   )
 }
+function ShieldIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M10 2.5l6 2.2v4.4c0 4-2.6 6.6-6 8.4-3.4-1.8-6-4.4-6-8.4V4.7l6-2.2z" />
+    </svg>
+  )
+}
 
 const LINKS = [
   { to: '/', labelKey: 'rail.generate', icon: '✦', end: true },
@@ -109,6 +116,27 @@ export default function Rail() {
             {t(l.labelKey)}
           </NavLink>
         ))}
+        {/* Admin-only entry — hidden for everyone else. This is UX
+            convenience, not the access boundary: App.tsx's RequireAdmin
+            route guard and every admin.go handler's requireAdmin
+            middleware are what actually stop a non-admin from reaching
+            /admin, this just doesn't dangle a link to a page that would
+            403 anyway. */}
+        {me.data?.is_admin && (
+          <NavLink
+            to="/admin"
+            className={({ isActive }) =>
+              `relative flex w-14 shrink-0 flex-col items-center gap-0.5 rounded-xl px-1 py-1.5 text-[10px] transition lg:w-16 lg:gap-1 lg:py-2 lg:text-[11px] ${
+                isActive ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300'
+              }`
+            }
+          >
+            <span className="relative text-base leading-none">
+              <ShieldIcon className="mx-auto h-[15px] w-[15px]" />
+            </span>
+            {t('rail.admin')}
+          </NavLink>
+        )}
       </nav>
 
       <div className="ml-1 flex shrink-0 items-center gap-2 lg:ml-0 lg:flex-col lg:gap-3 lg:pt-2">

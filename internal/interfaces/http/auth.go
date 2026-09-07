@@ -183,9 +183,10 @@ func (s *Server) handleMe(c *gin.Context) {
 	_ = s.db.First(&acct, "user_id = ?", user.ID).Error
 
 	c.JSON(http.StatusOK, gin.H{
-		"biz_id":  user.BizID,
-		"email":   user.Email,
-		"balance": acct.Balance,
+		"biz_id":   user.BizID,
+		"email":    user.Email,
+		"balance":  acct.Balance,
+		"is_admin": user.IsAdmin,
 	})
 }
 
