@@ -12,7 +12,8 @@ import JobDetail from './pages/JobDetail'
 import Credits from './pages/Credits'
 import Projects from './pages/Projects'
 import Settings from './pages/Settings'
-import Admin from './pages/Admin'
+import AdminSpend from './pages/AdminSpend'
+import AdminUsers from './pages/AdminUsers'
 import { useAuthStore } from './lib/authStore'
 import { api } from './lib/api'
 
@@ -126,12 +127,28 @@ export default function App() {
           </RequireAuth>
         }
       />
+      {/* /admin (bare) redirects to /admin/spend — 花费/人员管理 are two
+          separate pages now (AdminSpend.tsx/AdminUsers.tsx), each with its
+          own RequireAdmin guard so a stale bookmark to either still lands
+          somewhere real for a non-admin instead of a route with no
+          element. */}
+      <Route path="/admin" element={<Navigate to="/admin/spend" replace />} />
       <Route
-        path="/admin"
+        path="/admin/spend"
         element={
           <RequireAuth>
             <RequireAdmin>
-              <Admin />
+              <AdminSpend />
+            </RequireAdmin>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/users"
+        element={
+          <RequireAuth>
+            <RequireAdmin>
+              <AdminUsers />
             </RequireAdmin>
           </RequireAuth>
         }

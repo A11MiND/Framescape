@@ -124,7 +124,7 @@ export default function Rail() {
             403 anyway. */}
         {me.data?.is_admin && (
           <NavLink
-            to="/admin"
+            to="/admin/spend"
             className={({ isActive }) =>
               `relative flex w-14 shrink-0 flex-col items-center gap-0.5 rounded-xl px-1 py-1.5 text-[10px] transition lg:w-16 lg:gap-1 lg:py-2 lg:text-[11px] ${
                 isActive ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300'

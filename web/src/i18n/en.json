@@ -87,6 +87,8 @@
   "admin": {
     "title": "Admin",
     "backToApp": "Back to app",
+    "tabSpend": "Spend",
+    "tabUsers": "Users",
     "users": "Total users",
     "totalJobs": "Total jobs",
     "creditsRecharged": "Credits recharged",
