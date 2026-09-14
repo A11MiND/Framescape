@@ -39,12 +39,23 @@ import (
 // beyond what a smaller source already has.
 const tileSize = 1024
 
+// layoutCanvasSize is the overall square canvas used by every named,
+// non-equal-grid layout (layoutRects below) — unlike composeGrid's own
+// tileSize*cols/rows sizing (which only ever needs equal square cells),
+// these layouts mix panel sizes/shapes on one canvas, so the canvas itself
+// has to be a fixed size the panel rects are fractions of.
+const layoutCanvasSize = 2048
+
 type ComposeConfig struct {
 	AssetIDs []string `json:"asset-ids"`
-	// Layout is currently unused (grid dimensions are always computed from
-	// len(AssetIDs) — see composeGrid) — kept as a declared field so a
-	// future non-grid layout has somewhere to go without another Aether
-	// Binder "undeclared parameter" failure.
+	// Layout selects a named panel-layout template (image_comic4.go's AI
+	// planner picks one of minimax.LayoutGridEqual/FeatureLast/FeatureFirst/
+	// VerticalStrip/HorizontalStrip — this package doesn't import minimax
+	// for that, it just matches the same string values, see layoutRects).
+	// "" or any value layoutRects doesn't recognize (including
+	// "grid-equal" itself) falls back to composeGrid's original
+	// always-equal-square-grid behavior, so an older/blank job never
+	// regresses.
 	Layout string `json:"layout"`
 	UserID string `json:"user-id"`
 }
@@ -95,10 +106,19 @@ func (p *ComposePlugin) Execute(ctx context.Context, req *executor.ExecuteReques
 		tiles = append(tiles, img)
 	}
 
-	grid, cols, rows := composeGrid(tiles)
+	var canvas *image.RGBA
+	var layoutMeta string
+	if rects := layoutRects(cfg.Layout, len(tiles)); rects != nil {
+		canvas = composeCustomLayout(tiles, rects)
+		layoutMeta = cfg.Layout
+	} else {
+		var cols, rows int
+		canvas, cols, rows = composeGrid(tiles)
+		layoutMeta = fmt.Sprintf("%dx%d", cols, rows)
+	}
 
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, grid, &jpeg.Options{Quality: 90}); err != nil {
+	if err := jpeg.Encode(&buf, canvas, &jpeg.Options{Quality: 90}); err != nil {
 		return nil, fmt.Errorf("encode composed grid: %w", err)
 	}
 
@@ -111,11 +131,11 @@ func (p *ComposePlugin) Execute(ctx context.Context, req *executor.ExecuteReques
 		SizeBytes:     int64(buf.Len()),
 		Ext:           "jpg",
 		Mime:          "image/jpeg",
-		Width:         grid.Bounds().Dx(),
-		Height:        grid.Bounds().Dy(),
+		Width:         canvas.Bounds().Dx(),
+		Height:        canvas.Bounds().Dy(),
 		Meta: map[string]any{
 			"composed_from": cfg.AssetIDs,
-			"layout":        fmt.Sprintf("%dx%d", cols, rows),
+			"layout":        layoutMeta,
 		},
 	})
 	if err != nil {
@@ -194,6 +214,107 @@ func composeGrid(tiles []image.Image) (canvas *image.RGBA, cols, rows int) {
 		draw.Draw(canvas, dstRect, scaled, image.Point{}, draw.Src)
 	}
 	return canvas, cols, rows
+}
+
+// layoutRect is one panel's position on the canvas, as a fraction (0..1) of
+// the canvas's overall width/height — resolution-independent so the same
+// template works at any layoutCanvasSize.
+type layoutRect struct{ X, Y, W, H float64 }
+
+// layoutRects returns exactly one rect per tile for a recognized named
+// layout, or nil for "grid-equal"/blank/unrecognized values — the nil case
+// tells Execute to fall back to composeGrid's original equal-square-grid
+// math unchanged, which is deliberate: this only needs to cover the layouts
+// image_comic4.go's AI planner is actually allowed to choose (its own
+// whitelist), everything else keeps today's exact behavior.
+func layoutRects(layoutID string, n int) []layoutRect {
+	if n <= 0 {
+		return nil
+	}
+	switch layoutID {
+	case "feature-last":
+		return featureRects(n, true)
+	case "feature-first":
+		return featureRects(n, false)
+	case "vertical-strip":
+		return stripRects(n, true)
+	case "horizontal-strip":
+		return stripRects(n, false)
+	default:
+		return nil
+	}
+}
+
+// stripRects lays out n panels as equal-width rows (vertical) or
+// equal-height columns (horizontal) — generic for any n, unlike
+// composeGrid's near-square packing.
+func stripRects(n int, vertical bool) []layoutRect {
+	rects := make([]layoutRect, n)
+	frac := 1.0 / float64(n)
+	for i := range rects {
+		if vertical {
+			rects[i] = layoutRect{X: 0, Y: float64(i) * frac, W: 1, H: frac}
+		} else {
+			rects[i] = layoutRect{X: float64(i) * frac, Y: 0, W: frac, H: 1}
+		}
+	}
+	return rects
+}
+
+// featureRects gives one panel (the last one if last=true, else the first)
+// a full-width half of the canvas, and splits the remaining half evenly
+// among every other panel — the classic "punchline/opening panel is bigger"
+// comic convention (Canva's own comic-layout guidance calls out exactly this
+// kind of unequal grid). Generic for any n>=1; n==1 degenerates to a single
+// full-canvas rect.
+func featureRects(n int, last bool) []layoutRect {
+	if n <= 1 {
+		return []layoutRect{{X: 0, Y: 0, W: 1, H: 1}}
+	}
+	rects := make([]layoutRect, n)
+	featuredIdx, restStart, featuredY, restY := 0, 1, 0.0, 0.5
+	if last {
+		featuredIdx, restStart, featuredY, restY = n-1, 0, 0.5, 0.0
+	}
+	rects[featuredIdx] = layoutRect{X: 0, Y: featuredY, W: 1, H: 0.5}
+	restFrac := 1.0 / float64(n-1)
+	slot := 0
+	for i := restStart; i < restStart+n-1; i++ {
+		rects[i] = layoutRect{X: float64(slot) * restFrac, Y: restY, W: restFrac, H: 0.5}
+		slot++
+	}
+	return rects
+}
+
+// composeCustomLayout renders tiles onto one layoutCanvasSize-square canvas
+// per the given rects (same length/order as tiles) — layoutRects' own
+// caller (Execute) guarantees that pairing.
+func composeCustomLayout(tiles []image.Image, rects []layoutRect) *image.RGBA {
+	canvas := image.NewRGBA(image.Rect(0, 0, layoutCanvasSize, layoutCanvasSize))
+	for i, tile := range tiles {
+		r := rects[i]
+		x0, y0 := int(r.X*layoutCanvasSize), int(r.Y*layoutCanvasSize)
+		w, h := int(r.W*layoutCanvasSize), int(r.H*layoutCanvasSize)
+		scaled := scaleToRect(tile, w, h)
+		draw.Draw(canvas, image.Rect(x0, y0, x0+w, y0+h), scaled, image.Point{}, draw.Src)
+	}
+	return canvas
+}
+
+// scaleToRect is scaleToSquare generalized to a non-square target — the
+// same nearest-neighbor approach (fine for POC, same caveat as
+// scaleToSquare's own doc).
+func scaleToRect(src image.Image, w, h int) image.Image {
+	dst := image.NewRGBA(image.Rect(0, 0, w, h))
+	sb := src.Bounds()
+	for y := 0; y < h; y++ {
+		sy := sb.Min.Y + y*sb.Dy()/h
+		for x := 0; x < w; x++ {
+			sx := sb.Min.X + x*sb.Dx()/w
+			dst.Set(x, y, src.At(sx, sy))
+		}
+	}
+	return dst
 }
 
 func scaleToSquare(src image.Image, size int) image.Image {

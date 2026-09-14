@@ -52,11 +52,11 @@ type CharacterSlot struct {
 // (W5/W6) needs role-mapped references; images only need characters,
 // presets, and a seed.
 type Spec struct {
-	Text       string          `json:"text"`
-	N          int             `json:"n,omitempty"`          // image.single only: 1..9, omitted/0 means 1 (image.batch merged into image.single, PRD F5.1/F5.2)
-	Panels     []string        `json:"panels,omitempty"`     // image.comic4 only: minComic4Panels..capability.ImageMaxN panel prompts (PRD F5.3, panel count no longer fixed at 4)
-	Story      string          `json:"story,omitempty"`      // image.comic4 only, F5.4: auto-split into N panels instead of Panels (N from Spec.N, default 4); ignored if Panels is set
-	Shots      []string        `json:"shots,omitempty"`      // image.sequence only: N shot descriptions (PRD F5.5)
+	Text   string   `json:"text"`
+	N      int      `json:"n,omitempty"`      // image.single only: 1..9, omitted/0 means 1 (image.batch merged into image.single, PRD F5.1/F5.2)
+	Panels []string `json:"panels,omitempty"` // image.comic4 only: minComic4Panels..capability.ImageMaxN panel prompts (PRD F5.3, panel count no longer fixed at 4)
+	Story  string   `json:"story,omitempty"`  // image.comic4 only, F5.4: auto-split into N panels instead of Panels (N from Spec.N, default 4); ignored if Panels is set
+	Shots  []string `json:"shots,omitempty"`  // image.sequence only: N shot descriptions (PRD F5.5)
 	// ShotSourceRefs is image.sequence's cross-shot referencing (§07 gap: a
 	// user asked to #-reference a sibling shot's about-to-be-generated
 	// image, not just an existing library asset). Parallel array to Shots,
@@ -83,10 +83,10 @@ type Spec struct {
 	// #-mention still wins either way (image_sequence.go's own
 	// createImageSequence resolves this, ShotSourceRefs' own "值得保留" ask
 	// applies here unchanged).
-	ImageSequenceMode string `json:"image_sequence_mode,omitempty"` // image.sequence only: "quick" (default) | "continuity"
-	Characters []CharacterSlot `json:"characters,omitempty"` // F3.2
-	PresetIDs  []string        `json:"preset_ids,omitempty"` // F4.3
-	Seed       *int64          `json:"seed,omitempty"`       // explicit override; else a bound character's fixed seed wins
+	ImageSequenceMode string          `json:"image_sequence_mode,omitempty"` // image.sequence only: "quick" (default) | "continuity"
+	Characters        []CharacterSlot `json:"characters,omitempty"`          // F3.2
+	PresetIDs         []string        `json:"preset_ids,omitempty"`          // F4.3
+	Seed              *int64          `json:"seed,omitempty"`                // explicit override; else a bound character's fixed seed wins
 	// SourceImageAssetID is F5.8's image-to-image input — originally
 	// image.single only, extended to every image.* mode (§07 gap: a user
 	// asked why reference-image support wasn't universal) since
@@ -430,10 +430,20 @@ func EstimateCredits(workflowName string, spec Spec) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		credits := creditsvc.EstimatePerNodeImageCredits(n)
-		if len(spec.Panels) < minComic4Panels && spec.Story != "" {
-			credits += creditsvc.EstimateStorySplitCredits()
-		}
+		// +comic4StylizeRefCount: buildComic4Workflow now runs one
+		// stylize-reference image-generation pass per distinct bound
+		// character (or one for an ad hoc source image) before any panel
+		// runs, converting the raw reference photo into the comic's own
+		// art style once rather than leaving every panel to fight
+		// minimax.image's own pull toward photorealism on its own.
+		credits := creditsvc.EstimatePerNodeImageCredits(n + comic4StylizeRefCount(spec))
+		// The AI comic-planner call (minimax.PlanComic, image_comic4.go) now
+		// runs for every comic4 job, manual panels included — not just
+		// story-mode auto-split, which used to be this bucket's only
+		// trigger — since it also decides dialogue/layout/reference
+		// strategy for hand-typed panels. Same conservative-upper-bound
+		// bucket either way (EstimateStorySplitCredits' own doc).
+		credits += creditsvc.EstimateStorySplitCredits()
 		// Every panel gets H3-Context-IR enhanced now — image_comic4.go's
 		// own doc, no more "quick" mode without this cost.
 		credits += n * creditsvc.EstimatePromptEnhanceCredits()
@@ -544,10 +554,12 @@ func EstimateBreakdown(workflowName string, spec Spec) ([]EstimateItem, int, err
 			return nil, 0, err
 		}
 		perPanel := creditsvc.EstimatePerNodeImageCredits(1)
-		items := []EstimateItem{{Kind: ItemKindComic4Panels, Count: n, Credits: perPanel * n}}
-		if spec.Story != "" && len(spec.Panels) < minComic4Panels {
-			items = append(items, EstimateItem{Kind: ItemKindStorySplit, Count: 1, Credits: creditsvc.EstimateStorySplitCredits()})
-		}
+		// See EstimateCredits' matching comment on comic4StylizeRefCount.
+		panelCount := n + comic4StylizeRefCount(spec)
+		items := []EstimateItem{{Kind: ItemKindComic4Panels, Count: panelCount, Credits: perPanel * panelCount}}
+		// See EstimateCredits' matching comment: the AI comic-planner call
+		// now runs for every comic4 job, not just story-mode auto-split.
+		items = append(items, EstimateItem{Kind: ItemKindStorySplit, Count: 1, Credits: creditsvc.EstimateStorySplitCredits()})
 		items = append(items, EstimateItem{Kind: ItemKindPromptEnhance, Count: n, Credits: n * creditsvc.EstimatePromptEnhanceCredits()})
 		return items, total, nil
 	case "image.sequence":
@@ -726,6 +738,49 @@ func (s *Service) resolveCharacterRefAssetIDs(ctx context.Context, userID uint64
 		out = append(out, ids...)
 	}
 	return out, nil
+}
+
+// resolveCharacterPlanInfo loads every bound character's name/description
+// plus its first F3.1 reference-image asset id (if any), in slot order —
+// image.comic4's AI planner (minimax.PlanComic) needs slot identity
+// preserved alongside the image to decide reference_strategy/
+// character_slot, and buildComic4Workflow needs the same per-slot asset id
+// to resolve an "anchor_per_character" panel's literal reference. Distinct
+// from resolveCharacters (text-compile subset) and resolveCharacterRefAssetIDs
+// (flattened union, video.single's own F6.4 use where slot identity doesn't
+// matter) for the same reason those two are already separate from each
+// other.
+func (s *Service) resolveCharacterPlanInfo(ctx context.Context, userID uint64, slots []CharacterSlot) ([]minimax.PlanCharacterInfo, map[string]string, error) {
+	if len(slots) == 0 {
+		return nil, nil, nil
+	}
+	infos := make([]minimax.PlanCharacterInfo, 0, len(slots))
+	slotRefAsset := make(map[string]string, len(slots))
+	for _, slot := range slots {
+		var row persistence.Character
+		if err := s.db.WithContext(ctx).
+			Where("biz_id = ? AND user_id = ? AND deleted_at IS NULL", slot.CharacterID, userID).
+			First(&row).Error; err != nil {
+			return nil, nil, fmt.Errorf("character %q (slot %s) not found: %w", slot.CharacterID, slot.Slot, err)
+		}
+		var refAssetID string
+		if len(row.RefAssetIDs) > 0 {
+			var ids []string
+			if err := json.Unmarshal(row.RefAssetIDs, &ids); err != nil {
+				return nil, nil, fmt.Errorf("decode character %q ref_asset_ids: %w", slot.CharacterID, err)
+			}
+			if len(ids) > 0 {
+				refAssetID = ids[0]
+			}
+		}
+		infos = append(infos, minimax.PlanCharacterInfo{
+			Slot: slot.Slot, Name: row.Name, Description: row.Description, HasImage: refAssetID != "",
+		})
+		if refAssetID != "" {
+			slotRefAsset[slot.Slot] = refAssetID
+		}
+	}
+	return infos, slotRefAsset, nil
 }
 
 func (s *Service) resolvePresets(ctx context.Context, presetIDs []string) ([]prompt.Preset, error) {

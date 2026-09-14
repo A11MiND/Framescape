@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/BabySid/aether/executor"
 	"github.com/BabySid/aether/model"
@@ -46,6 +47,16 @@ type ImageConfig struct {
 	// ambiguity entirely by inlining the bytes instead of trying to reuse the
 	// video-generation-input upload/cache path).
 	SourceImageAssetID string `json:"source-image-asset-id"`
+	// ExpectedStyle gates an automatic-reroll quality check (checkIllustrationStyle
+	// below): empty (every caller except image.comic4) skips it entirely,
+	// preserving today's behavior exactly. Non-empty asks a MiniMax-M3
+	// vision call whether the generated image actually reads as that style
+	// rather than a real photograph, and silently rerolls with a fresh seed
+	// (up to maxStyleAttempts) if it doesn't — found live off image.comic4
+	// that an explicit, correctly-worded style instruction in the prompt
+	// still only converted a portion of panels away from photorealism on
+	// its own when anchored on a real uploaded photo.
+	ExpectedStyle string `json:"expected-style"`
 }
 
 type ImagePlugin struct {
@@ -98,7 +109,7 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 		}
 	}
 
-	mmReq := ImageGenerationRequest{
+	baseReq := ImageGenerationRequest{
 		Model:           cfg.Model,
 		Prompt:          cfg.Prompt,
 		N:               n,
@@ -113,38 +124,70 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 		if weight <= 0 {
 			weight = 0.8
 		}
-		mmReq.Style = &ImageStyle{StyleType: cfg.StyleType, StyleWeight: weight}
+		baseReq.Style = &ImageStyle{StyleType: cfg.StyleType, StyleWeight: weight}
 	}
 	if cfg.SourceImageAssetID != "" {
 		dataURI, err := p.buildSubjectReferenceDataURI(ctx, cfg.SourceImageAssetID)
 		if err != nil {
 			return errOutputs(model.ExecCodeError, "source_image: "+err.Error()), nil
 		}
-		mmReq.SubjectReference = []SubjectReferenceItem{{Type: "character", ImageFile: dataURI}}
+		baseReq.SubjectReference = []SubjectReferenceItem{{Type: "character", ImageFile: dataURI}}
 	}
 
-	resp, err := p.client.GenerateImage(ctx, mmReq)
-	if err != nil {
-		// Network/transport-layer failure — Aether's retry policy handles this.
-		return nil, fmt.Errorf("minimax image_generation call: %w", err)
-	}
+	// maxStyleAttempts only ever matters when cfg.ExpectedStyle is set
+	// (image.comic4 only) — every other caller's loop body runs exactly
+	// once, identical to before this field existed.
+	const maxStyleAttempts = 3
+	var resp *ImageGenerationResponse
+	for attempt := 1; ; attempt++ {
+		mmReq := baseReq
+		if attempt > 1 {
+			// Rerolling because the previous attempt looked photorealistic
+			// instead of the requested style — reusing the exact same seed
+			// would very likely reproduce the same (rejected) image, so
+			// this attempt lets MiniMax pick a fresh one. Trades away a
+			// little of this one panel's seed-based consistency with its
+			// siblings for actually matching the requested art style, which
+			// matters more (image_comic4.go's own doc on this feature).
+			mmReq.Seed = nil
+		}
+		var err error
+		resp, err = p.client.GenerateImage(ctx, mmReq)
+		if err != nil {
+			// Network/transport-layer failure — Aether's retry policy handles this.
+			return nil, fmt.Errorf("minimax image_generation call: %w", err)
+		}
 
-	// PRD §10.4 error classification table.
-	switch resp.BaseResp.StatusCode {
-	case 0:
-		// continue below
-	case 1002:
-		return errOutputs(model.ExecCodeError, "rate_limited: "+resp.BaseResp.StatusMsg), nil
-	case 1008:
-		return errOutputs(model.ExecCodeFailed, "insufficient_balance: "+resp.BaseResp.StatusMsg), nil
-	case 1026:
-		return errOutputs(model.ExecCodeFailed, "sensitive_content: "+resp.BaseResp.StatusMsg), nil
-	case 1004, 2049:
-		return errOutputs(model.ExecCodeFailed, "auth_error: "+resp.BaseResp.StatusMsg), nil
-	case 2013:
-		return errOutputs(model.ExecCodeFailed, "bad_params: "+resp.BaseResp.StatusMsg), nil
-	default:
-		return errOutputs(model.ExecCodeError, fmt.Sprintf("unclassified(%d): %s", resp.BaseResp.StatusCode, resp.BaseResp.StatusMsg)), nil
+		// PRD §10.4 error classification table.
+		switch resp.BaseResp.StatusCode {
+		case 0:
+			// continue below
+		case 1002:
+			return errOutputs(model.ExecCodeError, "rate_limited: "+resp.BaseResp.StatusMsg), nil
+		case 1008:
+			return errOutputs(model.ExecCodeFailed, "insufficient_balance: "+resp.BaseResp.StatusMsg), nil
+		case 1026:
+			return errOutputs(model.ExecCodeFailed, "sensitive_content: "+resp.BaseResp.StatusMsg), nil
+		case 1004, 2049:
+			return errOutputs(model.ExecCodeFailed, "auth_error: "+resp.BaseResp.StatusMsg), nil
+		case 2013:
+			return errOutputs(model.ExecCodeFailed, "bad_params: "+resp.BaseResp.StatusMsg), nil
+		default:
+			return errOutputs(model.ExecCodeError, fmt.Sprintf("unclassified(%d): %s", resp.BaseResp.StatusCode, resp.BaseResp.StatusMsg)), nil
+		}
+
+		if cfg.ExpectedStyle == "" || len(resp.Data.ImageURLs) == 0 {
+			break // no style gate requested, or nothing to check — accept as-is, same as pre-existing behavior
+		}
+		stylized, checkErr := p.checkIllustrationStyle(ctx, resp.Data.ImageURLs[0], cfg.ExpectedStyle)
+		if checkErr != nil || stylized || attempt >= maxStyleAttempts {
+			// Accept: the check itself is advisory (an infra hiccup here
+			// must never fail an otherwise-successful generation, same
+			// posture as projection.go's own reviewAsset), or it genuinely
+			// passed, or we're out of rerolls — whichever it is, this is
+			// the image that ships.
+			break
+		}
 	}
 
 	// §R3: materialize immediately — these URLs expire in 24h.
@@ -230,6 +273,42 @@ func (p *ImagePlugin) buildSubjectReferenceDataURI(ctx context.Context, assetBiz
 	}
 	mime := http.DetectContentType(data)
 	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data), nil
+}
+
+// checkIllustrationStyle asks MiniMax-M3's vision input whether a
+// just-generated image (still at its temporary MiniMax-hosted URL — no need
+// to download/re-host it ourselves just to ask about it) reads as a real
+// photograph instead of the requested illustrated style. Same "advisory,
+// any error or unparseable response is treated as a pass" posture as
+// projection.go's own reviewAsset (in package projection, otherwise the
+// same pattern) — a false negative here just means one panel looks more
+// photorealistic than asked, not a broken job; only Execute's caller
+// (cfg.ExpectedStyle != "") ever invokes this at all.
+func (p *ImagePlugin) checkIllustrationStyle(ctx context.Context, imageURL, expectedStyle string) (stylized bool, err error) {
+	resp, err := p.client.ChatCompletion(ctx, ChatCompletionRequest{
+		Model: textModel,
+		Messages: []ChatMessage{{
+			Role: "user",
+			Content: []map[string]any{
+				{"type": "image_url", "image_url": map[string]string{"url": imageURL}},
+				{"type": "text", "text": "This image is supposed to be rendered in this art style: \"" + expectedStyle +
+					"\". Look at it carefully. If it instead looks like a real photograph (realistic photographic " +
+					"lighting/texture, not a stylized illustration), reply with exactly \"REALISTIC\" and nothing else. " +
+					"If it genuinely looks like an illustrated/cartoon/anime/comic drawing matching that style, reply " +
+					"with exactly \"STYLIZED\" and nothing else."},
+			},
+		}},
+		Temperature:         0,
+		MaxCompletionTokens: 20,
+		Thinking:            &ThinkingConfig{Type: "disabled"},
+	})
+	if err != nil {
+		return true, err
+	}
+	if len(resp.Choices) == 0 {
+		return true, nil
+	}
+	return !strings.Contains(strings.ToUpper(resp.Choices[0].Message.Content), "REALISTIC"), nil
 }
 
 func errOutputs(code int, msg string) *model.ExecOutputs {

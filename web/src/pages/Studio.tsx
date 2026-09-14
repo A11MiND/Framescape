@@ -591,8 +591,17 @@ export default function Studio() {
     tab === 'image.single'
       ? estimateImageCredits(n)
       : tab === 'image.comic4'
-          ? estimatePerNodeImageCredits(comicMode === 'manual' ? manualPanelCount : n) +
-            (comicMode === 'auto' ? estimateStorySplitCredits() : 0)
+          ? // +stylizeRefCount: buildComic4Workflow's one-time
+            // stylize-reference pass per distinct bound character (or one
+            // for an ad hoc source image) — mirrors jobsvc.go's
+            // comic4StylizeRefCount.
+            estimatePerNodeImageCredits(
+              (comicMode === 'manual' ? manualPanelCount : n) +
+                (characterSlotIds.filter(Boolean).length || (sourceImageId ? 1 : 0)),
+            ) +
+            // The AI comic-planner call now runs for every comic4 job, not
+            // just story-mode auto-split — mirrors jobsvc.go's EstimateCredits.
+            estimateStorySplitCredits()
           : tab === 'image.sequence'
             ? estimatePerNodeImageCredits(shots.filter((s) => s.trim()).length || 1)
             : tab === 'video.single'

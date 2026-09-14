@@ -96,6 +96,133 @@ func TestImagePluginExecuteHappyPath(t *testing.T) {
 	}
 }
 
+// TestImagePluginExecuteExpectedStyle_PassesOnFirstAttempt covers the common
+// case: the style check approves the very first attempt, so Execute never
+// rerolls (only one image_generation call, only one style check).
+func TestImagePluginExecuteExpectedStyle_PassesOnFirstAttempt(t *testing.T) {
+	mux, srv, closeFn := newImageMux(t)
+	defer closeFn()
+	genCalls, checkCalls := 0, 0
+	mux.HandleFunc("/img/a.png", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(pngBytes(t, 8, 6))
+	})
+	mux.HandleFunc("/v1/image_generation", func(w http.ResponseWriter, req *http.Request) {
+		genCalls++
+		w.Write([]byte(`{"id":"img-1","data":{"image_urls":["` + srv.URL + `/img/a.png"]},"base_resp":{"status_code":0}}`))
+	})
+	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, req *http.Request) {
+		checkCalls++
+		w.Write([]byte(`{"id":"chat-1","choices":[{"message":{"role":"assistant","content":"STYLIZED"}}],"usage":{}}`))
+	})
+	plugin := NewImagePlugin(NewClient(srv.URL, "test-api-key"), &fakeSink{}, newFakeReader())
+	req := execRequest(t, "task-1", map[string]any{"prompt": "a cat", "n": "1", "user-id": "7", "expected-style": "anime"})
+
+	out, err := plugin.Execute(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if out.Code != 0 {
+		t.Fatalf("Code = %d, Message = %q", out.Code, out.Message)
+	}
+	if genCalls != 1 {
+		t.Errorf("image_generation calls = %d, want 1 (should accept on first attempt)", genCalls)
+	}
+	if checkCalls != 1 {
+		t.Errorf("style-check calls = %d, want 1", checkCalls)
+	}
+}
+
+// TestImagePluginExecuteExpectedStyle_RerollsOnRealisticUpToCap covers the
+// bug this feature exists for: a real uploaded photo pulled minimax.image's
+// own output toward photorealism despite a correct style instruction in the
+// prompt. When the check keeps failing, Execute should reroll with a fresh
+// seed (never the original, which would likely reproduce the same rejected
+// image) up to maxStyleAttempts, then accept the last attempt rather than
+// failing the whole node.
+func TestImagePluginExecuteExpectedStyle_RerollsOnRealisticUpToCap(t *testing.T) {
+	mux, srv, closeFn := newImageMux(t)
+	defer closeFn()
+	var seenSeeds []*int64
+	mux.HandleFunc("/img/a.png", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(pngBytes(t, 8, 6))
+	})
+	mux.HandleFunc("/v1/image_generation", func(w http.ResponseWriter, req *http.Request) {
+		var body ImageGenerationRequest
+		_ = decodeJSON(req, &body)
+		seenSeeds = append(seenSeeds, body.Seed)
+		w.Write([]byte(`{"id":"img-1","data":{"image_urls":["` + srv.URL + `/img/a.png"]},"base_resp":{"status_code":0}}`))
+	})
+	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte(`{"id":"chat-1","choices":[{"message":{"role":"assistant","content":"REALISTIC"}}],"usage":{}}`))
+	})
+	plugin := NewImagePlugin(NewClient(srv.URL, "test-api-key"), &fakeSink{}, newFakeReader())
+	req := execRequest(t, "task-1", map[string]any{
+		"prompt": "a cat", "n": "1", "user-id": "7", "seed": "42", "expected-style": "anime",
+	})
+
+	out, err := plugin.Execute(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if out.Code != 0 {
+		t.Fatalf("Code = %d, Message = %q, want success (out of rerolls ships the last attempt, not a failure)", out.Code, out.Message)
+	}
+	if len(seenSeeds) != 3 {
+		t.Fatalf("image_generation calls = %d, want exactly maxStyleAttempts=3", len(seenSeeds))
+	}
+	if seenSeeds[0] == nil || *seenSeeds[0] != 42 {
+		t.Errorf("first attempt should use the requested seed, got %v", seenSeeds[0])
+	}
+	for i, s := range seenSeeds[1:] {
+		if s != nil {
+			t.Errorf("reroll attempt %d should clear the seed for a fresh sample, got %v", i+2, *s)
+		}
+	}
+	if got := outputValue[int](t, out, "success-count"); got != 1 {
+		t.Errorf("success-count = %d, want 1", got)
+	}
+}
+
+// TestImagePluginExecuteNoExpectedStyle_SkipsStyleCheck is the regression
+// guard for every other minimax.image caller platform-wide (image.single,
+// image.sequence, etc.) — none of them set expected-style, so none of them
+// should ever trigger a style-check call at all, not even one that could
+// then fail/succeed silently. Asserts the call count directly rather than
+// just the end result, since an accidentally-triggered check that errors out
+// is swallowed as "advisory, accept" and would look identical to correctly
+// skipping it if only checking the final Code/success-count.
+func TestImagePluginExecuteNoExpectedStyle_SkipsStyleCheck(t *testing.T) {
+	mux, srv, closeFn := newImageMux(t)
+	defer closeFn()
+	checkCalls := 0
+	mux.HandleFunc("/img/a.png", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(pngBytes(t, 8, 6))
+	})
+	mux.HandleFunc("/v1/image_generation", func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte(`{"id":"img-1","data":{"image_urls":["` + srv.URL + `/img/a.png"]},"base_resp":{"status_code":0}}`))
+	})
+	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, req *http.Request) {
+		checkCalls++
+		w.Write([]byte(`{"id":"chat-1","choices":[{"message":{"role":"assistant","content":"REALISTIC"}}],"usage":{}}`))
+	})
+	plugin := NewImagePlugin(NewClient(srv.URL, "test-api-key"), &fakeSink{}, newFakeReader())
+	req := execRequest(t, "task-1", map[string]any{"prompt": "a cat", "n": "1", "user-id": "7"})
+
+	out, err := plugin.Execute(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if out.Code != 0 {
+		t.Fatalf("Code = %d, Message = %q", out.Code, out.Message)
+	}
+	if checkCalls != 0 {
+		t.Errorf("style-check calls = %d, want 0 when expected-style is unset", checkCalls)
+	}
+}
+
 func TestImagePluginExecuteNClamping(t *testing.T) {
 	var gotN int
 	client, closeFn := imageGenServer(t, func(w http.ResponseWriter, req *http.Request) {

@@ -36,10 +36,25 @@ func NewClient(baseURL, apiKey string) *Client {
 	return &Client{
 		baseURL: baseURL,
 		apiKey:  apiKey,
-		// Image generation is synchronous and observed to take up to ~20s
-		// (PRD §3.1); no retries/backoff here — that's the caller's job via
-		// Aether's retry policy on the task.
-		http: &http.Client{Timeout: 90 * time.Second},
+		// This one client is shared by every call shape this package makes:
+		// image_generation (~20s observed, PRD §3.1), files/upload, and the
+		// H3-Context-IR/video task-creation calls prompt_enhance.go and
+		// video.go issue from inside an asynq-executed task. Those tasks
+		// already get a correctly-scoped per-call deadline from the caller's
+		// own ctx (broker_asynq.go sets asynq.Timeout(assignment.Timeout+30s)
+		// per Aether task — 5m for enhance-panel, 3m for gen-one-panel, up to
+		// 30m for video), so this field must never be shorter than the
+		// longest of those or it silently overrides them at the transport
+		// level regardless of what the task declared (found live: an
+		// enhance-panel node with a declared 5m timeout still died at 90s
+		// with "Client.Timeout exceeded while awaiting headers" on a slow
+		// h3_context_ir call). 6 minutes is comfortably above every declared
+		// Aether task timeout in this codebase's workflows while still
+		// failing fast for the handful of synchronous, request-bound callers
+		// with no task-derived ctx deadline of their own (SplitStory,
+		// prompt_rewrite.go, trial.go) — those still return in low seconds
+		// in the normal case; this only changes their worst-case ceiling.
+		http: &http.Client{Timeout: 6 * time.Minute},
 	}
 }
 

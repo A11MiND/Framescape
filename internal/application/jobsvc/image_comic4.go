@@ -48,10 +48,12 @@ import (
 const minComic4Panels = 2
 
 type panelPlan struct {
-	Index   int // 1-based, 1..N
-	Prompt  string
-	RawText string
-	Seed    string
+	Index      int // 1-based, 1..N
+	Prompt     string
+	RawText    string
+	Seed       string
+	Dialogue   string // "" = no speech bubble this panel (minimax.PlanComic's per-panel suggestion)
+	RefAssetID string // this panel's own build-time-known literal reference image under the job's reference strategy; "" = none. In "chain" mode only panel 1's value is meaningful — later panels reference the previous panel's own runtime output instead, see buildComic4Workflow.
 }
 
 // comic4PanelCount answers "how many panels will this job actually run" for
@@ -79,6 +81,25 @@ func comic4PanelCount(spec Spec) (int, error) {
 	return 0, fmt.Errorf("image.comic4 requires at least %d panels, or a story to auto-split", minComic4Panels)
 }
 
+// comic4StylizeRefCount is EstimateCredits/EstimateBreakdown's conservative
+// upper bound for how many stylize-reference passes (buildComic4Workflow's
+// own doc) a comic4 job might run: one per distinct bound character, or one
+// for an ad hoc source image with no characters bound. These are pure
+// functions with no DB/MiniMax access, so this can't know the AI planner's
+// real reference_strategy in advance (e.g. it might land on "none" and skip
+// stylizing entirely) — erring toward over-estimating is safe per the
+// credits invariant (CLAUDE.md: balance+held == ledger sum), under-estimating
+// is not.
+func comic4StylizeRefCount(spec Spec) int {
+	if len(spec.Characters) > 0 {
+		return len(spec.Characters)
+	}
+	if spec.SourceImageAssetID != "" {
+		return 1
+	}
+	return 0
+}
+
 func (s *Service) createImageComic4(ctx context.Context, userID uint64, spec Spec, idemKey string, projectID *uint64) (*persistence.Job, error) {
 	// count/bounds-validation is comic4PanelCount's own job (also used by
 	// EstimateCredits) — re-deriving the same min/max clamping here used to
@@ -91,9 +112,59 @@ func (s *Service) createImageComic4(ctx context.Context, userID uint64, spec Spe
 		return nil, err
 	}
 
-	panelTexts := spec.Panels
+	characters, err := s.resolveCharacters(ctx, userID, spec.Characters)
+	if err != nil {
+		return nil, err
+	}
+	planCharInfos, slotRefAsset, err := s.resolveCharacterPlanInfo(ctx, userID, spec.Characters)
+	if err != nil {
+		return nil, err
+	}
+	presets, err := s.resolvePresets(ctx, spec.PresetIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	// The AI comic-planner call (minimax.PlanComic) reads the user's story/
+	// panels plus whichever bound characters actually have a real reference
+	// image, and decides — instead of requiring the caller to pick a mode —
+	// whether character consistency matters enough to anchor every panel on
+	// a real image, whether more than one bound character needs its own
+	// per-panel anchor, whether this is really a continuous single-take
+	// scene that should chain panel-to-panel instead, what page layout fits
+	// the story's pacing, and each panel's scene/action/expression/detail
+	// breakdown plus an optional line of dialogue. An advisory call — see
+	// its own doc — so it must never block job submission: a nil plan
+	// (unavailable deployment, call failure, or unparseable response) falls
+	// all the way back to this function's pre-planner behavior below
+	// (legacy SplitStory auto-split + unconditional "chain" strategy +
+	// equal-grid layout), which is exactly what shipped before this
+	// feature existed.
+	manualPanels := spec.Panels
+	if len(manualPanels) < minComic4Panels {
+		manualPanels = nil // Story mode — comic4PanelCount already confirmed spec.Story != "" in this branch
+	}
+	var plan *minimax.ComicPlan
+	if s.minimax != nil {
+		if p, _, planErr := minimax.PlanComic(ctx, s.minimax, minimax.PlanComicRequest{
+			Story: spec.Story, Panels: manualPanels, Count: count,
+			Characters: planCharInfos, HasSourceImage: spec.SourceImageAssetID != "",
+		}); planErr == nil {
+			plan = p
+		}
+	}
+
+	var panelTexts []string
 	splitCost := 0
-	if len(panelTexts) < minComic4Panels {
+	switch {
+	case plan != nil:
+		panelTexts = make([]string, len(plan.Panels))
+		for i, p := range plan.Panels {
+			panelTexts[i] = p.Text()
+		}
+	case len(manualPanels) >= minComic4Panels:
+		panelTexts = manualPanels
+	default:
 		if s.minimax == nil {
 			return nil, fmt.Errorf("story auto-split is unavailable in this deployment")
 		}
@@ -104,16 +175,27 @@ func (s *Service) createImageComic4(ctx context.Context, userID uint64, spec Spe
 		if len(panelTexts) != count {
 			return nil, fmt.Errorf("story split returned %d panels, want %d", len(panelTexts), count)
 		}
-		splitCost = creditsvc.EstimateStorySplitCredits()
+	}
+	// EstimateCredits/EstimateBreakdown now charge this bucket for every
+	// comic4 job (their own doc) — the planner call above always attempts
+	// to run, manual panels included, not just story-mode auto-split.
+	splitCost = creditsvc.EstimateStorySplitCredits()
+
+	referenceStrategy := minimax.RefStrategyChain
+	layoutID := minimax.LayoutGridEqual
+	if plan != nil {
+		referenceStrategy = plan.ReferenceStrategy
+		layoutID = plan.LayoutID
 	}
 
-	characters, err := s.resolveCharacters(ctx, userID, spec.Characters)
-	if err != nil {
-		return nil, err
-	}
-	presets, err := s.resolvePresets(ctx, spec.PresetIDs)
-	if err != nil {
-		return nil, err
+	// anchorAssetID is the one real reference image available outside a
+	// per-panel character assignment: an explicit ad hoc upload wins, else
+	// the first bound character's own saved reference image (F3.1) — same
+	// precedence video.single's F6.4 auto-reference already uses elsewhere
+	// (jobsvc.go's own SourceImageAssetID doc).
+	anchorAssetID := spec.SourceImageAssetID
+	if anchorAssetID == "" && len(planCharInfos) > 0 {
+		anchorAssetID = slotRefAsset[planCharInfos[0].Slot]
 	}
 
 	// resolveSharedSeed's own doc covers why every panel needs the same
@@ -121,13 +203,58 @@ func (s *Service) createImageComic4(ctx context.Context, userID uint64, spec Spe
 	seed := resolveSharedSeed(characters, spec.Seed)
 	seedStr := formatSeed(seed)
 
-	plans := make([]panelPlan, len(panelTexts))
-	for i, text := range panelTexts {
-		compiled := prompt.Compile(prompt.Input{Text: text, Characters: characters, Presets: presets, Seed: seed})
-		plans[i] = panelPlan{Index: i + 1, Prompt: compiled.Prompt, RawText: text, Seed: seedStr}
+	// style is a whole-comic art-style phrase repeated into every panel's
+	// own compiled prompt — found live off a job whose input asked for
+	// "cute anime style" as a global preamble before its per-panel text:
+	// with nothing carrying that intent past the story→panels split, every
+	// panel came out photorealistic instead. minimax.PlanComic.Style is
+	// already guaranteed non-empty (parseComicPlan defaults it); the
+	// legacy (no-planner) fallback path needs its own default here since
+	// there's no plan to read one from.
+	style := minimax.DefaultComicStyle
+	if plan != nil {
+		style = plan.Style
 	}
 
-	wfJSON := buildComic4Workflow(plans, spec.SourceImageAssetID)
+	plans := make([]panelPlan, len(panelTexts))
+	for i, text := range panelTexts {
+		styledText := text
+		if style != "" {
+			styledText = text + "，" + style
+		}
+		compiled := prompt.Compile(prompt.Input{Text: styledText, Characters: characters, Presets: presets, Seed: seed})
+		p := panelPlan{Index: i + 1, Prompt: compiled.Prompt, RawText: text, Seed: seedStr}
+
+		switch referenceStrategy {
+		case minimax.RefStrategyAnchor:
+			p.RefAssetID = anchorAssetID
+		case minimax.RefStrategyAnchorPerCharacter:
+			slot := ""
+			if plan != nil && i < len(plan.Panels) {
+				slot = plan.Panels[i].CharacterSlot
+			}
+			if slot == "" && len(planCharInfos) > 0 {
+				slot = planCharInfos[0].Slot
+			}
+			p.RefAssetID = slotRefAsset[slot]
+			if p.RefAssetID == "" {
+				p.RefAssetID = anchorAssetID // this panel's own character has no saved image — fall back rather than drop the reference entirely
+			}
+		case minimax.RefStrategyChain:
+			if i == 0 {
+				p.RefAssetID = anchorAssetID
+			}
+			// RefStrategyNone and every later chain-mode panel: leave
+			// RefAssetID empty — chain mode resolves later panels' own
+			// reference at DAG-build time in buildComic4Workflow instead.
+		}
+		if plan != nil && i < len(plan.Panels) {
+			p.Dialogue = plan.Panels[i].Dialogue
+		}
+		plans[i] = p
+	}
+
+	wfJSON := buildComic4Workflow(plans, referenceStrategy, layoutID, style)
 
 	specJSON, err := json.Marshal(spec)
 	if err != nil {
@@ -178,6 +305,16 @@ func genOnePanelTaskTemplate() map[string]any {
 			map[string]any{"name": "user-id", "type": "string"},
 			map[string]any{"name": "n", "type": "string", "value": "1"},
 			map[string]any{"name": "seed", "type": "string", "value": ""},
+			// expected-style gates minimax.image's own automatic-reroll
+			// check (image.go's checkIllustrationStyle): empty means "skip
+			// the check" (every other minimax.image caller platform-wide),
+			// non-empty asks the plugin to verify the result actually looks
+			// illustrated rather than photorealistic and silently reroll
+			// with a fresh seed (up to a small cap) if it doesn't — found
+			// live that a correct, explicit style instruction in the prompt
+			// still only converted ~3 of 4 panels away from photorealism on
+			// its own when anchored on a real photo.
+			map[string]any{"name": "expected-style", "type": "string", "value": ""},
 		}},
 		"phaseConditions": map[string]any{
 			"succeeded": `outputs.parameters["success-count"] == outputs.parameters["requested-n"]`,
@@ -191,7 +328,13 @@ func enhancePanelTaskTemplate() map[string]any {
 	return map[string]any{
 		"name": "enhance-panel", "executor": map[string]any{"type": "minimax.prompt_enhance"},
 		"inputs": map[string]any{"parameters": enhanceInputDecl()},
-		"retry":  map[string]any{"limit": 1}, "timeout": "5m",
+		// retry.limit matches gen-one-panel's: this node sits in front of
+		// every panel's own image call and is exposed to the same
+		// provider-latency risk, so a single transient blip here shouldn't
+		// get fewer retry chances than the node after it (was 1 — found live
+		// off a job that failed outright on panel 1's enhance step with zero
+		// images ever generated).
+		"retry": map[string]any{"limit": 2}, "timeout": "5m",
 	}
 }
 
@@ -215,13 +358,71 @@ func padCollectRefsArgs(imageArgs, videoArgs []any) []any {
 	return args
 }
 
-// buildComic4Workflow chains panel 1 -> panel 2 -> ... -> panel N, each
-// preceded by an enhance-panel-N node whose single reference image is the
-// same one the real gen-one-panel-N call uses: staticSourceAssetID for
-// panel 1 (may be empty), the immediately preceding panel's own asset-id
-// for every later panel.
-func buildComic4Workflow(plans []panelPlan, staticSourceAssetID string) []byte {
-	mainTasks := make([]any, 0, len(plans)*3+2)
+// buildComic4Workflow builds each panel's enhance-panel-N + gen-one-panel-N
+// pair according to referenceStrategy, decided by minimax.PlanComic (or the
+// fallback default of RefStrategyChain when the planner didn't run/didn't
+// return a usable plan):
+//   - RefStrategyChain (the original, only behavior before the AI planner
+//     existed): panel 1 anchors on plans[0].RefAssetID (may be empty), every
+//     later panel chains onto the immediately preceding panel's own runtime
+//     output — a real DAG dependency, so these panels run strictly in
+//     sequence.
+//   - RefStrategyAnchor / RefStrategyAnchorPerCharacter / RefStrategyNone:
+//     every panel's reference image (if any) is plans[i].RefAssetID, a
+//     literal already resolved at build time by createImageComic4 — no
+//     panel depends on any other panel's output, so all N panels' own
+//     enhance+gen chains run as independent parallel branches of the DAG,
+//     converging only at collect-panels/compose. This also means the whole
+//     job finishes faster and is less exposed to one slow panel dragging
+//     down every panel after it (the same concern M0's HTTP-timeout fix
+//     addresses at the transport level).
+func buildComic4Workflow(plans []panelPlan, referenceStrategy, layoutID, style string) []byte {
+	mainTasks := make([]any, 0, len(plans)*3+4)
+
+	// stylizeRef memoizes one "convert this raw reference photo into the
+	// comic's art style" pass per distinct raw asset id, so every panel that
+	// shares the same character only pays for it once. Found live that
+	// asking for style compliance inside each panel's own already-crowded
+	// prompt (scene + outline + dialogue + style all competing at once) only
+	// converted about 1 of 4 panels away from photorealism when the
+	// reference was a real photo — minimax.image's subject_reference
+	// mechanism visibly biases toward preserving the reference's own
+	// photographic quality. A dedicated node with nothing to do but that one
+	// conversion, whose OUTPUT (not the raw upload) becomes every real
+	// panel's own subject_reference from then on, converts far more
+	// reliably since there's no competing content to dilute the instruction.
+	type stylizedRef struct{ StylizeTask, CollectTask string }
+	stylizeFor := make(map[string]stylizedRef)
+	stylizeReference := func(rawAssetID string) stylizedRef {
+		if ref, ok := stylizeFor[rawAssetID]; ok {
+			return ref
+		}
+		idx := len(stylizeFor) + 1
+		stylizeName := fmt.Sprintf("stylize-reference-%d", idx)
+		collectName := fmt.Sprintf("collect-stylize-%d", idx)
+		mainTasks = append(mainTasks, map[string]any{
+			"name": stylizeName, "template": "gen-one-panel", "dependencies": []string{},
+			"arguments": map[string]any{"parameters": []any{
+				literal("prompt", stylizeReferencePrompt(style)),
+				literal("source-image-asset-id", rawAssetID),
+				fromWorkflow("user-id", "user-id"),
+				literal("n", "1"),
+				literal("seed", ""),
+				literal("expected-style", style),
+			}},
+		})
+		// Same scalar-asset-id-to-array bridge every chain-mode panel below
+		// already needs local.collect_refs for.
+		mainTasks = append(mainTasks, map[string]any{
+			"name": collectName, "template": "collect-refs", "dependencies": []string{stylizeName},
+			"arguments": map[string]any{"parameters": padCollectRefsArgs(
+				[]any{fromTask("image-1", stylizeName, "asset-id")}, nil,
+			)},
+		})
+		ref := stylizedRef{StylizeTask: stylizeName, CollectTask: collectName}
+		stylizeFor[rawAssetID] = ref
+		return ref
+	}
 
 	for _, p := range plans {
 		panelName := fmt.Sprintf("panel-%d", p.Index)
@@ -232,11 +433,24 @@ func buildComic4Workflow(plans []panelPlan, staticSourceAssetID string) []byte {
 		var refImageIDsForEnhance map[string]any
 		deps := []string{}
 		switch {
-		case p.Index == 1 && staticSourceAssetID != "":
-			// A literal, known at build time — no collect step needed, same
-			// as any other literal array elsewhere in this file.
-			refImageArg = literal("source-image-asset-id", staticSourceAssetID)
-			refImageIDsForEnhance = literal("reference-image-asset-ids", []string{staticSourceAssetID})
+		case referenceStrategy != minimax.RefStrategyChain && p.RefAssetID != "":
+			// Build-time-known (once stylized) for every panel, independent
+			// of every other panel — see this function's own doc on why
+			// that means these panels can run in parallel. All panels
+			// sharing the same raw asset id wait on the same one stylize
+			// pass rather than each running their own.
+			ref := stylizeReference(p.RefAssetID)
+			refImageArg = fromTask("source-image-asset-id", ref.StylizeTask, "asset-id")
+			refImageIDsForEnhance = fromTask("reference-image-asset-ids", ref.CollectTask, "image-ids")
+			deps = append(deps, ref.StylizeTask, ref.CollectTask)
+		case referenceStrategy != minimax.RefStrategyChain:
+			refImageArg = literal("source-image-asset-id", "")
+			refImageIDsForEnhance = literal("reference-image-asset-ids", []string{})
+		case p.Index == 1 && p.RefAssetID != "":
+			ref := stylizeReference(p.RefAssetID)
+			refImageArg = fromTask("source-image-asset-id", ref.StylizeTask, "asset-id")
+			refImageIDsForEnhance = fromTask("reference-image-asset-ids", ref.CollectTask, "image-ids")
+			deps = append(deps, ref.StylizeTask, ref.CollectTask)
 		case p.Index == 1:
 			refImageArg = literal("source-image-asset-id", "")
 			refImageIDsForEnhance = literal("reference-image-asset-ids", []string{})
@@ -260,8 +474,24 @@ func buildComic4Workflow(plans []panelPlan, staticSourceAssetID string) []byte {
 		outline := buildPanelOutline(plans, p.Index)
 		outlineAndPrompt := p.Prompt
 		if outline != "" {
-			outlineAndPrompt = "漫画剧情大纲（已发生的画格）：" + outline + "\n\n本格需要表现：" + p.Prompt
+			// The explicit "只画...不要把之前几格的画面也画进来" guard matters
+			// specifically when there's no reference image (RefStrategyNone):
+			// found live that H3-Context-IR, given a recap-plus-new-beat
+			// prompt with no <Picture> to anchor on, falls back to its
+			// native video-continuation behavior and emits a literal
+			// "[Shot 1] ... [Shot 2] ..." multi-scene description — which
+			// minimax.image then renders as one merged frame containing
+			// both the earlier and current panel's content. A bound
+			// reference image reliably keeps it to a single "reference
+			// generation" scene on its own (confirmed across every anchor/
+			// anchor_per_character test panel), so this guard is cheap
+			// insurance there too, not just a none-mode-only fix.
+			outlineAndPrompt = "漫画剧情大纲（已发生的画格，仅供你理解故事上下文，不需要画出来）：" + outline +
+				"\n\n本格需要表现（这一格实际要画的唯一画面）：" + p.Prompt +
+				"\n\n注意：只画“本格需要表现”里的这一个瞬间，不要把大纲里之前几格的画面内容也画进同一张图里。"
 		}
+		outlineAndPrompt += dialogueInstruction(p.Dialogue)
+		outlineAndPrompt += styleInstruction(style)
 		mainTasks = append(mainTasks, map[string]any{
 			"name": enhanceName, "template": "enhance-panel", "dependencies": deps,
 			"arguments": map[string]any{"parameters": []any{
@@ -283,6 +513,7 @@ func buildComic4Workflow(plans []panelPlan, staticSourceAssetID string) []byte {
 				refImageArg,
 				fromWorkflow("user-id", "user-id"),
 				literal("seed", p.Seed),
+				literal("expected-style", style),
 			}},
 		})
 	}
@@ -307,7 +538,7 @@ func buildComic4Workflow(plans []panelPlan, staticSourceAssetID string) []byte {
 		"name": "compose", "template": "compose-grid", "dependencies": []string{"collect-panels"},
 		"arguments": map[string]any{"parameters": []any{
 			fromTask("asset-ids", "collect-panels", "image-ids"),
-			literal("layout", ""), // compose.go always computes the real grid from len(asset-ids) now
+			literal("layout", layoutID), // local.compose looks this up against its own named-template table, falling back to the equal-grid it always used to compute unconditionally
 			fromWorkflow("user-id", "user-id"),
 		}},
 	})
@@ -371,4 +602,55 @@ func buildPanelOutline(plans []panelPlan, index int) string {
 		}
 	}
 	return strings.Join(parts, "；")
+}
+
+// dialogueInstruction appends a comic-speech-bubble rendering instruction to
+// a panel's enhance-panel prompt when the AI planner (or a hand-typed 台词)
+// decided this panel has a line of dialogue. Returns "" (no-op) for an empty
+// dialogue. This is "plan A" of M6's two-way dialogue-accuracy experiment —
+// relies entirely on MiniMax's own image model rendering the quoted text
+// correctly, which is unverified going in (industry-wide, legible in-image
+// text is a known weak spot for most diffusion models, CJK especially); a
+// deterministic post-processing overlay is the fallback plan if this proves
+// unreliable in practice.
+func dialogueInstruction(dialogue string) string {
+	if dialogue = strings.TrimSpace(dialogue); dialogue == "" {
+		return ""
+	}
+	return "\n\n画面中加入一个漫画对话框（气泡），气泡内文字必须精准显示为：「" + dialogue + "」，字体清晰可辨、完整排布在气泡内，不得出现其他文字或乱码。"
+}
+
+// styleInstruction appends an explicit, forceful art-style directive to every
+// panel's enhance-panel prompt — a separate, prominent append rather than
+// relying solely on style being blended into the compiled scene text
+// (prompt.Compile already does that too, in createImageComic4). Found live
+// that a mild style phrase buried inside a longer scene description isn't
+// enough to override minimax.image's own pull toward photorealism when the
+// panel's subject_reference is a real uploaded photo — H3-Context-IR's own
+// "subject_definitions" output kept describing the subject as "realistic"
+// despite the compiled prompt already containing a cute-illustration style
+// phrase. A standalone, unambiguous "must be illustrated, never photographic,
+// even with a real photo reference" instruction is the fix, mirroring how
+// dialogueInstruction's own bubble-text directive needed to be explicit
+// rather than folded into prose.
+func styleInstruction(style string) string {
+	if style = strings.TrimSpace(style); style == "" {
+		return ""
+	}
+	return "\n\n整体画面风格（强制要求，优先级高于参考图本身的质感）：" + style +
+		"。这是一格漫画画面，绝对不能画成写实照片质感，即使角色参考图是真实照片，也只借用其长相/花色/五官特征，" +
+		"必须彻底转换成上述漫画画法重新演绎。"
+}
+
+// stylizeReferencePrompt is stylize-reference's own prompt (buildComic4Workflow's
+// own doc covers why this runs as an isolated node rather than folding style
+// compliance into each panel's own already-crowded prompt): one focused ask,
+// nothing else competing for the model's attention.
+func stylizeReferencePrompt(style string) string {
+	if style = strings.TrimSpace(style); style == "" {
+		style = minimax.DefaultComicStyle
+	}
+	return "参考图里的角色，" + style + "。请保留角色的外观特征（毛色/花纹/五官/体型等辨识度特征），" +
+		"重新绘制成一张干净的漫画角色定妆照，人物居中、姿势自然、背景简单。" +
+		"绝对不能保留照片本身的写实质感、真实光影或噪点，输出必须是彻底的漫画插画画法，不是照片。"
 }
