@@ -19,19 +19,38 @@ import (
 	"fmt"
 	"net/http"
 
+	"cloud.google.com/go/auth/credentials"
 	"google.golang.org/genai"
 )
+
+// vertexAIScope is the OAuth scope Vertex AI calls need — copied from the
+// genai SDK's own internal Application Default Credentials detection
+// (google.golang.org/genai's client.go), which this package's own
+// CredentialsJSON path (below) replicates for a platform (Railway) with no
+// file-upload primitive credentials naturally live on: only environment
+// variables. Application Default Credentials — the GOOGLE_APPLICATION_CREDENTIALS
+// file-path or GCE/Cloud Run attached-identity path — remains the default
+// and every other caller's behavior; CredentialsJSON is additive.
+const vertexAIScope = "https://www.googleapis.com/auth/cloud-platform"
 
 // Config is NewClient's construction input. HTTPClient/BaseURL exist purely
 // for tests (image_test.go points a real client at an httptest.Server,
 // bypassing Application Default Credentials entirely) — every real caller
 // leaves both empty.
 type Config struct {
-	ProjectID  string
-	Location   string
-	Model      string
-	HTTPClient *http.Client
-	BaseURL    string
+	ProjectID string
+	Location  string
+	Model     string
+	// CredentialsJSON is a service-account key file's raw JSON content,
+	// for a deployment target with no clean way to hand the SDK a file
+	// path (Railway: environment variables, not files, are the thing that
+	// survives a redeploy). Empty (every local/GCE deployment) leaves
+	// authentication to Application Default Credentials entirely, exactly
+	// as before this field existed — this package never reads a credential
+	// file itself either way, only ever bytes already handed to it.
+	CredentialsJSON string
+	HTTPClient      *http.Client
+	BaseURL         string
 }
 
 type Client struct {
@@ -53,6 +72,16 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 		Backend:  genai.BackendVertexAI,
 		Project:  cfg.ProjectID,
 		Location: cfg.Location,
+	}
+	if cfg.CredentialsJSON != "" {
+		cred, err := credentials.DetectDefault(&credentials.DetectOptions{
+			CredentialsJSON: []byte(cfg.CredentialsJSON),
+			Scopes:          []string{vertexAIScope},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("gemini: parse credentials JSON: %w", err)
+		}
+		cc.Credentials = cred
 	}
 	if cfg.HTTPClient != nil {
 		cc.HTTPClient = cfg.HTTPClient

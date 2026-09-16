@@ -81,9 +81,10 @@ func main() {
 	// lookup with a clear "unknown type" error instead.
 	if projectID := config.GeminiVertexProjectID(); projectID != "" {
 		geminiClient, err := gemini.NewClient(ctx, gemini.Config{
-			ProjectID: projectID,
-			Location:  config.GeminiVertexLocation(),
-			Model:     config.GeminiImageModel(),
+			ProjectID:       projectID,
+			Location:        config.GeminiVertexLocation(),
+			Model:           config.GeminiImageModel(),
+			CredentialsJSON: config.GeminiVertexCredentialsJSON(),
 		})
 		if err != nil {
 			log.Error("gemini client init failed, image.comic4's gemini provider will be unavailable", zap.Error(err))

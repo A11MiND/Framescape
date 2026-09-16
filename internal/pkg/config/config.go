@@ -143,6 +143,16 @@ func GeminiVertexLocation() string { return getEnv("GEMINI_VERTEX_LOCATION", "us
 // GeminiImageModel is the GA (non-preview) image-output Gemini model name.
 func GeminiImageModel() string { return getEnv("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image") }
 
+// GeminiVertexCredentialsJSON is a service-account key file's raw JSON
+// content, for a deployment target (Railway) with no clean way to hand the
+// SDK a file path — environment variables, not files, are what survives a
+// redeploy there. Empty (the default, every local/GCE deployment) leaves
+// authentication to GOOGLE_APPLICATION_CREDENTIALS/Application Default
+// Credentials entirely, same as before this variable existed. Never
+// logged — this function's return value must never be passed to a logger,
+// same posture as MiniMaxAPIKey's own doc.
+func GeminiVertexCredentialsJSON() string { return getEnv("GEMINI_VERTEX_CREDENTIALS_JSON", "") }
+
 // GeminiVertexConcurrency caps concurrent Vertex AI generateContent calls
 // (gemini.Limiter's own doc: found live that comic4's anchor-mode DAG, which
 // deliberately fires every panel's generation in parallel, reliably tripped

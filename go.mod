@@ -5,6 +5,7 @@ go 1.25.7
 replace github.com/BabySid/aether => ./third_party/aether
 
 require (
+	cloud.google.com/go/auth v0.9.3
 	github.com/BabySid/aether v0.0.0-00010101000000-000000000000
 	github.com/expr-lang/expr v1.17.8
 	github.com/gin-gonic/gin v1.12.0
@@ -25,7 +26,6 @@ require (
 
 require (
 	cloud.google.com/go v0.116.0 // indirect
-	cloud.google.com/go/auth v0.9.3 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
