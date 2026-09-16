@@ -440,7 +440,9 @@
       "insertSeparator": "+ 插入分隔符 ---",
       "detectedCount": "识别到 {{n}} 格",
       "storyPlaceholder": "一段完整的剧情描述，系统会自动拆成连续分镜",
-      "panelCount": "格数"
+      "panelCount": "格数",
+      "provider": "生图模型",
+      "providerGeminiTooltip": "试用中：改用 Google Gemini 生成每一格图片，便于和 MiniMax 效果对比"
     },
     "imageSequence": {
       "addLabel": "+ 添加一张",

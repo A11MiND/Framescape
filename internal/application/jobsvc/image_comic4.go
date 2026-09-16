@@ -47,6 +47,25 @@ import (
 // comic (and wouldn't need compose-grid at all), so 2 is the real floor.
 const minComic4Panels = 2
 
+// Spec.ImageProvider's own doc (jobsvc.go) covers the "why" — these are just
+// the two recognized values, "minimax" also being what an empty/unrecognized
+// value normalizes to.
+const (
+	imageProviderMiniMax = "minimax"
+	imageProviderGemini  = "gemini"
+)
+
+// normalizeImageProvider never fails: an unrecognized or empty value falls
+// back to MiniMax (comic4's provider before this option existed), matching
+// this file's general posture of soft-fallback over hard validation error
+// for anything that isn't user-authored panel/story content.
+func normalizeImageProvider(s string) string {
+	if s == imageProviderGemini {
+		return imageProviderGemini
+	}
+	return imageProviderMiniMax
+}
+
 type panelPlan struct {
 	Index      int // 1-based, 1..N
 	Prompt     string
@@ -198,6 +217,21 @@ func (s *Service) createImageComic4(ctx context.Context, userID uint64, spec Spe
 		anchorAssetID = slotRefAsset[planCharInfos[0].Slot]
 	}
 
+	// subjectDescription is a text-only, species-agnostic backup consistency
+	// anchor for anchorAssetID's own subject — see DescribeReferenceSubject's
+	// own doc for why this matters specifically: MiniMax's subject_reference
+	// mechanism is documented as tuned for human portraits, so a pet/animal
+	// character (image.comic4's own motivating use case) can't lean on the
+	// image channel alone the way a human character can. Advisory only:
+	// any failure (no minimax client, asset lookup miss, vision-call error)
+	// just leaves this empty, same posture as the AI planner itself.
+	subjectDescription := ""
+	if anchorAssetID != "" && s.minimax != nil {
+		if url, err := s.resolveAssetPublicURL(ctx, anchorAssetID); err == nil && url != "" {
+			subjectDescription, _ = minimax.DescribeReferenceSubject(ctx, s.minimax, url)
+		}
+	}
+
 	// resolveSharedSeed's own doc covers why every panel needs the same
 	// seed, including when neither spec.Seed nor a bound character set one.
 	seed := resolveSharedSeed(characters, spec.Seed)
@@ -219,8 +253,11 @@ func (s *Service) createImageComic4(ctx context.Context, userID uint64, spec Spe
 	plans := make([]panelPlan, len(panelTexts))
 	for i, text := range panelTexts {
 		styledText := text
+		if subjectDescription != "" {
+			styledText += "，角色具体外观（务必保持一致）：" + subjectDescription
+		}
 		if style != "" {
-			styledText = text + "，" + style
+			styledText += "，" + style
 		}
 		compiled := prompt.Compile(prompt.Input{Text: styledText, Characters: characters, Presets: presets, Seed: seed})
 		p := panelPlan{Index: i + 1, Prompt: compiled.Prompt, RawText: text, Seed: seedStr}
@@ -254,7 +291,8 @@ func (s *Service) createImageComic4(ctx context.Context, userID uint64, spec Spe
 		plans[i] = p
 	}
 
-	wfJSON := buildComic4Workflow(plans, referenceStrategy, layoutID, style)
+	imageProvider := normalizeImageProvider(spec.ImageProvider)
+	wfJSON := buildComic4Workflow(plans, referenceStrategy, layoutID, style, imageProvider)
 
 	specJSON, err := json.Marshal(spec)
 	if err != nil {
@@ -315,6 +353,39 @@ func genOnePanelTaskTemplate() map[string]any {
 			// still only converted ~3 of 4 panels away from photorealism on
 			// its own when anchored on a real photo.
 			map[string]any{"name": "expected-style", "type": "string", "value": ""},
+			// expected-dialogue is expected-style's sibling gate, same
+			// posture: empty skips the check (every caller except a panel
+			// with dialogue), non-empty asks the plugin to actually read the
+			// speech-bubble text and reroll if it's garbled or wrong —
+			// dialogueInstruction's own prompt text asks the model to draw
+			// it, this is the verify-and-retry half of that.
+			map[string]any{"name": "expected-dialogue", "type": "string", "value": ""},
+		}},
+		"phaseConditions": map[string]any{
+			"succeeded": `outputs.parameters["success-count"] == outputs.parameters["requested-n"]`,
+			"failed":    `outputs.parameters["success-count"] < outputs.parameters["requested-n"]`,
+		},
+		"retry": map[string]any{"limit": 2}, "timeout": "3m",
+	}
+}
+
+// genOnePanelGeminiTaskTemplate is genOnePanelTaskTemplate's Gemini
+// counterpart (Spec.ImageProvider's own doc covers why this is a separate
+// executor type rather than a branch inside minimax.image): no
+// expected-style/expected-dialogue params, since gemini.ImagePlugin doesn't
+// implement minimax.ImagePlugin's vision-check-and-reroll loop — this
+// provider was added specifically to see how it performs on style/identity/
+// dialogue fidelity zero-shot, without MiniMax's own mitigations muddying
+// the comparison.
+func genOnePanelGeminiTaskTemplate() map[string]any {
+	return map[string]any{
+		"name": "gen-one-panel-gemini", "executor": map[string]any{"type": "gemini.image"},
+		"inputs": map[string]any{"parameters": []any{
+			map[string]any{"name": "prompt", "type": "string"},
+			map[string]any{"name": "source-image-asset-id", "type": "string"},
+			map[string]any{"name": "user-id", "type": "string"},
+			map[string]any{"name": "n", "type": "string", "value": "1"},
+			map[string]any{"name": "seed", "type": "string", "value": ""},
 		}},
 		"phaseConditions": map[string]any{
 			"succeeded": `outputs.parameters["success-count"] == outputs.parameters["requested-n"]`,
@@ -376,8 +447,30 @@ func padCollectRefsArgs(imageArgs, videoArgs []any) []any {
 //     job finishes faster and is less exposed to one slow panel dragging
 //     down every panel after it (the same concern M0's HTTP-timeout fix
 //     addresses at the transport level).
-func buildComic4Workflow(plans []panelPlan, referenceStrategy, layoutID, style string) []byte {
+func buildComic4Workflow(plans []panelPlan, referenceStrategy, layoutID, style, imageProvider string) []byte {
 	mainTasks := make([]any, 0, len(plans)*3+4)
+
+	// panelTemplate is which of genOnePanelTaskTemplate/
+	// genOnePanelGeminiTaskTemplate every panel and stylize-reference pass in
+	// this job uses — the stylize pass deliberately shares imageProvider with
+	// the real panels (rather than always running on MiniMax) so a
+	// gemini-provider job's whole pipeline stays on one model: comparing
+	// providers should compare the two end-to-end pipelines, not a
+	// MiniMax-stylized reference feeding into a Gemini panel call.
+	panelTemplate := "gen-one-panel"
+	if imageProvider == imageProviderGemini {
+		panelTemplate = "gen-one-panel-gemini"
+	}
+	// qualityGateArgs appends minimax.image's own expected-style/
+	// expected-dialogue literals — meaningless (and undeclared) on the
+	// Gemini template, so gemini-provider jobs omit them entirely rather
+	// than pass args the template doesn't accept.
+	qualityGateArgs := func(dialogue string) []any {
+		if imageProvider != imageProviderMiniMax {
+			return nil
+		}
+		return []any{literal("expected-style", style), literal("expected-dialogue", dialogue)}
+	}
 
 	// stylizeRef memoizes one "convert this raw reference photo into the
 	// comic's art style" pass per distinct raw asset id, so every panel that
@@ -400,16 +493,17 @@ func buildComic4Workflow(plans []panelPlan, referenceStrategy, layoutID, style s
 		idx := len(stylizeFor) + 1
 		stylizeName := fmt.Sprintf("stylize-reference-%d", idx)
 		collectName := fmt.Sprintf("collect-stylize-%d", idx)
+		stylizeArgs := []any{
+			literal("prompt", stylizeReferencePrompt(style)),
+			literal("source-image-asset-id", rawAssetID),
+			fromWorkflow("user-id", "user-id"),
+			literal("n", "1"),
+			literal("seed", ""),
+		}
+		stylizeArgs = append(stylizeArgs, qualityGateArgs("")...)
 		mainTasks = append(mainTasks, map[string]any{
-			"name": stylizeName, "template": "gen-one-panel", "dependencies": []string{},
-			"arguments": map[string]any{"parameters": []any{
-				literal("prompt", stylizeReferencePrompt(style)),
-				literal("source-image-asset-id", rawAssetID),
-				fromWorkflow("user-id", "user-id"),
-				literal("n", "1"),
-				literal("seed", ""),
-				literal("expected-style", style),
-			}},
+			"name": stylizeName, "template": panelTemplate, "dependencies": []string{},
+			"arguments": map[string]any{"parameters": stylizeArgs},
 		})
 		// Same scalar-asset-id-to-array bridge every chain-mode panel below
 		// already needs local.collect_refs for.
@@ -506,15 +600,16 @@ func buildComic4Workflow(plans []panelPlan, referenceStrategy, layoutID, style s
 			}},
 		})
 
+		panelArgs := []any{
+			fromTask("prompt", enhanceName, "enhanced-prompt"),
+			refImageArg,
+			fromWorkflow("user-id", "user-id"),
+			literal("seed", p.Seed),
+		}
+		panelArgs = append(panelArgs, qualityGateArgs(p.Dialogue)...)
 		mainTasks = append(mainTasks, map[string]any{
-			"name": panelName, "template": "gen-one-panel", "dependencies": append(deps, enhanceName),
-			"arguments": map[string]any{"parameters": []any{
-				fromTask("prompt", enhanceName, "enhanced-prompt"),
-				refImageArg,
-				fromWorkflow("user-id", "user-id"),
-				literal("seed", p.Seed),
-				literal("expected-style", style),
-			}},
+			"name": panelName, "template": panelTemplate, "dependencies": append(deps, enhanceName),
+			"arguments": map[string]any{"parameters": panelArgs},
 		})
 	}
 
@@ -543,9 +638,13 @@ func buildComic4Workflow(plans []panelPlan, referenceStrategy, layoutID, style s
 		}},
 	})
 
+	panelTaskTemplate := genOnePanelTaskTemplate()
+	if imageProvider == imageProviderGemini {
+		panelTaskTemplate = genOnePanelGeminiTaskTemplate()
+	}
 	templates := []any{
 		map[string]any{"dag": map[string]any{"name": "main", "tasks": mainTasks}},
-		map[string]any{"task": genOnePanelTaskTemplate()},
+		map[string]any{"task": panelTaskTemplate},
 		map[string]any{"task": enhancePanelTaskTemplate()},
 		map[string]any{"task": map[string]any{
 			"name": "compose-grid", "executor": map[string]any{"type": "local.compose"},

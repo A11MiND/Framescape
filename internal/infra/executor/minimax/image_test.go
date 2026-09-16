@@ -113,7 +113,7 @@ func TestImagePluginExecuteExpectedStyle_PassesOnFirstAttempt(t *testing.T) {
 	})
 	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, req *http.Request) {
 		checkCalls++
-		w.Write([]byte(`{"id":"chat-1","choices":[{"message":{"role":"assistant","content":"STYLIZED"}}],"usage":{}}`))
+		w.Write([]byte(`{"id":"chat-1","choices":[{"message":{"role":"assistant","content":"MATCH"}}],"usage":{}}`))
 	})
 	plugin := NewImagePlugin(NewClient(srv.URL, "test-api-key"), &fakeSink{}, newFakeReader())
 	req := execRequest(t, "task-1", map[string]any{"prompt": "a cat", "n": "1", "user-id": "7", "expected-style": "anime"})
@@ -136,10 +136,13 @@ func TestImagePluginExecuteExpectedStyle_PassesOnFirstAttempt(t *testing.T) {
 // TestImagePluginExecuteExpectedStyle_RerollsOnRealisticUpToCap covers the
 // bug this feature exists for: a real uploaded photo pulled minimax.image's
 // own output toward photorealism despite a correct style instruction in the
-// prompt. When the check keeps failing, Execute should reroll with a fresh
-// seed (never the original, which would likely reproduce the same rejected
-// image) up to maxStyleAttempts, then accept the last attempt rather than
-// failing the whole node.
+// prompt. When the check keeps failing, Execute should reroll with a
+// different-but-nearby seed (a deterministic offset from the original, never
+// the exact same value that would likely reproduce the same rejected image —
+// and never a fully random one either, which was found live to sometimes
+// drift a rerolled panel into looking like a different character from its
+// non-rerolled siblings) up to maxStyleAttempts, then accept the last
+// attempt rather than failing the whole node.
 func TestImagePluginExecuteExpectedStyle_RerollsOnRealisticUpToCap(t *testing.T) {
 	mux, srv, closeFn := newImageMux(t)
 	defer closeFn()
@@ -155,7 +158,7 @@ func TestImagePluginExecuteExpectedStyle_RerollsOnRealisticUpToCap(t *testing.T)
 		w.Write([]byte(`{"id":"img-1","data":{"image_urls":["` + srv.URL + `/img/a.png"]},"base_resp":{"status_code":0}}`))
 	})
 	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, req *http.Request) {
-		w.Write([]byte(`{"id":"chat-1","choices":[{"message":{"role":"assistant","content":"REALISTIC"}}],"usage":{}}`))
+		w.Write([]byte(`{"id":"chat-1","choices":[{"message":{"role":"assistant","content":"MISMATCH"}}],"usage":{}}`))
 	})
 	plugin := NewImagePlugin(NewClient(srv.URL, "test-api-key"), &fakeSink{}, newFakeReader())
 	req := execRequest(t, "task-1", map[string]any{
@@ -176,8 +179,10 @@ func TestImagePluginExecuteExpectedStyle_RerollsOnRealisticUpToCap(t *testing.T)
 		t.Errorf("first attempt should use the requested seed, got %v", seenSeeds[0])
 	}
 	for i, s := range seenSeeds[1:] {
-		if s != nil {
-			t.Errorf("reroll attempt %d should clear the seed for a fresh sample, got %v", i+2, *s)
+		attempt := i + 2
+		want := int64(42 + attempt)
+		if s == nil || *s != want {
+			t.Errorf("reroll attempt %d should use a deterministic offset seed %d (not the original, not fully random), got %v", attempt, want, s)
 		}
 	}
 	if got := outputValue[int](t, out, "success-count"); got != 1 {
@@ -206,7 +211,7 @@ func TestImagePluginExecuteNoExpectedStyle_SkipsStyleCheck(t *testing.T) {
 	})
 	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, req *http.Request) {
 		checkCalls++
-		w.Write([]byte(`{"id":"chat-1","choices":[{"message":{"role":"assistant","content":"REALISTIC"}}],"usage":{}}`))
+		w.Write([]byte(`{"id":"chat-1","choices":[{"message":{"role":"assistant","content":"MISMATCH"}}],"usage":{}}`))
 	})
 	plugin := NewImagePlugin(NewClient(srv.URL, "test-api-key"), &fakeSink{}, newFakeReader())
 	req := execRequest(t, "task-1", map[string]any{"prompt": "a cat", "n": "1", "user-id": "7"})
@@ -220,6 +225,81 @@ func TestImagePluginExecuteNoExpectedStyle_SkipsStyleCheck(t *testing.T) {
 	}
 	if checkCalls != 0 {
 		t.Errorf("style-check calls = %d, want 0 when expected-style is unset", checkCalls)
+	}
+}
+
+// TestImagePluginExecuteExpectedDialogue_RerollsOnGarbledText covers the bug
+// this check exists for: a panel can be a perfectly on-style illustration
+// while its speech-bubble text renders as confident-looking garbage (e.g.
+// "When will I pou leld?" for an intended line) — a defect the style check
+// alone can never catch since nothing about the art style itself is wrong.
+func TestImagePluginExecuteExpectedDialogue_RerollsOnGarbledText(t *testing.T) {
+	mux, srv, closeFn := newImageMux(t)
+	defer closeFn()
+	genCalls := 0
+	mux.HandleFunc("/img/a.png", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(pngBytes(t, 8, 6))
+	})
+	mux.HandleFunc("/v1/image_generation", func(w http.ResponseWriter, req *http.Request) {
+		genCalls++
+		w.Write([]byte(`{"id":"img-1","data":{"image_urls":["` + srv.URL + `/img/a.png"]},"base_resp":{"status_code":0}}`))
+	})
+	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte(`{"id":"chat-1","choices":[{"message":{"role":"assistant","content":"MISMATCH"}}],"usage":{}}`))
+	})
+	plugin := NewImagePlugin(NewClient(srv.URL, "test-api-key"), &fakeSink{}, newFakeReader())
+	req := execRequest(t, "task-1", map[string]any{
+		"prompt": "a cat", "n": "1", "user-id": "7", "expected-dialogue": "Hello there!",
+	})
+
+	out, err := plugin.Execute(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if out.Code != 0 {
+		t.Fatalf("Code = %d, Message = %q, want success (out of rerolls ships the last attempt)", out.Code, out.Message)
+	}
+	if genCalls != 3 {
+		t.Errorf("image_generation calls = %d, want exactly maxStyleAttempts=3", genCalls)
+	}
+}
+
+// TestImagePluginExecuteExpectedStyleAndDialogue_SkipsDialogueCheckWhenStyleFails
+// covers the short-circuit: no point spending a second vision call reading
+// dialogue text on an attempt that's already getting rerolled for style.
+func TestImagePluginExecuteExpectedStyleAndDialogue_SkipsDialogueCheckWhenStyleFails(t *testing.T) {
+	mux, srv, closeFn := newImageMux(t)
+	defer closeFn()
+	checkCalls := 0
+	mux.HandleFunc("/img/a.png", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(pngBytes(t, 8, 6))
+	})
+	mux.HandleFunc("/v1/image_generation", func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte(`{"id":"img-1","data":{"image_urls":["` + srv.URL + `/img/a.png"]},"base_resp":{"status_code":0}}`))
+	})
+	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, req *http.Request) {
+		checkCalls++
+		// Always MISMATCH: whichever check this reply is answering, it fails.
+		w.Write([]byte(`{"id":"chat-1","choices":[{"message":{"role":"assistant","content":"MISMATCH"}}],"usage":{}}`))
+	})
+	plugin := NewImagePlugin(NewClient(srv.URL, "test-api-key"), &fakeSink{}, newFakeReader())
+	req := execRequest(t, "task-1", map[string]any{
+		"prompt": "a cat", "n": "1", "user-id": "7", "expected-style": "anime", "expected-dialogue": "Hello there!",
+	})
+
+	out, err := plugin.Execute(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if out.Code != 0 {
+		t.Fatalf("Code = %d, Message = %q", out.Code, out.Message)
+	}
+	// 3 attempts, exactly 1 check (style) per attempt since it fails every
+	// time — never 2 (style + dialogue) per attempt.
+	if checkCalls != 3 {
+		t.Errorf("chat-completions calls = %d, want exactly 3 (one style check per attempt, dialogue check skipped once style already failed)", checkCalls)
 	}
 }
 
@@ -404,6 +484,99 @@ func TestImagePluginExecuteSourceImageAssetID(t *testing.T) {
 	}
 	if len(gotSubjectRef) != 1 || gotSubjectRef[0].Type != "character" || !strings.HasPrefix(gotSubjectRef[0].ImageFile, "data:image/png;base64,") {
 		t.Errorf("subject_reference = %+v, want one character-type data URI", gotSubjectRef)
+	}
+}
+
+// TestImagePluginExecuteExpectedStyleWithSourceImage_RerollsOnIdentityMismatch
+// covers the bug this check exists for: image_comic4.go's own panels are
+// each independently anchored on the identical reference image (not chained
+// off each other), yet a panel that needed a reroll could still end up
+// looking like a visibly different character — subject_reference alone
+// doesn't guarantee identity consistency. When the identity check keeps
+// failing, Execute should reroll up to maxStyleAttempts just like the style
+// check does.
+func TestImagePluginExecuteExpectedStyleWithSourceImage_RerollsOnIdentityMismatch(t *testing.T) {
+	mux, srv, closeFn := newImageMux(t)
+	defer closeFn()
+	genCalls := 0
+	mux.HandleFunc("/img/a.png", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(pngBytes(t, 8, 6))
+	})
+	mux.HandleFunc("/source.png", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(pngBytes(t, 2, 2))
+	})
+	mux.HandleFunc("/v1/image_generation", func(w http.ResponseWriter, req *http.Request) {
+		genCalls++
+		w.Write([]byte(`{"id":"img-1","data":{"image_urls":["` + srv.URL + `/img/a.png"]},"base_resp":{"status_code":0}}`))
+	})
+	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, req *http.Request) {
+		var body ChatCompletionRequest
+		_ = decodeJSON(req, &body)
+		raw, _ := json.Marshal(body.Messages)
+		reply := "MATCH"
+		if strings.Contains(string(raw), "reference character") {
+			reply = "MISMATCH" // the identity-consistency check specifically always fails
+		}
+		w.Write([]byte(`{"id":"chat-1","choices":[{"message":{"role":"assistant","content":"` + reply + `"}}],"usage":{}}`))
+	})
+	reader := newFakeReader()
+	reader.set("src-asset", srv.URL+"/source.png")
+	plugin := NewImagePlugin(NewClient(srv.URL, "test-api-key"), &fakeSink{}, reader)
+	req := execRequest(t, "task-1", map[string]any{
+		"prompt": "a cat", "n": "1", "user-id": "7", "expected-style": "anime", "source-image-asset-id": "src-asset",
+	})
+
+	out, err := plugin.Execute(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if out.Code != 0 {
+		t.Fatalf("Code = %d, Message = %q, want success (out of rerolls ships the last attempt)", out.Code, out.Message)
+	}
+	if genCalls != 3 {
+		t.Errorf("image_generation calls = %d, want exactly maxStyleAttempts=3", genCalls)
+	}
+}
+
+// TestImagePluginExecuteSourceImageWithoutExpectedStyle_SkipsIdentityCheck is
+// the regression guard for image.single's own F5.8 image-to-image callers
+// (and anyone else passing source-image-asset-id outside image.comic4):
+// without expected-style also set, the identity check must never run at all.
+func TestImagePluginExecuteSourceImageWithoutExpectedStyle_SkipsIdentityCheck(t *testing.T) {
+	mux, srv, closeFn := newImageMux(t)
+	defer closeFn()
+	checkCalls := 0
+	mux.HandleFunc("/img/a.png", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(pngBytes(t, 8, 6))
+	})
+	mux.HandleFunc("/source.png", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(pngBytes(t, 2, 2))
+	})
+	mux.HandleFunc("/v1/image_generation", func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte(`{"id":"img-1","data":{"image_urls":["` + srv.URL + `/img/a.png"]},"base_resp":{"status_code":0}}`))
+	})
+	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, req *http.Request) {
+		checkCalls++
+		w.Write([]byte(`{"id":"chat-1","choices":[{"message":{"role":"assistant","content":"MISMATCH"}}],"usage":{}}`))
+	})
+	reader := newFakeReader()
+	reader.set("src-asset", srv.URL+"/source.png")
+	plugin := NewImagePlugin(NewClient(srv.URL, "test-api-key"), &fakeSink{}, reader)
+	req := execRequest(t, "task-1", map[string]any{"prompt": "a cat", "n": "1", "user-id": "7", "source-image-asset-id": "src-asset"})
+
+	out, err := plugin.Execute(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if out.Code != 0 {
+		t.Fatalf("Code = %d, Message = %q", out.Code, out.Message)
+	}
+	if checkCalls != 0 {
+		t.Errorf("chat-completions calls = %d, want 0 when expected-style is unset", checkCalls)
 	}
 }
 

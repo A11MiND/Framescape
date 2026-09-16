@@ -57,6 +57,16 @@ type ImageConfig struct {
 	// still only converted a portion of panels away from photorealism on
 	// its own when anchored on a real uploaded photo.
 	ExpectedStyle string `json:"expected-style"`
+	// ExpectedDialogue gates a second automatic-reroll check, same posture
+	// as ExpectedStyle: empty (every panel with no speech bubble, and every
+	// caller outside image.comic4) skips it entirely. Non-empty asks
+	// whether the speech-bubble text actually rendered matches this exact
+	// line, and rerolls if it doesn't — found live that a comic panel's
+	// bubble can render confident-looking but genuinely garbled text (e.g.
+	// "When will I pou leld?" for an intended English line), which a
+	// style-only check has no way to catch since the panel can otherwise be
+	// a perfectly on-style illustration.
+	ExpectedDialogue string `json:"expected-dialogue"`
 }
 
 type ImagePlugin struct {
@@ -126,30 +136,45 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 		}
 		baseReq.Style = &ImageStyle{StyleType: cfg.StyleType, StyleWeight: weight}
 	}
+	var referenceDataURI string
 	if cfg.SourceImageAssetID != "" {
 		dataURI, err := p.buildSubjectReferenceDataURI(ctx, cfg.SourceImageAssetID)
 		if err != nil {
 			return errOutputs(model.ExecCodeError, "source_image: "+err.Error()), nil
 		}
 		baseReq.SubjectReference = []SubjectReferenceItem{{Type: "character", ImageFile: dataURI}}
+		referenceDataURI = dataURI // reused below for checkIdentityMatch — no second download
 	}
 
 	// maxStyleAttempts only ever matters when cfg.ExpectedStyle is set
 	// (image.comic4 only) — every other caller's loop body runs exactly
 	// once, identical to before this field existed.
+	// checkIdentity gates the identity-consistency reroll (checkIdentityMatch
+	// below): only meaningful when there's an actual reference image to
+	// compare against (SourceImageAssetID) and the caller is asking for
+	// automatic quality checks at all (ExpectedStyle — set only by
+	// image.comic4, same scoping every other check here already uses).
+	checkIdentity := cfg.ExpectedStyle != "" && referenceDataURI != ""
+
 	const maxStyleAttempts = 3
 	var resp *ImageGenerationResponse
 	for attempt := 1; ; attempt++ {
 		mmReq := baseReq
-		if attempt > 1 {
-			// Rerolling because the previous attempt looked photorealistic
-			// instead of the requested style — reusing the exact same seed
-			// would very likely reproduce the same (rejected) image, so
-			// this attempt lets MiniMax pick a fresh one. Trades away a
-			// little of this one panel's seed-based consistency with its
-			// siblings for actually matching the requested art style, which
-			// matters more (image_comic4.go's own doc on this feature).
-			mmReq.Seed = nil
+		if attempt > 1 && seed != nil {
+			// Rerolling because the previous attempt failed a quality check
+			// — reusing the exact same seed would very likely reproduce the
+			// same (rejected) image. A *fully* random reseed here used to
+			// undo the whole point of image_comic4's shared per-job seed:
+			// found live that a panel needing even one reroll could end up
+			// looking like a visibly different character from its
+			// (non-rerolled) siblings, since it alone lost the shared seed
+			// neighborhood. A small deterministic offset still gives
+			// MiniMax a genuinely different sample to try while staying
+			// close enough to the original seed's own visual identity.
+			s := *seed + int64(attempt)
+			mmReq.Seed = &s
+		} else if attempt > 1 {
+			mmReq.Seed = nil // no shared seed was requested in the first place — nothing to stay close to
 		}
 		var err error
 		resp, err = p.client.GenerateImage(ctx, mmReq)
@@ -176,16 +201,30 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 			return errOutputs(model.ExecCodeError, fmt.Sprintf("unclassified(%d): %s", resp.BaseResp.StatusCode, resp.BaseResp.StatusMsg)), nil
 		}
 
-		if cfg.ExpectedStyle == "" || len(resp.Data.ImageURLs) == 0 {
-			break // no style gate requested, or nothing to check — accept as-is, same as pre-existing behavior
+		if (cfg.ExpectedStyle == "" && cfg.ExpectedDialogue == "" && !checkIdentity) || len(resp.Data.ImageURLs) == 0 {
+			break // no quality gate requested, or nothing to check — accept as-is, same as pre-existing behavior
 		}
-		stylized, checkErr := p.checkIllustrationStyle(ctx, resp.Data.ImageURLs[0], cfg.ExpectedStyle)
-		if checkErr != nil || stylized || attempt >= maxStyleAttempts {
-			// Accept: the check itself is advisory (an infra hiccup here
-			// must never fail an otherwise-successful generation, same
-			// posture as projection.go's own reviewAsset), or it genuinely
-			// passed, or we're out of rerolls — whichever it is, this is
-			// the image that ships.
+		passed := true
+		if cfg.ExpectedStyle != "" {
+			ok, checkErr := p.checkIllustrationStyle(ctx, resp.Data.ImageURLs[0], cfg.ExpectedStyle)
+			passed = checkErr != nil || ok // an infra hiccup here is advisory-pass, same posture as projection.go's own reviewAsset
+		}
+		// Every later check below only runs once the earlier ones already
+		// passed — this attempt is getting rerolled either way once any one
+		// check fails, so there's no point spending another vision call
+		// finding out whether the others also happen to be wrong.
+		if passed && checkIdentity {
+			ok, checkErr := p.checkIdentityMatch(ctx, resp.Data.ImageURLs[0], referenceDataURI)
+			passed = checkErr != nil || ok
+		}
+		if passed && cfg.ExpectedDialogue != "" {
+			ok, checkErr := p.checkDialogueText(ctx, resp.Data.ImageURLs[0], cfg.ExpectedDialogue)
+			passed = checkErr != nil || ok
+		}
+		if passed || attempt >= maxStyleAttempts {
+			// Accept: both requested checks passed (or weren't requested),
+			// or we're out of rerolls — either way, this is the image that
+			// ships.
 			break
 		}
 	}
@@ -277,13 +316,17 @@ func (p *ImagePlugin) buildSubjectReferenceDataURI(ctx context.Context, assetBiz
 
 // checkIllustrationStyle asks MiniMax-M3's vision input whether a
 // just-generated image (still at its temporary MiniMax-hosted URL — no need
-// to download/re-host it ourselves just to ask about it) reads as a real
-// photograph instead of the requested illustrated style. Same "advisory,
-// any error or unparseable response is treated as a pass" posture as
-// projection.go's own reviewAsset (in package projection, otherwise the
-// same pattern) — a false negative here just means one panel looks more
-// photorealistic than asked, not a broken job; only Execute's caller
-// (cfg.ExpectedStyle != "") ever invokes this at all.
+// to download/re-host it ourselves just to ask about it) actually matches
+// the requested art style specifically, not just "any non-photo style".
+// Found live that a looser photo-vs-illustration binary let a 3D-rendered
+// CGI/Pixar-style panel pass right alongside sibling panels correctly
+// rendered as flat 2D cel-shaded anime — a real style-consistency defect
+// across the same comic, even though no individual panel was "photorealistic"
+// on its own. Same "advisory, any error or unparseable response is treated
+// as a pass" posture as projection.go's own reviewAsset (in package
+// projection, otherwise the same pattern) — a false negative here just means
+// one panel looks stylistically off, not a broken job; only Execute's
+// caller (cfg.ExpectedStyle != "") ever invokes this at all.
 func (p *ImagePlugin) checkIllustrationStyle(ctx context.Context, imageURL, expectedStyle string) (stylized bool, err error) {
 	resp, err := p.client.ChatCompletion(ctx, ChatCompletionRequest{
 		Model: textModel,
@@ -291,11 +334,13 @@ func (p *ImagePlugin) checkIllustrationStyle(ctx context.Context, imageURL, expe
 			Role: "user",
 			Content: []map[string]any{
 				{"type": "image_url", "image_url": map[string]string{"url": imageURL}},
-				{"type": "text", "text": "This image is supposed to be rendered in this art style: \"" + expectedStyle +
-					"\". Look at it carefully. If it instead looks like a real photograph (realistic photographic " +
-					"lighting/texture, not a stylized illustration), reply with exactly \"REALISTIC\" and nothing else. " +
-					"If it genuinely looks like an illustrated/cartoon/anime/comic drawing matching that style, reply " +
-					"with exactly \"STYLIZED\" and nothing else."},
+				{"type": "text", "text": "This image is supposed to be rendered in exactly this art style: \"" + expectedStyle +
+					"\". Look at it carefully and judge strictly. Reply with exactly \"MISMATCH\" and nothing else if ANY of " +
+					"these are true: it looks like a real photograph rather than a drawing; it is a 3D-rendered / CGI / " +
+					"Pixar-like style when the requested style calls for flat 2D illustration (or vice versa); its line " +
+					"work, shading, or overall rendering technique otherwise clearly does not match the requested style " +
+					"description. Reply with exactly \"MATCH\" and nothing else only if it genuinely looks like it was " +
+					"drawn in that specific style."},
 			},
 		}},
 		Temperature:         0,
@@ -308,7 +353,91 @@ func (p *ImagePlugin) checkIllustrationStyle(ctx context.Context, imageURL, expe
 	if len(resp.Choices) == 0 {
 		return true, nil
 	}
-	return !strings.Contains(strings.ToUpper(resp.Choices[0].Message.Content), "REALISTIC"), nil
+	return !strings.Contains(strings.ToUpper(resp.Choices[0].Message.Content), "MISMATCH"), nil
+}
+
+// checkDialogueText asks MiniMax-M3's vision input to actually read the
+// speech-bubble text in a just-generated image and compare it against the
+// intended line. Found live that a comic panel's bubble can render
+// confident-looking but genuinely garbled text (e.g. "When will I pou
+// leld?" for an intended English line) — a defect a style check has no way
+// to catch, since the panel can otherwise be a perfectly on-style
+// illustration. Same "advisory, any error or unparseable response is a
+// pass" posture as checkIllustrationStyle — only Execute's caller
+// (cfg.ExpectedDialogue != "") ever invokes this at all.
+func (p *ImagePlugin) checkDialogueText(ctx context.Context, imageURL, expectedDialogue string) (matches bool, err error) {
+	resp, err := p.client.ChatCompletion(ctx, ChatCompletionRequest{
+		Model: textModel,
+		Messages: []ChatMessage{{
+			Role: "user",
+			Content: []map[string]any{
+				{"type": "image_url", "image_url": map[string]string{"url": imageURL}},
+				{"type": "text", "text": "This image should contain a speech bubble whose text reads exactly: \"" + expectedDialogue +
+					"\". Read the actual text rendered inside the bubble carefully, letter by letter. Reply with exactly " +
+					"\"MISMATCH\" and nothing else if the bubble is missing, illegible, garbled, or the text differs from " +
+					"the intended line in any way (extra/missing/wrong letters, nonsense words, wrong language). Reply with " +
+					"exactly \"MATCH\" and nothing else only if the rendered text is clearly legible and reads correctly " +
+					"(minor case/punctuation differences are fine)."},
+			},
+		}},
+		Temperature:         0,
+		MaxCompletionTokens: 20,
+		Thinking:            &ThinkingConfig{Type: "disabled"},
+	})
+	if err != nil {
+		return true, err
+	}
+	if len(resp.Choices) == 0 {
+		return true, nil
+	}
+	return !strings.Contains(strings.ToUpper(resp.Choices[0].Message.Content), "MISMATCH"), nil
+}
+
+// checkIdentityMatch asks MiniMax-M3's vision input whether a just-generated
+// panel actually depicts the same character as the reference image it was
+// anchored on. Found live that image.comic4's panels — even though every
+// one is independently anchored on the identical reference image, not
+// chained off each other — could still visibly diverge from one another:
+// specifically, a panel that needed even one style/dialogue reroll lost its
+// shared per-job seed (this file's own Execute doc on that), and the
+// resulting fresh sample sometimes drifted far enough from the reference
+// that it read as a different individual (wrong face shape, wrong
+// coloring/markings) rather than just a different pose of the same one.
+// subject_reference itself doesn't guarantee this — see comic_plan.go's
+// DescribeReferenceSubject doc on why it's documented as portrait-tuned,
+// not a hard identity lock for every subject. referenceDataURI is the exact
+// same data URI already sent as this call's own subject_reference, reused
+// here rather than re-downloaded. Same "advisory, any error or unparseable
+// response is a pass" posture as this file's other checks.
+func (p *ImagePlugin) checkIdentityMatch(ctx context.Context, generatedURL, referenceDataURI string) (matches bool, err error) {
+	resp, err := p.client.ChatCompletion(ctx, ChatCompletionRequest{
+		Model: textModel,
+		Messages: []ChatMessage{{
+			Role: "user",
+			Content: []map[string]any{
+				{"type": "text", "text": "Image 1 is the reference character:"},
+				{"type": "image_url", "image_url": map[string]string{"url": referenceDataURI}},
+				{"type": "text", "text": "Image 2 is a newly generated panel that is supposed to depict the exact same character:"},
+				{"type": "image_url", "image_url": map[string]string{"url": generatedURL}},
+				{"type": "text", "text": "Compare the main character's face/head in both images — same species/type, same coloring or " +
+					"markings, same distinguishing features, same general build. Ignore differences in pose, expression, camera " +
+					"angle, art style, or background — only judge whether it's plausibly the same individual. Reply with exactly " +
+					"\"MISMATCH\" and nothing else if image 2's character looks like a visibly different individual (wrong " +
+					"coloring/markings, different face shape, different species/type). Reply with exactly \"MATCH\" and nothing " +
+					"else if it's a reasonable depiction of the same character."},
+			},
+		}},
+		Temperature:         0,
+		MaxCompletionTokens: 20,
+		Thinking:            &ThinkingConfig{Type: "disabled"},
+	})
+	if err != nil {
+		return true, err
+	}
+	if len(resp.Choices) == 0 {
+		return true, nil
+	}
+	return !strings.Contains(strings.ToUpper(resp.Choices[0].Message.Content), "MISMATCH"), nil
 }
 
 func errOutputs(code int, msg string) *model.ExecOutputs {

@@ -10,11 +10,13 @@ import (
 	"context"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/BabySid/aether/executor"
 	"go.uber.org/zap"
 
 	"aigc-platform/internal/infra/cache"
+	"aigc-platform/internal/infra/executor/gemini"
 	"aigc-platform/internal/infra/executor/local"
 	"aigc-platform/internal/infra/executor/minimax"
 	"aigc-platform/internal/infra/executor/mock"
@@ -68,6 +70,29 @@ func main() {
 	must(registry.Register(local.NewGatePlugin()), log)
 	must(registry.Register(local.NewConcatPlugin(sink, sink)), log)
 	must(registry.Register(local.NewCollectRefsPlugin()), log)
+
+	// Gemini/Vertex AI is comic4's optional second image-generation provider
+	// (image_comic4.go's Spec.ImageProvider) — opt-in, gated on
+	// GEMINI_VERTEX_PROJECT_ID being set. Unlike MiniMax it isn't a hard
+	// startup dependency: a misconfigured or not-yet-provisioned Vertex AI
+	// project shouldn't take down the whole worker over an optional feature,
+	// so construction failure here just logs and skips registration —
+	// image.comic4 jobs that pick "gemini" would then fail at the executor
+	// lookup with a clear "unknown type" error instead.
+	if projectID := config.GeminiVertexProjectID(); projectID != "" {
+		geminiClient, err := gemini.NewClient(ctx, gemini.Config{
+			ProjectID: projectID,
+			Location:  config.GeminiVertexLocation(),
+			Model:     config.GeminiImageModel(),
+		})
+		if err != nil {
+			log.Error("gemini client init failed, image.comic4's gemini provider will be unavailable", zap.Error(err))
+		} else {
+			geminiLimiter := gemini.NewLimiter(redisClient, "default", config.GeminiVertexConcurrency(),
+				time.Duration(config.GeminiVertexMinIntervalMs())*time.Millisecond)
+			must(registry.Register(gemini.NewImagePlugin(geminiClient, sink, sink, geminiLimiter)), log)
+		}
+	}
 
 	log.Info("worker starting", zap.Int("concurrency", config.WorkerConcurrency()))
 	redisOpt := cache.AsynqRedisOpt(config.RedisAddr(), config.RedisURL())

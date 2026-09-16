@@ -2,9 +2,9 @@
   "apiVersion": "aether/v1",
   "kind": "Workflow",
   "metadata": {
-    "name": "image-single",
+    "name": "image-single-gemini",
     "annotations": {
-      "description": "F5.1/F5.2 单图与批量出图已合并: 1 个 Task, n=1..9 (单次 MiniMax 调用出 1..9 张，n=1 时就是原本的单图), 不是 N 个并行 Task — 见 PRD §4.2 划分原则。image.batch 作为独立 workflow_name 已撤除，n 现在是 image.single 自己的可选参数。"
+      "description": "image.single's Gemini/Vertex AI counterpart (Spec.ImageProvider=\"gemini\") — same 1-task shape as image-single.json, routed to gemini.image instead of minimax.image. reference-image-asset-ids (plural, unlike minimax's single source-image-asset-id) exists specifically to exercise Gemini's own multi-image-fusion recipe for a scene needing more than one bound character at once, which MiniMax's subject_reference (exactly one reference image per call) can never do."
     }
   },
   "spec": {
@@ -13,7 +13,7 @@
       "parameters": [
         { "name": "prompt", "type": "string" },
         { "name": "seed", "type": "string" },
-        { "name": "source-image-asset-id", "type": "string" },
+        { "name": "reference-image-asset-ids", "type": "array" },
         { "name": "user-id", "type": "string" },
         { "name": "n", "type": "string", "default": "1" },
         { "name": "aspect-ratio", "type": "string", "default": "" }
@@ -26,12 +26,12 @@
           "tasks": [
             {
               "name": "gen",
-              "template": "gen-image",
+              "template": "gen-image-gemini",
               "arguments": {
                 "parameters": [
                   { "name": "prompt", "valueFrom": { "parameter": "workflow.parameters.prompt" } },
                   { "name": "seed", "valueFrom": { "parameter": "workflow.parameters.seed" } },
-                  { "name": "source-image-asset-id", "valueFrom": { "parameter": "workflow.parameters.source-image-asset-id" } },
+                  { "name": "reference-image-asset-ids", "valueFrom": { "parameter": "workflow.parameters.reference-image-asset-ids" } },
                   { "name": "user-id", "valueFrom": { "parameter": "workflow.parameters.user-id" } },
                   { "name": "n", "valueFrom": { "parameter": "workflow.parameters.n" } },
                   { "name": "aspect-ratio", "valueFrom": { "parameter": "workflow.parameters.aspect-ratio" } }
@@ -43,13 +43,13 @@
       },
       {
         "task": {
-          "name": "gen-image",
-          "executor": { "type": "minimax.image" },
+          "name": "gen-image-gemini",
+          "executor": { "type": "gemini.image" },
           "inputs": {
             "parameters": [
               { "name": "prompt", "type": "string" },
               { "name": "seed", "type": "string" },
-              { "name": "source-image-asset-id", "type": "string" },
+              { "name": "reference-image-asset-ids", "type": "array" },
               { "name": "user-id", "type": "string" },
               { "name": "n", "type": "string" },
               { "name": "aspect-ratio", "type": "string", "value": "" }

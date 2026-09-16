@@ -239,6 +239,11 @@ export default function Studio() {
   // mode now).
   const [comicMode, setComicMode] = useState<'manual' | 'auto'>('manual')
   const [story, setStory] = useState('')
+  // image.comic4's optional second image-generation provider (jobsvc.go's
+  // Spec.ImageProvider doc) — an opt-in comparison toggle, not a permanent
+  // UI fixture: MiniMax stays the default in every other tab and for anyone
+  // who doesn't touch this.
+  const [imageProvider, setImageProvider] = useState<'minimax' | 'gemini'>('minimax')
   // image.sequence's own quick/continuity toggle (Spec.ImageSequenceMode
   // doc) — unlike comic4, image.sequence keeps both modes since its
   // #-mention override needs a real "off" state to fall back to.
@@ -535,6 +540,7 @@ export default function Studio() {
         spec.panels = splitPanels(panelsText)
       }
       if (sourceImageId) spec.source_image_asset_id = sourceImageId
+      if (imageProvider === 'gemini') spec.image_provider = 'gemini'
     } else if (tab === 'image.sequence') {
       // Blank shots get dropped, which shifts every later shot's position —
       // filterShotsWithRefs renumbers shotSourceRefs' 1-based indices (and
@@ -785,6 +791,27 @@ export default function Studio() {
                 >
                   {t('studio.comic.auto')}
                 </button>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-zinc-500">
+                <span>{t('studio.comic.provider')}</span>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setImageProvider('minimax')}
+                    className={`rounded-md px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${imageProvider === 'minimax' ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-500 hover:bg-zinc-950'}`}
+                  >
+                    MiniMax
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImageProvider('gemini')}
+                    className={`rounded-md px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${imageProvider === 'gemini' ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-500 hover:bg-zinc-950'}`}
+                    title={t('studio.comic.providerGeminiTooltip')}
+                  >
+                    Gemini
+                  </button>
+                </div>
               </div>
 
               {/* Every panel always chains to the one before it and gets an

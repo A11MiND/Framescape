@@ -247,6 +247,7 @@ export interface Spec {
   preset_ids?: string[]
   seed?: number
   source_image_asset_id?: string // F5.8, image.single only
+  image_provider?: 'minimax' | 'gemini' // image.comic4 only — see jobsvc.go's Spec.ImageProvider doc; omitted/'minimax' is the default
   // video.single / video.sequence fields, unused by the image forms.
   duration_seconds?: number
   resolution?: string

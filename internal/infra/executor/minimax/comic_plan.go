@@ -304,6 +304,48 @@ func parseComicPlan(raw string, req PlanComicRequest) *ComicPlan {
 	return plan
 }
 
+// DescribeReferenceSubject asks MiniMax-M3's vision input for a short,
+// reusable text description of a reference photo's specific subject —
+// coloring, markings, body type, anything that would let the same subject be
+// drawn consistently across panels from text alone. Returns "" (not an
+// error) on any failure — advisory only, same "never block job submission"
+// posture as PlanComic.
+//
+// This matters specifically because MiniMax's own subject_reference
+// mechanism (client.go's SubjectReferenceItem, type "character") is
+// documented as a portrait feature — its own API reference recommends "a
+// single person's front-facing photo" for best results — so identity
+// preservation for a non-human subject (a pet, in image.comic4's own
+// motivating use case) is inherently less reliable through the image
+// channel alone. Repeating an explicit text description of the actual
+// photographed subject in every panel's own prompt gives a second,
+// species-agnostic consistency anchor that doesn't depend on
+// subject_reference generalizing beyond what it was built for.
+func DescribeReferenceSubject(ctx context.Context, client *Client, imageURL string) (string, error) {
+	resp, err := client.ChatCompletion(ctx, ChatCompletionRequest{
+		Model: textModel,
+		Messages: []ChatMessage{{
+			Role: "user",
+			Content: []map[string]any{
+				{"type": "image_url", "image_url": map[string]string{"url": imageURL}},
+				{"type": "text", "text": "Look at the main subject in this photo (a person, pet, or other character). " +
+					"In one or two short sentences in Chinese, describe only its specific, distinguishing visual " +
+					"features — coloring/fur or hair pattern, markings, body type, breed if identifiable, and any " +
+					"other detail that would let someone draw this exact subject consistently across multiple separate " +
+					"illustrations. Do not describe the background, pose, or lighting. Output only the description, " +
+					"nothing else."},
+			},
+		}},
+		Temperature:         0.2,
+		MaxCompletionTokens: 150,
+		Thinking:            &ThinkingConfig{Type: "disabled"},
+	})
+	if err != nil || len(resp.Choices) == 0 {
+		return "", err
+	}
+	return strings.TrimSpace(resp.Choices[0].Message.Content), nil
+}
+
 // fallbackReferenceStrategy is the same Go-side heuristic image_comic4.go
 // would otherwise have to hardcode: with a real reference image and only one
 // bound character, anchor every panel on it; with 2+ bound characters, let

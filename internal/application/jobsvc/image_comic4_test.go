@@ -78,7 +78,7 @@ func testPlans(refIDs ...string) []panelPlan {
 
 func TestBuildComic4Workflow_ChainStrategy_PanelsDependSequentially(t *testing.T) {
 	plans := testPlans("char-asset", "", "", "")
-	raw := buildComic4Workflow(plans, minimax.RefStrategyChain, minimax.LayoutGridEqual, "")
+	raw := buildComic4Workflow(plans, minimax.RefStrategyChain, minimax.LayoutGridEqual, "", imageProviderMiniMax)
 	tasks := mainTasks(t, raw)
 
 	// Panel 1's own literal reference is routed through the one-time
@@ -109,7 +109,7 @@ func TestBuildComic4Workflow_ChainStrategy_PanelsDependSequentially(t *testing.T
 
 func TestBuildComic4Workflow_AnchorStrategy_PanelsAreIndependent(t *testing.T) {
 	plans := testPlans("char-asset", "char-asset", "char-asset", "char-asset")
-	raw := buildComic4Workflow(plans, minimax.RefStrategyAnchor, minimax.LayoutGridEqual, "")
+	raw := buildComic4Workflow(plans, minimax.RefStrategyAnchor, minimax.LayoutGridEqual, "", imageProviderMiniMax)
 	tasks := mainTasks(t, raw)
 
 	for i := 1; i <= 4; i++ {
@@ -141,7 +141,7 @@ func TestBuildComic4Workflow_AnchorStrategy_PanelsAreIndependent(t *testing.T) {
 
 func TestBuildComic4Workflow_AnchorPerCharacterStrategy_UsesPerPanelAsset(t *testing.T) {
 	plans := testPlans("asset-a", "asset-b", "asset-a", "asset-b")
-	raw := buildComic4Workflow(plans, minimax.RefStrategyAnchorPerCharacter, minimax.LayoutGridEqual, "")
+	raw := buildComic4Workflow(plans, minimax.RefStrategyAnchorPerCharacter, minimax.LayoutGridEqual, "", imageProviderMiniMax)
 	tasks := mainTasks(t, raw)
 
 	wantStylizeTask := []string{"stylize-reference-1", "stylize-reference-2", "stylize-reference-1", "stylize-reference-2"}
@@ -161,7 +161,7 @@ func TestBuildComic4Workflow_AnchorPerCharacterStrategy_UsesPerPanelAsset(t *tes
 
 func TestBuildComic4Workflow_NoneStrategy_NoReferenceImage(t *testing.T) {
 	plans := testPlans("", "", "")
-	raw := buildComic4Workflow(plans, minimax.RefStrategyNone, minimax.LayoutGridEqual, "")
+	raw := buildComic4Workflow(plans, minimax.RefStrategyNone, minimax.LayoutGridEqual, "", imageProviderMiniMax)
 	tasks := mainTasks(t, raw)
 
 	for i := 1; i <= 3; i++ {
@@ -179,7 +179,7 @@ func TestBuildComic4Workflow_NoneStrategy_NoReferenceImage(t *testing.T) {
 func TestBuildComic4Workflow_DialogueInjectedIntoPrompt(t *testing.T) {
 	plans := testPlans("", "")
 	plans[0].Dialogue = "早安，今天也要加油！"
-	raw := buildComic4Workflow(plans, minimax.RefStrategyNone, minimax.LayoutGridEqual, "")
+	raw := buildComic4Workflow(plans, minimax.RefStrategyNone, minimax.LayoutGridEqual, "", imageProviderMiniMax)
 	tasks := mainTasks(t, raw)
 
 	prompt1, _ := param(t, tasks["enhance-panel-1"], "prompt").Value.(string)
@@ -204,7 +204,7 @@ func TestBuildComic4Workflow_DialogueInjectedIntoPrompt(t *testing.T) {
 // alongside the recap.
 func TestBuildComic4Workflow_OutlineGuardsAgainstShotBleeding(t *testing.T) {
 	plans := testPlans("", "", "")
-	raw := buildComic4Workflow(plans, minimax.RefStrategyNone, minimax.LayoutGridEqual, "")
+	raw := buildComic4Workflow(plans, minimax.RefStrategyNone, minimax.LayoutGridEqual, "", imageProviderMiniMax)
 	tasks := mainTasks(t, raw)
 
 	prompt1, _ := param(t, tasks["enhance-panel-1"], "prompt").Value.(string)
@@ -223,7 +223,7 @@ func TestBuildComic4Workflow_OutlineGuardsAgainstShotBleeding(t *testing.T) {
 
 func TestBuildComic4Workflow_LayoutPassedToCompose(t *testing.T) {
 	plans := testPlans("", "")
-	raw := buildComic4Workflow(plans, minimax.RefStrategyNone, minimax.LayoutFeatureLast, "")
+	raw := buildComic4Workflow(plans, minimax.RefStrategyNone, minimax.LayoutFeatureLast, "", imageProviderMiniMax)
 	tasks := mainTasks(t, raw)
 
 	layoutArg := param(t, tasks["compose"], "layout")
@@ -240,7 +240,7 @@ func TestBuildComic4Workflow_LayoutPassedToCompose(t *testing.T) {
 // strategy or panel index.
 func TestBuildComic4Workflow_StyleInjectedIntoEveryPanel(t *testing.T) {
 	plans := testPlans("photo-asset", "photo-asset")
-	raw := buildComic4Workflow(plans, minimax.RefStrategyAnchor, minimax.LayoutGridEqual, "日系动漫插画风格")
+	raw := buildComic4Workflow(plans, minimax.RefStrategyAnchor, minimax.LayoutGridEqual, "日系动漫插画风格", imageProviderMiniMax)
 	tasks := mainTasks(t, raw)
 
 	for _, name := range []string{"enhance-panel-1", "enhance-panel-2"} {
@@ -251,6 +251,79 @@ func TestBuildComic4Workflow_StyleInjectedIntoEveryPanel(t *testing.T) {
 		if !strings.Contains(p, "写实") {
 			t.Errorf("%s's prompt should explicitly rule out photorealistic rendering, got %q", name, p)
 		}
+	}
+}
+
+// TestBuildComic4Workflow_GeminiProvider_UsesGeminiTemplateAndOmitsQualityGateArgs
+// covers Spec.ImageProvider's "gemini" branch: every panel and the
+// stylize-reference pass must route through gen-one-panel-gemini (gemini.image)
+// instead of gen-one-panel (minimax.image), and must never pass
+// expected-style/expected-dialogue — gemini.ImagePlugin's ImageConfig
+// doesn't declare those fields, so passing them would either be silently
+// ignored or (if the gemini template also declared them) a maintenance trap
+// implying a QA loop that doesn't actually exist for this provider.
+func TestBuildComic4Workflow_GeminiProvider_UsesGeminiTemplateAndOmitsQualityGateArgs(t *testing.T) {
+	plans := testPlans("photo-asset", "photo-asset")
+	plans[0].Dialogue = "早安！"
+	raw := buildComic4Workflow(plans, minimax.RefStrategyAnchor, minimax.LayoutGridEqual, "日系动漫插画风格", imageProviderGemini)
+	tasks := mainTasks(t, raw)
+
+	for _, name := range []string{"panel-1", "panel-2", "stylize-reference-1"} {
+		task, ok := tasks[name]
+		if !ok {
+			t.Fatalf("expected task %q to exist", name)
+		}
+		if task.Template != "gen-one-panel-gemini" {
+			t.Errorf("%s should use the gemini template, got %q", name, task.Template)
+		}
+		for _, p := range task.Arguments.Parameters {
+			if p.Name == "expected-style" || p.Name == "expected-dialogue" {
+				t.Errorf("%s should not carry %q for the gemini provider, got %+v", name, p.Name, p)
+			}
+		}
+	}
+
+	if got := param(t, tasks["stylize-reference-1"], "source-image-asset-id").Value; got != "photo-asset" {
+		t.Errorf("stylize-reference-1 should still convert the original literal asset, got %+v", got)
+	}
+	panel1Ref := param(t, tasks["panel-1"], "source-image-asset-id")
+	if panel1Ref.ValueFrom == nil || !strings.Contains(panel1Ref.ValueFrom.Parameter, "stylize-reference-1") {
+		t.Errorf("panel 1 should still anchor on the stylized reference under the gemini provider, got %+v", panel1Ref)
+	}
+
+	// The gemini-provider job's own templates section should declare
+	// gen-one-panel-gemini, not gen-one-panel — decoded separately from
+	// mainTasks since template declarations live alongside, not inside, the
+	// dag's own task list.
+	var doc struct {
+		Spec struct {
+			Templates []struct {
+				Task *struct {
+					Name string `json:"name"`
+				} `json:"task"`
+			} `json:"templates"`
+		} `json:"spec"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("decode workflow JSON: %v", err)
+	}
+	var sawGeminiTemplate, sawMinimaxTemplate bool
+	for _, tpl := range doc.Spec.Templates {
+		if tpl.Task == nil {
+			continue
+		}
+		switch tpl.Task.Name {
+		case "gen-one-panel-gemini":
+			sawGeminiTemplate = true
+		case "gen-one-panel":
+			sawMinimaxTemplate = true
+		}
+	}
+	if !sawGeminiTemplate {
+		t.Error("workflow should declare the gen-one-panel-gemini task template")
+	}
+	if sawMinimaxTemplate {
+		t.Error("a gemini-provider workflow should not also declare the minimax gen-one-panel template")
 	}
 }
 

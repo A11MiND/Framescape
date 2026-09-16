@@ -91,6 +91,14 @@ services:
       REDIS_ADDR: "redis:6379"
       MINIO_ENDPOINT: "minio:9000"
       MINIO_PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-http://localhost}/aigc-assets"
+    # GEMINI_VERTEX_CREDENTIALS_HOST_PATH (local-only, set in .env, never
+    # committed) mounts a GCP service-account key file read-only at the path
+    # GOOGLE_APPLICATION_CREDENTIALS points to inside the container — the
+    # Vertex AI SDK reads it directly, this compose file never does. Empty/
+    # unset on any deployment without Gemini configured just mounts nothing
+    # extra were it not for the default below; see .env.example.
+    volumes:
+      - ${GEMINI_VERTEX_CREDENTIALS_HOST_PATH:-/dev/null}:/run/secrets/gemini-credentials.json:ro
     # ffprobe/ffmpeg (internal/infra/executor/local) fetch the asset's stored
     # PublicURL directly — the same URL a browser on the host uses. When
     # PUBLIC_BASE_URL is host-relative ("http://localhost"), that resolves to

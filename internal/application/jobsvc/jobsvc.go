@@ -97,6 +97,24 @@ type Spec struct {
 	// unchanged to "同 reference").
 	SourceImageAssetID string `json:"source_image_asset_id,omitempty"`
 
+	// ImageProvider applies to image.comic4 and image.single: "" (default) or
+	// "minimax" uses MiniMax's image_generation as always; "gemini" routes
+	// generation to Google's gemini-2.5-flash-image (Vertex AI) instead,
+	// added specifically to compare character-consistency/dialogue-text
+	// fidelity against MiniMax's portrait-tuned subject_reference. Any other
+	// value falls back to "minimax" (createImageComic4's own
+	// normalizeImageProvider, reused by Create's image.single branch) rather
+	// than failing the job — a stale/unrecognized value from an older
+	// frontend build should never block submission.
+	ImageProvider string `json:"image_provider,omitempty"`
+	// AspectRatio is image.single only, for now: MiniMax's own
+	// image_generation and Gemini's GenerateContent both accept the same
+	// small set of ratio strings ("1:1", "4:3", "16:9", "9:16", etc — not
+	// separately whitelisted here, each executor's own API call is the
+	// validation). "" defaults to "1:1" in both executors, unchanged from
+	// image.single's behavior before this field existed.
+	AspectRatio string `json:"aspect_ratio,omitempty"`
+
 	// video.single only (F6.1-F6.3; PRD §3.2). Exactly one of
 	// {FirstFrameAssetID, LastFrameAssetID} vs the three Reference*AssetIDs
 	// fields may be set — enforced again in minimax.video itself, but this is
@@ -263,6 +281,9 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 	if workflowName == "video.single" && spec.PromptEnhance {
 		defFile = "video-single-enhanced"
 	}
+	if workflowName == "image.single" && normalizeImageProvider(spec.ImageProvider) == imageProviderGemini {
+		defFile = "image-single-gemini"
+	}
 	raw, err := workflowdefs.FS.ReadFile(defFile + ".json")
 	if err != nil {
 		return nil, fmt.Errorf("load workflow definition %q: %w", defFile, err)
@@ -298,7 +319,7 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 		compiled := prompt.Compile(prompt.Input{Text: spec.Text, Characters: characters, Presets: presets, Seed: spec.Seed})
 		args["prompt"] = compiled.Prompt
 		args["seed"] = formatSeed(compiled.Seed)
-		args["source-image-asset-id"] = spec.SourceImageAssetID
+		args["aspect-ratio"] = spec.AspectRatio
 		n := spec.N
 		if n <= 0 {
 			n = 1
@@ -307,6 +328,35 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 			n = 9 // mirrors image.go's own MiniMax-hard-limit clamp, so the hold matches what actually runs
 		}
 		args["n"] = strconv.Itoa(n)
+
+		// refAssetIDs mirrors F6.4's video.single auto-reference (below):
+		// an explicit SourceImageAssetID always wins; otherwise, if
+		// characters are bound, fall back to their own F3.1 reference
+		// images rather than requiring the caller to re-pick the same
+		// asset by hand. Previously image.single never did this at all —
+		// only an explicit SourceImageAssetID worked, so a caller with a
+		// bound character still had to separately re-select its own asset.
+		var refAssetIDs []string
+		if spec.SourceImageAssetID != "" {
+			refAssetIDs = []string{spec.SourceImageAssetID}
+		} else if len(spec.Characters) > 0 {
+			autoRefs, err := s.resolveCharacterRefAssetIDs(ctx, userID, spec.Characters)
+			if err != nil {
+				return nil, err
+			}
+			refAssetIDs = autoRefs
+		}
+		// minimax.image only ever takes one reference image per call
+		// (subject_reference's own hard limit — image_comic4.go's package
+		// doc), so image-single.json's singular field only ever sees the
+		// first one; gemini.image's plural field (image-single-gemini.json)
+		// is the one path that can actually use more than one at once (its
+		// own ImageConfig doc: Google's own multi-image-fusion recipe).
+		args["source-image-asset-id"] = ""
+		if len(refAssetIDs) > 0 {
+			args["source-image-asset-id"] = refAssetIDs[0]
+		}
+		args["reference-image-asset-ids"] = nonNil(refAssetIDs)
 		estimatedCredits = creditsvc.EstimateImageCredits(n)
 	case "video.single":
 		// §3.2's 7000-char cap, not image's 1500 (PRD §3.1) — video.go itself
@@ -781,6 +831,21 @@ func (s *Service) resolveCharacterPlanInfo(ctx context.Context, userID uint64, s
 		}
 	}
 	return infos, slotRefAsset, nil
+}
+
+// resolveAssetPublicURL looks up one asset's persisted public_url column
+// directly — jobsvc runs in cmd/api, which holds no assetstore.Reader (that
+// lives in the worker's executor wiring only), but public_url is
+// materialized once at asset-creation time and stored on the row itself
+// (persistence.Asset), so a plain read through the existing db handle is
+// enough; no storage client needed. Used only by image_comic4.go's
+// subjectDescription extraction, which treats any error here as advisory
+// (empty description, not a failure).
+func (s *Service) resolveAssetPublicURL(ctx context.Context, assetBizID string) (string, error) {
+	var url string
+	err := s.db.WithContext(ctx).Model(&persistence.Asset{}).
+		Where("biz_id = ?", assetBizID).Limit(1).Pluck("public_url", &url).Error
+	return url, err
 }
 
 func (s *Service) resolvePresets(ctx context.Context, presetIDs []string) ([]prompt.Preset, error) {

@@ -440,7 +440,9 @@
       "insertSeparator": "+ Insert separator ---",
       "detectedCount": "{{n}} panels detected",
       "storyPlaceholder": "A complete story — the system will auto-split it into consecutive panels",
-      "panelCount": "Panels"
+      "panelCount": "Panels",
+      "provider": "Image model",
+      "providerGeminiTooltip": "Experimental: generate each panel with Google Gemini instead, for comparing against MiniMax"
     },
     "imageSequence": {
       "addLabel": "+ Add an image",

@@ -124,6 +124,44 @@ func SuspendedTimeout() time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
+// --- Gemini / Vertex AI (image.comic4's optional second image-generation
+// provider, alongside MiniMax — see internal/infra/executor/gemini). Auth is
+// never read here: the Vertex AI Go SDK authenticates via Application
+// Default Credentials, so a service-account key file is wired in purely by
+// pointing the standard GOOGLE_APPLICATION_CREDENTIALS env var at it (same
+// posture as every other provider credential in this codebase — never
+// read/parsed/logged by our own code). ---
+
+// GeminiVertexProjectID is the GCP project ID Vertex AI calls bill against.
+// Empty (the default) disables Gemini registration entirely in cmd/worker —
+// this feature is opt-in, MiniMax remains comic4's default provider.
+func GeminiVertexProjectID() string { return getEnv("GEMINI_VERTEX_PROJECT_ID", "") }
+
+// GeminiVertexLocation is the Vertex AI region GenerateContent calls target.
+func GeminiVertexLocation() string { return getEnv("GEMINI_VERTEX_LOCATION", "us-central1") }
+
+// GeminiImageModel is the GA (non-preview) image-output Gemini model name.
+func GeminiImageModel() string { return getEnv("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image") }
+
+// GeminiVertexConcurrency caps concurrent Vertex AI generateContent calls
+// (gemini.Limiter's own doc: found live that comic4's anchor-mode DAG, which
+// deliberately fires every panel's generation in parallel, reliably tripped
+// a fresh GCP project's default per-project quota — one of four concurrent
+// panels came back "429 RESOURCE_EXHAUSTED" almost every time). 0 disables
+// the limiter (unbounded) — fine once this project's quota is confirmed
+// sufficient, but until then set this to a conservative number like 1 or 2.
+func GeminiVertexConcurrency() int { return getEnvInt("GEMINI_VERTEX_CONCURRENCY", 0) }
+
+// GeminiVertexMinIntervalMs paces gemini.Limiter's second gate: no new
+// Vertex AI call starts until this many milliseconds have passed since the
+// previous one started, regardless of concurrency slots free. 0 disables it.
+// Added after live testing found GeminiVertexConcurrency alone
+// insufficient — two calls that started simultaneously (concurrency check
+// passed for both) still both came back 429 RESOURCE_EXHAUSTED from Vertex
+// AI Express Mode, evidence the real ceiling is a requests-per-time-window
+// quota, not a concurrent-connections one.
+func GeminiVertexMinIntervalMs() int { return getEnvInt("GEMINI_VERTEX_MIN_INTERVAL_MS", 0) }
+
 // --- Google / phone login scaffolding — routes, DB columns, and frontend
 // entry points exist regardless (auth_oauth.go), but every one of them
 // checks these first and answers "not configured" (a real 4xx, not a
