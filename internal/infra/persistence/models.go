@@ -30,9 +30,12 @@ type User struct {
 	// default" account — found via every requireAuth-gated test in this
 	// package failing with account_suspended immediately after adding that
 	// check.
-	IsActive  bool      `gorm:"column:is_active;default:true"`
-	CreatedAt time.Time `gorm:"column:created_at"`
-	UpdatedAt time.Time `gorm:"column:updated_at"`
+	IsActive bool `gorm:"column:is_active;default:true"`
+	// ComicAIEnabled opts a non-admin account into OpenAI comic generation
+	// (migration 00022's gray release). Admins are allowed regardless.
+	ComicAIEnabled bool      `gorm:"column:comic_ai_enabled"`
+	CreatedAt      time.Time `gorm:"column:created_at"`
+	UpdatedAt      time.Time `gorm:"column:updated_at"`
 }
 
 func (User) TableName() string { return "users" }

@@ -32,6 +32,11 @@ export default function AdminUsers() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
     onError: (err) => pushToast(err instanceof ApiError ? err.message : t('admin.actionFailed')),
   })
+  const setComicAI = useMutation({
+    mutationFn: ({ bizId, enabled }: { bizId: string; enabled: boolean }) => api.adminSetComicAI(bizId, enabled),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
+    onError: (err) => pushToast(err instanceof ApiError ? err.message : t('admin.actionFailed')),
+  })
   const setActive = useMutation({
     mutationFn: ({ bizId, isActive }: { bizId: string; isActive: boolean }) => api.adminSetActive(bizId, isActive),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
@@ -67,7 +72,7 @@ export default function AdminUsers() {
             </div>
           </div>
           <div className="overflow-x-auto rounded-xl border border-zinc-800">
-            <table className="w-full text-sm">
+            <table className="w-full whitespace-nowrap text-sm">
               <thead>
                 <tr className="border-b border-zinc-800 text-left text-xs uppercase tracking-wide text-zinc-500">
                   <th className="px-4 py-2 font-normal">{t('admin.colAccount')}</th>
@@ -78,6 +83,7 @@ export default function AdminUsers() {
                   <th className="px-4 py-2 text-right font-normal">{t('admin.colJobs')}</th>
                   <th className="px-4 py-2 font-normal">{t('admin.colRole')}</th>
                   <th className="px-4 py-2 font-normal">{t('admin.colStatus')}</th>
+                  <th className="px-4 py-2 font-normal">{t('admin.colComicAi')}</th>
                   <th className="px-4 py-2 font-normal"></th>
                 </tr>
               </thead>
@@ -108,8 +114,17 @@ export default function AdminUsers() {
                         </span>
                       )}
                     </td>
+                    <td className="px-4 py-2.5">
+                      {u.is_admin ? (
+                        <span className="text-xs text-zinc-500">{t('admin.comicAiAdmin')}</span>
+                      ) : u.comic_ai_enabled ? (
+                        <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-xs text-violet-300">{t('admin.comicAiOn')}</span>
+                      ) : (
+                        <span className="text-xs text-zinc-600">{t('admin.comicAiOff')}</span>
+                      )}
+                    </td>
                     <td className="px-4 py-2.5 text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
                         <button
                           onClick={() => setGrantTarget(u)}
                           className="rounded-lg border border-zinc-800 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-violet-500 hover:text-violet-300"
@@ -123,6 +138,15 @@ export default function AdminUsers() {
                         >
                           {u.is_admin ? t('admin.revokeAdmin') : t('admin.makeAdmin')}
                         </button>
+                        {!u.is_admin && (
+                          <button
+                            onClick={() => setComicAI.mutate({ bizId: u.biz_id, enabled: !u.comic_ai_enabled })}
+                            disabled={setComicAI.isPending}
+                            className="rounded-lg border border-zinc-800 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-violet-500 hover:text-violet-300 disabled:opacity-50"
+                          >
+                            {u.comic_ai_enabled ? t('admin.comicAiDisable') : t('admin.comicAiEnable')}
+                          </button>
+                        )}
                         <button
                           onClick={() => setActive.mutate({ bizId: u.biz_id, isActive: !u.is_active })}
                           disabled={setActive.isPending}

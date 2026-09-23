@@ -26,6 +26,8 @@ export function AssetPicker({
   max,
   disabled,
   emptyHint,
+  filter,
+  accept,
 }: {
   type: 'image' | 'video'
   selected: string[]
@@ -33,6 +35,10 @@ export function AssetPicker({
   max?: number
   disabled?: boolean
   emptyHint?: string
+  // Narrows the library to assets a consumer can actually use (e.g. the
+  // comic editor's PNG/JPEG/WebP-only references); accept narrows uploads.
+  filter?: (asset: AssetResponse) => boolean
+  accept?: string
 }) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
@@ -47,11 +53,11 @@ export function AssetPicker({
     mutationFn: (file: File) => uploadAsset(file),
     onSuccess: (asset) => {
       qc.invalidateQueries({ queryKey: ['assets'] })
-      if (!max || selected.length < max) onToggle(asset.biz_id)
+      if ((!max || selected.length < max) && (!filter || filter(asset))) onToggle(asset.biz_id)
     },
   })
 
-  const all = assets.data?.assets ?? []
+  const all = (assets.data?.assets ?? []).filter((a) => !filter || filter(a))
   const selectedAssets = all.filter((a) => selected.includes(a.biz_id))
   const empty = assets.isSuccess && all.length === 0
 
@@ -96,7 +102,7 @@ export function AssetPicker({
         <input
           ref={fileInputRef}
           type="file"
-          accept={type === 'image' ? 'image/*' : 'video/*'}
+          accept={accept ?? (type === 'image' ? 'image/*' : 'video/*')}
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0]

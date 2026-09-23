@@ -86,7 +86,10 @@ func TestLimiterMinInterval(t *testing.T) {
 		rc.Del(context.Background(), "sem:gemini:image:"+accountID, "sem:gemini:image:lastdispatch:"+accountID)
 	})
 
-	minInterval := 150 * time.Millisecond
+	// Must exceed fastLimiter's 200ms polling budget. The old 150ms
+	// interval legitimately expired inside Acquire, so the "refused"
+	// assertion failed whenever this test actually ran against Redis.
+	minInterval := 5 * time.Second
 	limiter := fastLimiter(rc, accountID, 10, minInterval) // concurrency wide open — only the interval gate should bind
 	ctx := context.Background()
 
@@ -110,8 +113,12 @@ func TestLimiterMinInterval(t *testing.T) {
 		t.Errorf("acquire 2 gave up after %v, want it to poll out its MaxWait budget (%v)", elapsed, limiter.MaxWait)
 	}
 
-	// Enough real time has now passed (the failed poll loop above already
-	// spent >= minInterval) that a fresh acquire should succeed.
+	// Move the persisted dispatch timestamp beyond the interval without a
+	// slow wall-clock sleep. The next call still exercises the real Lua gate.
+	_, dispatchKey := limiter.keys()
+	if err := rc.Set(ctx, dispatchKey, time.Now().Add(-minInterval-time.Second).UnixMilli(), time.Minute).Err(); err != nil {
+		t.Fatal(err)
+	}
 	release2, ok, err := limiter.Acquire(ctx, "task-3")
 	if err != nil || !ok {
 		t.Fatalf("acquire after interval elapsed: ok=%v err=%v, want ok=true", ok, err)

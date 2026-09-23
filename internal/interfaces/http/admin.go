@@ -118,6 +118,7 @@ type adminUserRow struct {
 	Phone        *string   `json:"phone"`
 	IsAdmin      bool      `json:"is_admin"`
 	IsActive     bool      `json:"is_active"`
+	ComicAI      bool      `json:"comic_ai_enabled"`
 	Balance      int       `json:"balance"`
 	Held         int       `json:"held"`
 	CreditsSpent int       `json:"credits_spent"`
@@ -216,6 +217,7 @@ func (s *Server) handleAdminListUsers(c *gin.Context) {
 			Phone:        u.Phone,
 			IsAdmin:      u.IsAdmin,
 			IsActive:     u.IsActive,
+			ComicAI:      u.ComicAIEnabled,
 			Balance:      acct.Balance,
 			Held:         acct.Held,
 			CreditsSpent: int(spentByUser[u.ID]),
@@ -435,6 +437,38 @@ func (s *Server) handleAdminSetActive(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"biz_id": target.BizID, "is_active": *req.IsActive})
+}
+
+type setComicAIRequest struct {
+	Enabled *bool `json:"enabled" binding:"required"`
+}
+
+// handleAdminSetComicAI is POST /api/v1/admin/users/{bizID}/comic-ai:
+// opts one account in/out of the OpenAI comic gray release (migration
+// 00022). Admins are always allowed, so toggling one only matters if they
+// later lose admin.
+func (s *Server) handleAdminSetComicAI(c *gin.Context) {
+	var req setComicAIRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
+		return
+	}
+	res := s.db.WithContext(c.Request.Context()).Model(&persistence.User{}).Where("biz_id = ?", c.Param("bizID")).
+		Update("comic_ai_enabled", *req.Enabled)
+	if res.Error != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "update comic ai flag"))
+		return
+	}
+	if res.RowsAffected == 0 {
+		// MySQL reports 0 rows for a no-op update too; distinguish from not found.
+		var n int64
+		s.db.WithContext(c.Request.Context()).Model(&persistence.User{}).Where("biz_id = ?", c.Param("bizID")).Count(&n)
+		if n == 0 {
+			c.JSON(http.StatusNotFound, errBody("not_found", "user not found"))
+			return
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"biz_id": c.Param("bizID"), "comic_ai_enabled": *req.Enabled})
 }
 
 // handleAdminUsage is GET /api/v1/admin/usage?days=30: per-day job counts

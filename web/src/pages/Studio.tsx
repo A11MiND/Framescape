@@ -305,6 +305,10 @@ export default function Studio() {
     // of workflow_name use; without it this landed on tab: 'image.batch',
     // which matches no format card and populates no fields below.
     const workflowName = resolveTab(prefill.workflowName)
+    if (workflowName === 'image.comic4' && spec.comic_mode) {
+      navigate('/comics', { replace: true, state: { prefillComic: spec } })
+      return
+    }
     setTab(workflowName)
 
     const boundIds = (spec.characters ?? []).map((c) => c.character_id)
@@ -701,7 +705,9 @@ export default function Studio() {
             return (
               <button
                 key={tb}
-                onClick={() => setTab(tb)}
+                // Gray release: only accounts in the OpenAI comic beta land on the
+                // new editor; everyone else keeps the MiniMax/Gemini comic form.
+                onClick={() => tb === 'image.comic4' && me.data?.comic_ai ? navigate('/comics') : setTab(tb)}
                 className={`rounded-xl border p-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
                   active ? 'border-violet-500 bg-violet-500/10' : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700'
                 }`}

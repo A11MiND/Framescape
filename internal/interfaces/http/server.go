@@ -87,6 +87,10 @@ func (s *Server) Router() *gin.Engine {
 		authed := v1.Group("")
 		authed.Use(s.requireAuth())
 		authed.GET("/me", s.handleMe)
+		authed.GET("/comics", s.handleListComics)
+		authed.POST("/comics", s.handleSaveComic)
+		authed.GET("/comics/:bizID", s.handleGetComic)
+		authed.PATCH("/comics/:bizID", s.handleSaveComic)
 		authed.PATCH("/me/password", s.handleChangePassword)
 		authed.POST("/prompts/rewrite", s.handleRewritePrompt)
 		authed.POST("/jobs", s.handleCreateJob)
@@ -139,6 +143,7 @@ func (s *Server) Router() *gin.Engine {
 		admin.POST("/admin/users/:bizID/admin", s.handleAdminSetAdmin)
 		admin.POST("/admin/users", s.handleAdminCreateUser)
 		admin.POST("/admin/users/:bizID/active", s.handleAdminSetActive)
+		admin.POST("/admin/users/:bizID/comic-ai", s.handleAdminSetComicAI)
 		admin.GET("/admin/usage", s.handleAdminUsage)
 	}
 	return r

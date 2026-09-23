@@ -1,5 +1,6 @@
 import { useAuthStore } from './authStore'
 import i18n from '../i18n'
+import type { ComicDocument, SavedComic, ComicSummary } from './comicDocument'
 
 // PRD §13.1: base /api/v1, JSON error envelope {code,message,request_id}.
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8080/api/v1'
@@ -90,9 +91,13 @@ export interface MeResponse {
   email: string | null
   balance: number
   is_admin: boolean
+  // OpenAI comic gray release (users.comic_ai_enabled, always true for
+  // admins) — mirrors what POST /jobs enforces with 403 comic_ai_not_enabled.
+  comic_ai?: boolean
 }
 
 export interface Capabilities {
+  comic?: { openai_enabled: boolean; model: string; max_brief_chars: number; max_context_chars: number; max_background_chars: number; max_references: number }
   image: { max_n: number; max_prompt_chars: number }
   video: {
     duration_min: number
@@ -236,6 +241,9 @@ export interface CharacterSlot {
 }
 
 export interface Spec {
+  comic_mode?: 'direct' | 'editable'
+  comic_panel?: number
+  comic_context?: string
   text?: string
   n?: number // image.single only: also image.comic4's own auto-split panel count when no explicit panels are given (default 4)
   panels?: string[] // image.comic4 only: 2..9 panel prompts, always chained panel-to-panel — no independent "quick" mode anymore
@@ -247,7 +255,7 @@ export interface Spec {
   preset_ids?: string[]
   seed?: number
   source_image_asset_id?: string // F5.8, image.single only
-  image_provider?: 'minimax' | 'gemini' // image.comic4 only — see jobsvc.go's Spec.ImageProvider doc; omitted/'minimax' is the default
+  image_provider?: 'minimax' | 'gemini' | 'openai' // 'openai' only with comic_mode (ComicStudio)
   // video.single / video.sequence fields, unused by the image forms.
   duration_seconds?: number
   resolution?: string
@@ -393,6 +401,7 @@ export interface AdminUser {
   phone: string | null
   is_admin: boolean
   is_active: boolean
+  comic_ai_enabled: boolean
   balance: number
   held: number
   credits_spent: number
@@ -409,6 +418,10 @@ export interface AdminUsageDay {
 }
 
 export const api = {
+  listComics: () => request<{ comics: ComicSummary[] }>('GET', '/comics'),
+  getComic: (id: string) => request<SavedComic>('GET', `/comics/${id}`),
+  saveComic: (id: string | null, version: number, document: ComicDocument) =>
+    request<SavedComic>(id ? 'PATCH' : 'POST', id ? `/comics/${id}` : '/comics', { version, document }),
   // code is ignored server-side unless config.EmailProviderAPIKey() is set
   // (handleRegister's own doc) — harmless to always send whatever the
   // "发送验证码" field holds, empty or not.
@@ -642,4 +655,6 @@ export const api = {
     request<{ biz_id: string; email: string; temp_password: string }>('POST', '/admin/users', { email }),
   adminSetActive: (bizId: string, isActive: boolean) =>
     request<{ biz_id: string; is_active: boolean }>('POST', `/admin/users/${bizId}/active`, { is_active: isActive }),
+  adminSetComicAI: (bizId: string, enabled: boolean) =>
+    request<{ biz_id: string; comic_ai_enabled: boolean }>('POST', `/admin/users/${bizId}/comic-ai`, { enabled }),
 }

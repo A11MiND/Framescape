@@ -52,11 +52,15 @@ type CharacterSlot struct {
 // (W5/W6) needs role-mapped references; images only need characters,
 // presets, and a seed.
 type Spec struct {
-	Text   string   `json:"text"`
-	N      int      `json:"n,omitempty"`      // image.single only: 1..9, omitted/0 means 1 (image.batch merged into image.single, PRD F5.1/F5.2)
-	Panels []string `json:"panels,omitempty"` // image.comic4 only: minComic4Panels..capability.ImageMaxN panel prompts (PRD F5.3, panel count no longer fixed at 4)
-	Story  string   `json:"story,omitempty"`  // image.comic4 only, F5.4: auto-split into N panels instead of Panels (N from Spec.N, default 4); ignored if Panels is set
-	Shots  []string `json:"shots,omitempty"`  // image.sequence only: N shot descriptions (PRD F5.5)
+	// ComicMode opts into the non-rewriting four-panel workflow. Empty retains legacy jobs.
+	ComicMode    string   `json:"comic_mode,omitempty"`    // direct | editable
+	ComicPanel   int      `json:"comic_panel,omitempty"`   // 0 = page, 1..4 = isolated replacement
+	ComicContext string   `json:"comic_context,omitempty"` // user-reviewed source excerpts, not the entire booklet
+	Text         string   `json:"text"`
+	N            int      `json:"n,omitempty"`      // image.single only: 1..9, omitted/0 means 1 (image.batch merged into image.single, PRD F5.1/F5.2)
+	Panels       []string `json:"panels,omitempty"` // image.comic4 only: minComic4Panels..capability.ImageMaxN panel prompts (PRD F5.3, panel count no longer fixed at 4)
+	Story        string   `json:"story,omitempty"`  // image.comic4 only, F5.4: auto-split into N panels instead of Panels (N from Spec.N, default 4); ignored if Panels is set
+	Shots        []string `json:"shots,omitempty"`  // image.sequence only: N shot descriptions (PRD F5.5)
 	// ShotSourceRefs is image.sequence's cross-shot referencing (§07 gap: a
 	// user asked to #-reference a sibling shot's about-to-be-generated
 	// image, not just an existing library asset). Parallel array to Shots,
@@ -105,7 +109,9 @@ type Spec struct {
 	// value falls back to "minimax" (createImageComic4's own
 	// normalizeImageProvider, reused by Create's image.single branch) rather
 	// than failing the job — a stale/unrecognized value from an older
-	// frontend build should never block submission.
+	// frontend build should never block submission. "openai" is the one
+	// exception: it is only valid with ComicMode set (comic_direct.go) and is
+	// rejected everywhere else rather than silently falling back.
 	ImageProvider string `json:"image_provider,omitempty"`
 	// AspectRatio is image.single only, for now: MiniMax's own
 	// image_generation and Gemini's GenerateContent both accept the same
@@ -239,6 +245,9 @@ func New(db *gorm.DB, eng workflow.Engine, credits *creditsvc.Service, minimaxCl
 // redundant work for the common case (retry arrives after the original
 // request already finished).
 func (s *Service) Create(ctx context.Context, userID uint64, workflowName string, spec Spec, idemKey string, projectID *uint64) (*persistence.Job, error) {
+	if spec.ImageProvider == "openai" && (workflowName != "image.comic4" || spec.ComicMode == "") {
+		return nil, fmt.Errorf("openai requires the direct or editable comic workflow")
+	}
 	if idemKey != "" {
 		existing, err := s.findByIdemKey(ctx, userID, idemKey)
 		if err != nil {
@@ -267,6 +276,9 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 		return s.createImageSequence(ctx, userID, spec, idemKey, projectID)
 	}
 	if workflowName == "image.comic4" {
+		if spec.ComicMode != "" {
+			return s.createDirectComic(ctx, userID, spec, idemKey, projectID)
+		}
 		// Also dynamically generated, unconditionally now — image.comic4's
 		// old "quick" static-Loop mode was removed entirely (image_comic4.go's
 		// package doc: "沒有參考前圖的四格漫畫快速模式可以去掉了...一點用都
@@ -465,6 +477,15 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 // yourself." Keep in sync with Create's switch and createVideoSequence's
 // own estimatedCredits line by hand.
 func EstimateCredits(workflowName string, spec Spec) (int, error) {
+	if spec.ImageProvider == "openai" && (workflowName != "image.comic4" || spec.ComicMode == "") {
+		return 0, fmt.Errorf("openai requires the direct or editable comic workflow")
+	}
+	if workflowName == "image.comic4" && spec.ComicMode != "" {
+		if _, err := directComicPrompt(spec); err != nil {
+			return 0, err
+		}
+		return directComicCredits(spec), nil
+	}
 	switch workflowName {
 	case "image.single":
 		n := spec.N
@@ -599,6 +620,9 @@ func EstimateBreakdown(workflowName string, spec Spec) ([]EstimateItem, int, err
 		}
 		return []EstimateItem{{Kind: ItemKindImageSingle, Count: n, Credits: total}}, total, nil
 	case "image.comic4":
+		if spec.ComicMode != "" {
+			return []EstimateItem{{Kind: ItemKindComic4Panels, Count: 1, Credits: total}}, total, nil
+		}
 		n, err := comic4PanelCount(spec)
 		if err != nil {
 			return nil, 0, err

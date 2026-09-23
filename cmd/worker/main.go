@@ -20,6 +20,7 @@ import (
 	"aigc-platform/internal/infra/executor/local"
 	"aigc-platform/internal/infra/executor/minimax"
 	"aigc-platform/internal/infra/executor/mock"
+	"aigc-platform/internal/infra/executor/openai"
 	"aigc-platform/internal/infra/persistence"
 	"aigc-platform/internal/infra/storage"
 	aetherengine "aigc-platform/internal/infra/workflow/aether"
@@ -70,6 +71,7 @@ func main() {
 	must(registry.Register(local.NewGatePlugin()), log)
 	must(registry.Register(local.NewConcatPlugin(sink, sink)), log)
 	must(registry.Register(local.NewCollectRefsPlugin()), log)
+	must(registry.Register(openai.NewImagePlugin(openai.Config{APIKey: config.OpenAIAPIKey(), Model: config.OpenAIImageModel(), BaseURL: config.OpenAIBaseURL(), USDToCNY: config.OpenAIUSDToCNY(), ReserveUSD: config.OpenAIImageReserveUSD(), PerRefUSD: config.OpenAIImageReservePerRefUSD()}, sink, sink)), log)
 
 	// Gemini/Vertex AI is comic4's optional second image-generation provider
 	// (image_comic4.go's Spec.ImageProvider) — opt-in, gated on

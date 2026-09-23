@@ -6,10 +6,40 @@ package config
 
 import (
 	"log"
+	"math"
 	"os"
 	"strconv"
 	"time"
 )
+
+// OpenAI's native Image API powers the four-panel comic editor (openai.image).
+// The key lives on API (to gate job creation) and worker (to call OpenAI) only.
+func OpenAIAPIKey() string { return getEnv("OPENAI_API_KEY", "") }
+func OpenAIBaseURL() string {
+	return getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+}
+func OpenAIImageModel() string { return getEnv("OPENAI_IMAGE_MODEL", "gpt-image-2.5-flare") }
+
+// Accounting conversion, not a live exchange-rate quote. Set consistently on API/scheduler/worker.
+func OpenAIUSDToCNY() float64 { return positiveFloat("OPENAI_USD_TO_CNY", 7) }
+
+// Per-call credit reservation, also billed when OpenAI omits usage. Not a
+// provider-side spending cap. A high-quality 1536x1024 page is ~$0.05-0.15;
+// the unused remainder is refunded when the job ends.
+func OpenAIImageReserveUSD() float64 { return positiveFloat("OPENAI_IMAGE_RESERVE_USD", 0.50) }
+
+// Extra reservation per attached reference image (each is billed as image
+// input tokens), added on top of OpenAIImageReserveUSD.
+func OpenAIImageReservePerRefUSD() float64 {
+	return positiveFloat("OPENAI_IMAGE_RESERVE_PER_REF_USD", 0.03)
+}
+func positiveFloat(key string, fallback float64) float64 {
+	v, err := strconv.ParseFloat(getEnv(key, ""), 64)
+	if err != nil || v <= 0 || math.IsNaN(v) || math.IsInf(v, 0) {
+		return fallback
+	}
+	return v
+}
 
 const devOnlyJWTSecret = "dev-only-insecure-secret-change-me"
 

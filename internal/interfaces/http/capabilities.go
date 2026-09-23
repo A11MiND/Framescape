@@ -5,7 +5,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"aigc-platform/internal/application/jobsvc"
 	"aigc-platform/internal/domain/capability"
+	"aigc-platform/internal/domain/comic"
+	"aigc-platform/internal/pkg/config"
 )
 
 // handleGetCapabilities is GET /api/v1/capabilities (PRD §10.5/§13.2's
@@ -20,6 +23,7 @@ import (
 // state.
 func (s *Server) handleGetCapabilities(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
+		"comic": gin.H{"openai_enabled": jobsvc.OpenAIComicEnabled(), "model": config.OpenAIImageModel(), "max_brief_chars": 20000, "max_context_chars": 8000, "max_background_chars": 200000, "max_references": comic.MaxReferences},
 		"image": gin.H{
 			"max_n":            capability.ImageMaxN,
 			"max_prompt_chars": capability.ImageMaxPromptChars,

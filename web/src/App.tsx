@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import Login from './pages/Login'
 import Studio from './pages/Studio'
+import ComicStudio from './pages/ComicStudio'
 import Characters from './pages/Characters'
 import Presets from './pages/Presets'
 import Assets from './pages/Assets'
@@ -47,6 +48,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<Studio />} />
       <Route path="/studio" element={<Navigate to="/" replace />} />
+      <Route path="/comics" element={<RequireAuth><ComicStudio /></RequireAuth>} />
       <Route
         path="/characters"
         element={

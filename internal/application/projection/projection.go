@@ -159,14 +159,16 @@ func isTerminalPhase(phase string) bool {
 	}
 }
 
-// maybeCommitCredits implements §12.3's per-node settlement: a task that
-// just succeeded with a "cost-yuan" output (every minimax.* executor emits
-// this) converts to credits and moves out of held permanently. Every other
-// transition (Running, Failed, a task with no cost-yuan output at all —
-// local.*/human.gate) is a no-op here, not an error; most task transitions
-// simply have nothing to commit.
+// maybeCommitCredits settles known provider charges on terminal tasks.
+// openai.image can return a paid image followed by a local storage failure;
+// its error output still carries cost-yuan and must not become a free call.
+// Running tasks and terminal tasks without positive cost-yuan are no-ops.
 func (p *Projector) maybeCommitCredits(ctx context.Context, jobID uint64, tr *store.TaskRun) {
-	if tr.Status == nil || string(*tr.Status) != "Succeeded" || tr.Outputs == nil {
+	if tr.Status == nil || tr.Outputs == nil {
+		return
+	}
+	status := string(*tr.Status)
+	if status != "Succeeded" && status != "Failed" && status != "Error" {
 		return
 	}
 	outputs := aetherengine.ParamsToMap(tr.Outputs.Parameters)

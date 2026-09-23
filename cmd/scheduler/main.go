@@ -27,6 +27,7 @@ import (
 	"aigc-platform/internal/infra/executor/local"
 	"aigc-platform/internal/infra/executor/minimax"
 	"aigc-platform/internal/infra/executor/mock"
+	"aigc-platform/internal/infra/executor/openai"
 	"aigc-platform/internal/infra/persistence"
 	"aigc-platform/internal/infra/storage"
 	aetherengine "aigc-platform/internal/infra/workflow/aether"
@@ -94,6 +95,7 @@ func main() {
 	must(registry.Register(local.NewGatePlugin()), log)
 	must(registry.Register(local.NewConcatPlugin(sink, sink)), log)
 	must(registry.Register(local.NewCollectRefsPlugin()), log)
+	must(registry.Register(openai.NewImagePlugin(openai.Config{Model: config.OpenAIImageModel(), BaseURL: config.OpenAIBaseURL(), USDToCNY: config.OpenAIUSDToCNY(), ReserveUSD: config.OpenAIImageReserveUSD(), PerRefUSD: config.OpenAIImageReservePerRefUSD()}, sink, sink)), log)
 
 	redisOpt := cache.AsynqRedisOpt(config.RedisAddr(), config.RedisURL())
 	asynqBroker := aetherengine.NewAsynqBroker(redisOpt)

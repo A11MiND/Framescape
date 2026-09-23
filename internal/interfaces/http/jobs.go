@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -43,6 +44,10 @@ func (s *Server) handleCreateJob(c *gin.Context) {
 	idemKey := c.GetHeader("Idempotency-Key")
 
 	job, err := s.jobs.Create(c.Request.Context(), userID(c), req.WorkflowName, req.Spec, idemKey, projectID)
+	if errors.Is(err, jobsvc.ErrComicAINotEnabled) {
+		c.JSON(http.StatusForbidden, errBody("comic_ai_not_enabled", err.Error()))
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusUnprocessableEntity, errBody("submit_failed", err.Error()))
 		return

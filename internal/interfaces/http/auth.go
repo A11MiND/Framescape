@@ -196,6 +196,9 @@ func (s *Server) handleMe(c *gin.Context) {
 		"email":    user.Email,
 		"balance":  acct.Balance,
 		"is_admin": user.IsAdmin,
+		// Gray-release gate for OpenAI comics (jobsvc.ComicAIAllowed, which
+		// is what job creation actually enforces).
+		"comic_ai": user.IsAdmin || user.ComicAIEnabled,
 	})
 }
 
