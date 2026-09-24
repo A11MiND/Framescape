@@ -1,11 +1,10 @@
 # Framescape (帧境)
 
-An AIGC content-generation platform for image and video, built on
-[MiniMax](https://www.minimaxi.com/)'s generation API and a vendored
-workflow-orchestration engine ([Aether](third_party/aether)). Users compose
-structured prompts and reference material into declarative workflows — from
-a single image to a multi-shot video sequence — and every generated result
-is stored as a reusable asset.
+An AIGC content-generation platform for image and video, built on MiniMax,
+OpenAI and Gemini generation APIs. Users compose structured prompts and
+reference material into generation jobs — from a single image to a
+multi-shot video sequence with a preview review step — and every generated
+result is stored as a reusable asset.
 
 [![CI](https://github.com/A11MiND/Framescape/actions/workflows/ci.yml/badge.svg)](https://github.com/A11MiND/Framescape/actions/workflows/ci.yml)
 
@@ -20,33 +19,39 @@ is stored as a reusable asset.
 
 ## Architecture
 
-Three independently-scalable Go processes, plus a React frontend:
+Two horizontally scalable Go processes plus a React frontend. Neither holds
+job state in memory; any instance can be stopped or killed at any time.
 
-- **`cmd/api`** — stateless Gin HTTP layer (auth, validation, job CRUD). Never
-  holds a workflow engine instance; reaches one over HTTP.
-- **`cmd/scheduler`** — hosts the single [Aether](third_party/aether) engine
-  instance that actually runs workflow DAGs. Must stay single-instance (see
-  [`CLAUDE.md`](CLAUDE.md) for why).
-- **`cmd/worker`** — executes tasks (image/video generation, ffmpeg
-  composition, etc.) off asynq queues and reports results back to the
-  scheduler. Holds no engine instance either, so it scales independently.
+- **`cmd/api`** — Gin HTTP layer: auth, validation, pricing quotes, job
+  creation (job row, credit reservation and plan in one transaction), reads,
+  and a per-user SSE event stream.
+- **`cmd/worker`** — runs job nodes from asynq queues (`interactive`,
+  `video`, `media`, `system`, each with its own pool), sweeps for work a
+  crash or lost message left behind, and runs maintenance.
 
-Business code is layered domain-driven and never imports Aether directly:
+Execution state lives in MySQL (`job_nodes`); every transition is a
+compare-and-set, so duplicated or lost queue messages are harmless. Remote
+provider tasks (video) are submitted once and polled from short tasks, so
+waiting never occupies a worker slot and a worker restart never resubmits
+a paid task. See `internal/infra/orchestrator`.
 
 ```
 internal/
-  domain/        — Engine port, capability limits, prompt compilation
-  application/    — job orchestration, credits ledger, community, upkeep
-  infra/          — persistence (GORM), MiniMax/mock/local executors,
-                    the one package allowed to import Aether, storage, cache
+  domain/         — plan and status types, capability limits, prompt compilation
+  application/    — job lifecycle (jobsvc), plan builders (workflows),
+                    credits, community, review, upkeep
+  infra/          — orchestrator, realtime fan-out, persistence, executors
+                    (MiniMax/OpenAI/Gemini/local/mock), storage, cache
   interfaces/http — Gin handlers
 ```
 
+`cmd/fakeprovider` imitates MiniMax and OpenAI (configurable latency, errors
+and rate limits) for local end-to-end and load testing without paid calls.
+
 ## Tech stack
 
-Go 1.25 · Gin · GORM · MySQL 8 · Redis 7 · [Aether](third_party/aether)
-(vendored workflow engine) · asynq · MinIO · goose migrations · React 19 ·
-TypeScript · Vite · TanStack Query · Tailwind v4
+Go 1.25 · Gin · GORM · MySQL 8 · Redis 7 · asynq · MinIO · goose migrations ·
+React 19 · TypeScript · Vite · TanStack Query · Tailwind v4
 
 ## Getting started
 
@@ -58,25 +63,28 @@ docker compose -f deploy/docker-compose.yml --env-file .env up -d --build
 ```
 
 This builds and runs the full stack — MySQL, Redis, MinIO, `api`,
-`scheduler`, `worker`, and an nginx-fronted build of the frontend — behind a
+`worker`, and an nginx-fronted build of the frontend — behind a
 single public port (`:80`). See [`deploy/docker-compose.yml`](deploy/docker-compose.yml).
 
 ### Local development
 
-Four long-lived processes: three Go binaries plus the Vite dev server.
+Three long-lived processes: two Go binaries plus the Vite dev server. Run as
+many api/worker instances as you like.
 
 ```bash
 set -a && source .env && set +a   # go run does NOT load .env on its own
 
 go run ./cmd/api
-go run ./cmd/scheduler
 go run ./cmd/worker
 
 cd web && npm install && npm run dev
 ```
 
-Without a real `MINIMAX_API_KEY`, `cmd/worker` can still run entirely on the
-`mock.*` executors for local development and testing.
+Without real provider keys, run `make run-fakeprovider` and point
+`MINIMAX_BASE_URL=http://127.0.0.1:18090` and
+`OPENAI_BASE_URL=http://127.0.0.1:18090/v1` at it; the real executors then run
+end to end at no cost. `make test-infra-up` starts disposable
+MySQL/Redis/MinIO for tests.
 
 ## Configuration
 
@@ -96,9 +104,10 @@ go test -race ./...                     # run before considering backend work do
 cd web
 npm run build                           # tsc -b && vite build
 npm run lint                            # oxlint
+npm test                                # vitest
 ```
 
-`make build` / `make run-api` / `make run-scheduler` / `make run-worker` /
+`make build` / `make run-api` / `make run-worker` / `make run-fakeprovider` /
 `make migrate` / `make test` / `make lint` / `make docker-*` wrap the
 equivalent commands — see the [`Makefile`](Makefile).
 
@@ -106,10 +115,8 @@ equivalent commands — see the [`Makefile`](Makefile).
 
 | Path | What lives there |
 |---|---|
-| `cmd/` | Entry points for the five binaries (api/scheduler/worker/migrate/cli) |
+| `cmd/` | Entry points: api, worker, migrate, cli, fakeprovider (dev/test) |
 | `internal/` | All business logic, layered as above |
 | `web/` | React + TypeScript frontend |
-| `third_party/aether/` | Vendored workflow-orchestration engine |
-| `workflows/` | Static Aether workflow definitions (`image.single`, `video.single`) |
 | `migrations/` | goose SQL migrations |
 | `deploy/` | Dockerfile, docker-compose.yml, nginx config, Prometheus/Grafana |
