@@ -1,6 +1,6 @@
-import { test } from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { newComic, newLayer, constrainLayer, applyGeneratedImage, sourceExcerpts, charCount, wrapText, parseComicDocument } from '../src/lib/comicDocument.ts'
+import { newComic, newLayer, constrainLayer, applyGeneratedImage, sourceExcerpts, charCount, wrapText, parseComicDocument } from '../../src/lib/comicDocument'
 
 test('replacement preserves all dialogue, logo and other panels', () => {
   const doc = newComic(); doc.page_asset_id = 'original'; doc.layers = [newLayer('bubble', 'one'), { ...newLayer('logo', 'logo'), asset_id: 'brand-logo' }]

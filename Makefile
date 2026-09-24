@@ -1,6 +1,7 @@
 .PHONY: build build-api build-scheduler build-worker build-cli build-migrate \
 	docker-up docker-down docker-logs docker-build docker-restart-app \
-	migrate run-api run-scheduler run-worker web test lint
+	migrate run-api run-scheduler run-worker run-fakeprovider test-infra-up test-infra-down \
+	web test lint
 
 # --- Local (non-Docker) dev: matches the manual three-process workflow used
 # throughout this project's development, just as `make` targets instead of
@@ -31,6 +32,19 @@ run-scheduler:
 
 run-worker:
 	go run ./cmd/worker
+
+# Stand-in for MiniMax/OpenAI: set MINIMAX_BASE_URL=http://127.0.0.1:18090 and
+# OPENAI_BASE_URL=http://127.0.0.1:18090/v1 to run the real executors for free.
+run-fakeprovider:
+	go run ./cmd/fakeprovider
+
+# Disposable MySQL/Redis/MinIO on 13316/16386/19000 (tmpfs, never touches the
+# dev stack's volumes) for integration tests.
+test-infra-up:
+	docker compose -f deploy/docker-compose.test.yml up -d --wait
+
+test-infra-down:
+	docker compose -f deploy/docker-compose.test.yml down
 
 migrate:
 	go run ./cmd/migrate
