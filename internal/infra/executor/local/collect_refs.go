@@ -17,8 +17,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/BabySid/aether/executor"
-	"github.com/BabySid/aether/model"
+	"aigc-platform/internal/infra/executor/spi/executor"
+	"aigc-platform/internal/infra/executor/spi/model"
 )
 
 // CollectRefsConfig has two callers with two different reasons for their

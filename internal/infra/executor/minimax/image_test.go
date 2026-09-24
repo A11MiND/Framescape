@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/BabySid/aether/model"
+	"aigc-platform/internal/infra/executor/spi/model"
 )
 
 func pngBytes(t *testing.T, w, h int) []byte {

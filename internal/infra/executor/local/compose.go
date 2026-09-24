@@ -21,8 +21,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BabySid/aether/executor"
-	"github.com/BabySid/aether/model"
+	"aigc-platform/internal/infra/executor/spi/executor"
+	"aigc-platform/internal/infra/executor/spi/model"
 	"go.uber.org/zap"
 
 	"aigc-platform/internal/infra/executor/assetstore"

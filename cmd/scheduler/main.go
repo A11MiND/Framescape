@@ -14,7 +14,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/BabySid/aether/executor"
+	aetherexecutor "github.com/BabySid/aether/executor"
+
+	"aigc-platform/internal/infra/executor/spi/executor"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
@@ -101,7 +103,7 @@ func main() {
 	asynqBroker := aetherengine.NewAsynqBroker(redisOpt)
 	defer asynqBroker.Close()
 
-	eng, err := aetherengine.New(mysqlStore, asynqBroker, registry)
+	eng, err := aetherengine.New(mysqlStore, asynqBroker, mustAdapt(registry, log))
 	if err != nil {
 		log.Fatal("construct engine", zap.Error(err))
 	}
@@ -160,4 +162,12 @@ func must(err error, log *zap.Logger) {
 	if err != nil {
 		log.Fatal("executor registration failed", zap.Error(err))
 	}
+}
+
+func mustAdapt(registry *executor.Registry, log *zap.Logger) *aetherexecutor.Registry {
+	adapted, err := aetherengine.AdaptRegistry(registry)
+	if err != nil {
+		log.Fatal("executor registry adaptation failed", zap.Error(err))
+	}
+	return adapted
 }

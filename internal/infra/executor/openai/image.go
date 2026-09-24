@@ -26,8 +26,8 @@ import (
 	"unicode/utf8"
 
 	"aigc-platform/internal/infra/executor/assetstore"
-	"github.com/BabySid/aether/executor"
-	"github.com/BabySid/aether/model"
+	"aigc-platform/internal/infra/executor/spi/executor"
+	"aigc-platform/internal/infra/executor/spi/model"
 )
 
 // Fixed request shape for the comic page: 3:2 canvas matching the editor's

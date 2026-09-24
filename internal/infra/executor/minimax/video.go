@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BabySid/aether/executor"
-	"github.com/BabySid/aether/model"
+	"aigc-platform/internal/infra/executor/spi/executor"
+	"aigc-platform/internal/infra/executor/spi/model"
 	"github.com/redis/go-redis/v9"
 
 	"aigc-platform/internal/domain/capability"

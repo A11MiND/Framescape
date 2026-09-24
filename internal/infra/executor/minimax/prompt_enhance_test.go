@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/BabySid/aether/model"
+	"aigc-platform/internal/infra/executor/spi/model"
 )
 
 func TestPromptEnhancePluginExecuteHappyPath(t *testing.T) {

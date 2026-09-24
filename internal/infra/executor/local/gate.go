@@ -11,8 +11,8 @@ package local
 import (
 	"context"
 
-	"github.com/BabySid/aether/executor"
-	"github.com/BabySid/aether/model"
+	"aigc-platform/internal/infra/executor/spi/executor"
+	"aigc-platform/internal/infra/executor/spi/model"
 )
 
 // decisionMarker is the one input key Resume's payload always includes,

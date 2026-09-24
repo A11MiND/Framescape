@@ -16,8 +16,8 @@ import (
 	"testing"
 
 	"aigc-platform/internal/infra/executor/assetstore"
-	"github.com/BabySid/aether/executor"
-	"github.com/BabySid/aether/model"
+	"aigc-platform/internal/infra/executor/spi/executor"
+	"aigc-platform/internal/infra/executor/spi/model"
 )
 
 const testModel = "gpt-image-2.5-flare"

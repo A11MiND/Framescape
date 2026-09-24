@@ -12,7 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/BabySid/aether/executor"
+	aetherexecutor "github.com/BabySid/aether/executor"
+
+	"aigc-platform/internal/infra/executor/spi/executor"
 	"go.uber.org/zap"
 
 	"aigc-platform/internal/infra/cache"
@@ -99,7 +101,7 @@ func main() {
 
 	log.Info("worker starting", zap.Int("concurrency", config.WorkerConcurrency()))
 	redisOpt := cache.AsynqRedisOpt(config.RedisAddr(), config.RedisURL())
-	if err := aetherengine.RunWorker(ctx, redisOpt, registry, config.WorkerConcurrency()); err != nil && ctx.Err() == nil {
+	if err := aetherengine.RunWorker(ctx, redisOpt, mustAdapt(registry, log), config.WorkerConcurrency()); err != nil && ctx.Err() == nil {
 		log.Fatal("worker stopped", zap.Error(err))
 	}
 	log.Info("worker shut down")
@@ -109,4 +111,12 @@ func must(err error, log *zap.Logger) {
 	if err != nil {
 		log.Fatal("executor registration failed", zap.Error(err))
 	}
+}
+
+func mustAdapt(registry *executor.Registry, log *zap.Logger) *aetherexecutor.Registry {
+	adapted, err := aetherengine.AdaptRegistry(registry)
+	if err != nil {
+		log.Fatal("executor registry adaptation failed", zap.Error(err))
+	}
+	return adapted
 }
