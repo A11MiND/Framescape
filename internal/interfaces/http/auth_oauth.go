@@ -267,6 +267,18 @@ func (s *Server) findOrCreateGoogleUser(claims *googleClaims) (persistence.User,
 // the product's behalf), so it's a single clearly-marked seam: implement
 // the real API call here once config.SMSAPIKey() is set. Nothing else in
 // this file needs to change when that happens.
+// smsSenderImplemented and emailSenderImplemented flip to true once the
+// matching send function calls a real provider. Until then the method is
+// reported unavailable even when its key is set, so a configured key can
+// never make sign-up depend on a code that is never delivered.
+var (
+	smsSenderImplemented   = false
+	emailSenderImplemented = false
+)
+
+func smsAvailable() bool   { return smsSenderImplemented && config.SMSAPIKey() != "" }
+func emailAvailable() bool { return emailSenderImplemented && config.EmailProviderAPIKey() != "" }
+
 func sendSMSCode(ctx context.Context, phone, code string) error {
 	return fmt.Errorf("no SMS provider wired in yet — implement sendSMSCode once config.SMSAPIKey() is set")
 }
@@ -276,7 +288,7 @@ type phoneSendCodeRequest struct {
 }
 
 func (s *Server) handlePhoneSendCode(c *gin.Context) {
-	if config.SMSAPIKey() == "" {
+	if !smsAvailable() {
 		c.JSON(http.StatusBadRequest, errBody("sms_not_configured", "phone login is not configured on this server"))
 		return
 	}
@@ -313,7 +325,7 @@ type phoneVerifyRequest struct {
 // has no password (nil PasswordHash) — SMS-code-in only, until Settings
 // gives it one.
 func (s *Server) handlePhoneVerify(c *gin.Context) {
-	if config.SMSAPIKey() == "" {
+	if !smsAvailable() {
 		c.JSON(http.StatusBadRequest, errBody("sms_not_configured", "phone login is not configured on this server"))
 		return
 	}
@@ -376,7 +388,7 @@ type emailSendCodeRequest struct {
 }
 
 func (s *Server) handleEmailSendCode(c *gin.Context) {
-	if config.EmailProviderAPIKey() == "" {
+	if !emailAvailable() {
 		c.JSON(http.StatusBadRequest, errBody("email_not_configured", "email verification is not configured on this server"))
 		return
 	}

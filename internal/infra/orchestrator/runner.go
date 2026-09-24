@@ -642,6 +642,9 @@ func assetList(outputs map[string]any) []byte {
 	return raw
 }
 
+// Enqueue dispatches a follow-up task outside any job transition.
+func (o *Orchestrator) Enqueue(ctx context.Context, t Task) error { return o.enqueue(ctx, t) }
+
 func (o *Orchestrator) enqueue(ctx context.Context, t Task) error {
 	if o.dispatch == nil {
 		return nil

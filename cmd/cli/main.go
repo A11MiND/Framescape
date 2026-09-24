@@ -24,6 +24,10 @@ func main() {
 	switch os.Args[1] {
 	case "grant-credits":
 		cmdGrantCredits(os.Args[2:])
+	case "backfill-thumbnails":
+		cmdBackfillThumbnails(os.Args[2:])
+	case "audit":
+		cmdAudit(os.Args[2:])
 	default:
 		usage()
 		os.Exit(1)
@@ -31,7 +35,10 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: cli grant-credits -email=<email> -amount=<n> [-remark=<text>]")
+	fmt.Fprintln(os.Stderr, `usage:
+  cli grant-credits -email=<email> -amount=<n> [-remark=<text>]
+  cli backfill-thumbnails [-limit=<n>]   queue previews for assets without one
+  cli audit                              check credit and job invariants; exits 1 on violations`)
 }
 
 func cmdGrantCredits(args []string) {

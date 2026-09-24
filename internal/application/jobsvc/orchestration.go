@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"aigc-platform/internal/application/creditsvc"
+	"aigc-platform/internal/application/media"
 	"aigc-platform/internal/domain/workflow"
 	"aigc-platform/internal/infra/orchestrator"
 	"aigc-platform/internal/pkg/metrics"
@@ -62,15 +63,19 @@ func (h Hooks) NodeFinishedTx(ctx context.Context, tx *sql.Tx, job orchestrator.
 			return nil, fmt.Errorf("record moderation: %w", err)
 		}
 	}
-	if !h.ReviewImages || n.Status != workflow.NodeSucceeded || n.Executor != "minimax.image" {
+	if n.Status != workflow.NodeSucceeded {
 		return nil, nil
+	}
+	var tasks []orchestrator.Task
+	for _, id := range outputAssets(n.Outputs) {
+		tasks = append(tasks, media.ThumbnailTask(id))
 	}
 	assetID, _ := n.Outputs["asset-id"].(string)
-	if assetID == "" {
-		return nil, nil
+	if h.ReviewImages && n.Executor == "minimax.image" && assetID != "" {
+		payload, _ := json.Marshal(AssetReview{JobID: job.ID, UserID: job.UserID, TaskRunID: n.TaskRunID, AssetID: assetID, Executor: n.Executor})
+		tasks = append(tasks, orchestrator.Task{Kind: TaskAssetReview, Queue: orchestrator.QueueSystem, Payload: payload, UniqueID: "review:" + assetID})
 	}
-	payload, _ := json.Marshal(AssetReview{JobID: job.ID, UserID: job.UserID, TaskRunID: n.TaskRunID, AssetID: assetID, Executor: n.Executor})
-	return []orchestrator.Task{{Kind: TaskAssetReview, Queue: orchestrator.QueueSystem, Payload: payload, UniqueID: "review:" + assetID}}, nil
+	return tasks, nil
 }
 
 func (h Hooks) JobFinishedTx(ctx context.Context, tx *sql.Tx, job orchestrator.JobRef, status string) error {
@@ -79,4 +84,23 @@ func (h Hooks) JobFinishedTx(ctx context.Context, tx *sql.Tx, job orchestrator.J
 		metrics.JobsTotal.WithLabelValues(name, status).Inc()
 	}
 	return nil
+}
+
+// outputAssets lists the generated assets in a node's outputs.
+func outputAssets(outputs map[string]any) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(v any) {
+		if s, ok := v.(string); ok && s != "" && !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	add(outputs["asset-id"])
+	if list, ok := outputs["asset-ids"].([]any); ok {
+		for _, v := range list {
+			add(v)
+		}
+	}
+	return out
 }

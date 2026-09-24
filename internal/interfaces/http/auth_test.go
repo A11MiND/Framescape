@@ -231,7 +231,7 @@ func TestHandleChangePasswordNilPasswordHashAccount(t *testing.T) {
 	if err := s.createAccount(&user); err != nil {
 		t.Fatalf("seed google-only account: %v", err)
 	}
-	access, err := signToken(testJWTSecret, user.ID, tokenAccess, accessTTL)
+	access, err := signToken(testJWTSecret, user.ID, tokenAccess, accessTTL())
 	if err != nil {
 		t.Fatalf("sign access token: %v", err)
 	}

@@ -95,6 +95,22 @@ func WorkerMetricsAddr() string { return getEnv("WORKER_METRICS_ADDR", ":8091") 
 func MySQLMaxOpenConns() int { return getEnvInt("MYSQL_MAX_OPEN_CONNS", 50) }
 func MySQLMaxIdleConns() int { return getEnvInt("MYSQL_MAX_IDLE_CONNS", 25) }
 
+// JWTAccessTTLMinutes is the access-token lifetime; 0 keeps one hour.
+func JWTAccessTTLMinutes() int { return getEnvInt("JWT_ACCESS_TTL_MINUTES", 0) }
+
+// CORSAllowedOrigins lists browser origins allowed to call the API from
+// another origin (comma separated). Empty allows any origin outside
+// production and none in production, where the frontend is same-origin.
+func CORSAllowedOrigins() []string {
+	var out []string
+	for _, o := range strings.Split(getEnv("CORS_ALLOWED_ORIGINS", ""), ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
 // APIAddr is the address cmd/api's Gin server listens on.
 func APIAddr() string { return getEnv("API_ADDR", ":8080") }
 

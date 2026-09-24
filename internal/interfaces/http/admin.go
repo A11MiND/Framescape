@@ -27,6 +27,10 @@ import (
 	"aigc-platform/internal/pkg/id"
 )
 
+// Real spend: jobs run by the previous engine carry their cost only in the
+// commit row's remark (ref_type task_run); everything since lives in
+// provider_calls, which also covers calls never billed to a user.
+//
 // costYuanExpr pulls the real, MiniMax-reported yuan cost out of a commit
 // row's remark (creditsvc.Commit's own remarkPayload — {"kind": "commit",
 // "amount": N, "cost_yuan": X}) — this is what MiniMax's own API response
@@ -94,10 +98,12 @@ func (s *Server) handleAdminOverview(c *gin.Context) {
 	// own doc covers why this is a truer "how much has this cost us"
 	// answer than the credits figures above (those carry §12.2's 2x margin
 	// and a unit conversion, not a 1:1 view of real spend).
-	var totalCostYuan float64
+	var totalCostYuan, providerYuan float64
 	s.db.WithContext(ctx).Model(&persistence.CreditLedger{}).
-		Where("direction = ?", "commit").
+		Where("direction = ? AND ref_type = ?", "commit", "task_run").
 		Select(costYuanExpr).Scan(&totalCostYuan)
+	s.db.WithContext(ctx).Table("provider_calls").Select("COALESCE(SUM(cost_yuan), 0)").Scan(&providerYuan)
+	totalCostYuan += providerYuan
 
 	c.JSON(http.StatusOK, gin.H{
 		"user_count":        userCount,
@@ -189,11 +195,17 @@ func (s *Server) handleAdminListUsers(c *gin.Context) {
 		Yuan   float64
 	}
 	s.db.WithContext(ctx).Model(&persistence.CreditLedger{}).
-		Where("user_id IN ? AND direction = ?", userIDs, "commit").
+		Where("user_id IN ? AND direction = ? AND ref_type = ?", userIDs, "commit", "task_run").
 		Select("user_id, " + costYuanExpr + " as yuan").Group("user_id").Scan(&costRows)
 	costByUser := map[uint64]float64{}
 	for _, r := range costRows {
 		costByUser[r.UserID] = r.Yuan
+	}
+	costRows = nil
+	s.db.WithContext(ctx).Table("provider_calls").Where("user_id IN ?", userIDs).
+		Select("user_id, COALESCE(SUM(cost_yuan), 0) as yuan").Group("user_id").Scan(&costRows)
+	for _, r := range costRows {
+		costByUser[r.UserID] += r.Yuan
 	}
 
 	var jobCountRows []struct {
@@ -208,6 +220,7 @@ func (s *Server) handleAdminListUsers(c *gin.Context) {
 		jobCountByUser[r.UserID] = r.N
 	}
 
+	openAIUsers, _ := persistence.UsersWithEntitlement(ctx, s.db, userIDs, persistence.EntitlementOpenAIImage)
 	out := make([]adminUserRow, 0, len(users))
 	for _, u := range users {
 		acct := acctByUser[u.ID]
@@ -217,7 +230,7 @@ func (s *Server) handleAdminListUsers(c *gin.Context) {
 			Phone:        u.Phone,
 			IsAdmin:      u.IsAdmin,
 			IsActive:     u.IsActive,
-			ComicAI:      u.ComicAIEnabled,
+			ComicAI:      openAIUsers[u.ID],
 			Balance:      acct.Balance,
 			Held:         acct.Held,
 			CreditsSpent: int(spentByUser[u.ID]),
@@ -453,20 +466,15 @@ func (s *Server) handleAdminSetComicAI(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
 		return
 	}
-	res := s.db.WithContext(c.Request.Context()).Model(&persistence.User{}).Where("biz_id = ?", c.Param("bizID")).
-		Update("comic_ai_enabled", *req.Enabled)
-	if res.Error != nil {
-		c.JSON(http.StatusInternalServerError, errBody("internal", "update comic ai flag"))
+	ctx := c.Request.Context()
+	var target persistence.User
+	if err := s.db.WithContext(ctx).Select("id").Where("biz_id = ?", c.Param("bizID")).First(&target).Error; err != nil {
+		c.JSON(http.StatusNotFound, errBody("not_found", "user not found"))
 		return
 	}
-	if res.RowsAffected == 0 {
-		// MySQL reports 0 rows for a no-op update too; distinguish from not found.
-		var n int64
-		s.db.WithContext(c.Request.Context()).Model(&persistence.User{}).Where("biz_id = ?", c.Param("bizID")).Count(&n)
-		if n == 0 {
-			c.JSON(http.StatusNotFound, errBody("not_found", "user not found"))
-			return
-		}
+	if err := persistence.SetEntitlement(ctx, s.db, target.ID, persistence.EntitlementOpenAIImage, *req.Enabled, userID(c)); err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "update entitlement"))
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{"biz_id": c.Param("bizID"), "comic_ai_enabled": *req.Enabled})
 }
@@ -508,9 +516,14 @@ func (s *Server) handleAdminUsage(c *gin.Context) {
 		Yuan float64
 	}
 	s.db.WithContext(ctx).Model(&persistence.CreditLedger{}).
-		Where("created_at >= ? AND direction = ?", since, "commit").
+		Where("created_at >= ? AND direction = ? AND ref_type = ?", since, "commit", "task_run").
 		Select("DATE(created_at) as day, " + costYuanExpr + " as yuan").
 		Group("DATE(created_at)").Order("day").Scan(&costRows)
+	var providerRows = costRows[:0:0]
+	s.db.WithContext(ctx).Table("provider_calls").Where("started_at >= ?", since).
+		Select("DATE(started_at) as day, COALESCE(SUM(cost_yuan), 0) as yuan").
+		Group("DATE(started_at)").Scan(&providerRows)
+	costRows = append(costRows, providerRows...)
 
 	jobsByDay := map[string]int64{}
 	for _, r := range jobRows {
@@ -522,7 +535,7 @@ func (s *Server) handleAdminUsage(c *gin.Context) {
 	}
 	costByDay := map[string]float64{}
 	for _, r := range costRows {
-		costByDay[r.Day] = r.Yuan
+		costByDay[r.Day] += r.Yuan
 	}
 
 	daysOut := make([]gin.H, 0, len(jobRows)+len(creditRows))

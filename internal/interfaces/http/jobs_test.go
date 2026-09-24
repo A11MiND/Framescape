@@ -260,3 +260,63 @@ func TestHandleEstimateJob(t *testing.T) {
 		t.Fatalf("zero-balance estimate: status = %d, want %d, body = %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 }
+
+func TestJobBucketsSummaryRenameAndQuote(t *testing.T) {
+	s, eng := newFullTestServer(t)
+	r := s.Router()
+	token, _ := registerAndFund(t, s, 1000)
+	spec := jobsvc.Spec{Text: "a tram by the sea"}
+
+	quoted, _ := jobsvc.EstimateCredits("image.single", spec)
+	stale := quoted + 1
+	rec := doJSON(t, r, http.MethodPost, "/api/v1/jobs", createJobRequest{WorkflowName: "image.single", Spec: spec, QuoteTotal: &stale}, token)
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "price_changed") {
+		t.Fatalf("stale quote: %d %s", rec.Code, rec.Body.String())
+	}
+	a := createJob(t, s, token)
+	rec = doJSON(t, r, http.MethodPost, "/api/v1/jobs", createJobRequest{WorkflowName: "image.single", Spec: spec, QuoteTotal: &quoted}, token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("confirmed quote: %d %s", rec.Code, rec.Body.String())
+	}
+	eng.finish(t, a, "succeeded")
+
+	rec = doJSON(t, r, http.MethodGet, "/api/v1/jobs/summary", nil, token)
+	var sum map[string]int
+	_ = json.Unmarshal(rec.Body.Bytes(), &sum)
+	if sum["active"] != 1 || sum["succeeded"] != 1 || sum["total"] != 2 {
+		t.Fatalf("summary = %v", sum)
+	}
+	rec = doJSON(t, r, http.MethodGet, "/api/v1/jobs?bucket=succeeded", nil, token)
+	if !strings.Contains(rec.Body.String(), a) || strings.Count(rec.Body.String(), `"biz_id"`) != 1 {
+		t.Fatalf("succeeded bucket: %s", rec.Body.String())
+	}
+	if rec = doJSON(t, r, http.MethodGet, "/api/v1/jobs?bucket=nope", nil, token); rec.Code != http.StatusBadRequest {
+		t.Fatalf("unknown bucket: %d", rec.Code)
+	}
+
+	if rec = doJSON(t, r, http.MethodPatch, "/api/v1/jobs/"+a, map[string]string{"title": "Coastal tram"}, token); rec.Code != http.StatusNoContent {
+		t.Fatalf("rename: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = doJSON(t, r, http.MethodGet, "/api/v1/jobs?q=oastal", nil, token)
+	if !strings.Contains(rec.Body.String(), "Coastal tram") {
+		t.Fatalf("title search: %s", rec.Body.String())
+	}
+	if rec = doJSON(t, r, http.MethodPatch, "/api/v1/jobs/"+a, map[string]string{"title": " "}, token); rec.Code != http.StatusBadRequest && rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("blank title accepted: %d", rec.Code)
+	}
+
+	rec = doJSON(t, r, http.MethodGet, "/api/v1/credits/ledger?job_id="+a, nil, token)
+	if !strings.Contains(rec.Body.String(), `"direction":"hold"`) || !strings.Contains(rec.Body.String(), `"workflow_name":"image.single"`) {
+		t.Fatalf("ledger lacks the job link: %s", rec.Body.String())
+	}
+}
+
+func TestCapabilitiesReportProvidersAndAuth(t *testing.T) {
+	s := newTestServer(t)
+	rec := doJSON(t, s.Router(), http.MethodGet, "/api/v1/capabilities", nil, "")
+	for _, want := range []string{`"max_composed_chars":20000`, `"phone_sms":false`, `"email_verification":false`, `"providers"`, `"entitlement":"openai_image"`} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("capabilities missing %s: %s", want, rec.Body.String())
+		}
+	}
+}

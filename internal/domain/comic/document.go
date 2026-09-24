@@ -51,6 +51,20 @@ type Document struct {
 // the current page as one more reference, so users get 16-1.
 const MaxReferences = 15
 
+// Text limits, in characters (runes). The generation text is the brief plus
+// one label line per reference, so a client must budget the brief against
+// MaxComposedChars minus its labels rather than against MaxBriefChars.
+const (
+	MaxTitleChars          = 128
+	MaxBriefChars          = 20000  // stored in the document
+	MaxComposedChars       = 20000  // brief plus reference labels, sent to generation
+	MaxReferenceLabelChars = 200    // one reference's usage note
+	MaxContextChars        = 8000   // reviewed source excerpts sent along
+	MaxBackgroundChars     = 200000 // raw imported source kept in the document
+	MaxCompiledChars       = 32000  // final prompt after appending contracts
+	MaxLayers              = 64
+)
+
 // ImageMime is the set of image types the comic editor stores and sends to
 // OpenAI (its edits endpoint accepts PNG, JPEG and WebP).
 func ImageMime(mime string) bool {
@@ -63,16 +77,16 @@ func (d Document) Validate() error {
 	if d.SchemaVersion != 1 {
 		return fmt.Errorf("unsupported comic document version")
 	}
-	if strings.TrimSpace(d.Title) == "" || utf8.RuneCountInString(d.Title) > 128 {
+	if strings.TrimSpace(d.Title) == "" || utf8.RuneCountInString(d.Title) > MaxTitleChars {
 		return fmt.Errorf("title must contain 1..128 characters")
 	}
 	if d.Mode != "direct" && d.Mode != "editable" {
 		return fmt.Errorf("invalid comic mode")
 	}
-	if utf8.RuneCountInString(d.Brief) > 20000 || utf8.RuneCountInString(d.Background) > 200000 || utf8.RuneCountInString(d.Context) > 8000 {
+	if utf8.RuneCountInString(d.Brief) > MaxBriefChars || utf8.RuneCountInString(d.Background) > MaxBackgroundChars || utf8.RuneCountInString(d.Context) > MaxContextChars {
 		return fmt.Errorf("comic source or brief exceeds the character limit")
 	}
-	if len(d.References) > MaxReferences || len(d.PanelAssetIDs) != 4 || len(d.Layers) > 64 {
+	if len(d.References) > MaxReferences || len(d.PanelAssetIDs) != 4 || len(d.Layers) > MaxLayers {
 		return fmt.Errorf("invalid reference, panel or layer count")
 	}
 	for _, ref := range d.References {

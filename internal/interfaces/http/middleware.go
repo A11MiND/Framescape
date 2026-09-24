@@ -51,7 +51,7 @@ func (s *Server) requireAuth() gin.HandlerFunc {
 // requireAdmin chains after requireAuth (needs userID(c) already set) and
 // rejects any caller whose users.is_admin isn't true. Deliberately a fresh
 // DB read on every request rather than something baked into the JWT at
-// login time — an access token lives up to 7 days (accessTTL), and revoking
+// login time — an access token lives up to accessTTL(), and revoking
 // someone's admin rights must take effect on their very next request, not
 // wait for their token to expire or force a mass token invalidation.
 func (s *Server) requireAdmin() gin.HandlerFunc {

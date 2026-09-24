@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -98,8 +99,8 @@ func TestHandleDeleteProject(t *testing.T) {
 	}
 
 	rec = doJSON(t, r, http.MethodDelete, "/api/v1/projects/"+bizID, nil, tokenA)
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("delete: status = %d, want %d, body = %s", rec.Code, http.StatusNoContent, rec.Body.String())
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"detached"`) {
+		t.Fatalf("delete: status = %d, want %d with detached counts, body = %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 	rec = doJSON(t, r, http.MethodDelete, "/api/v1/projects/"+bizID, nil, tokenA)
 	if rec.Code != http.StatusNotFound {
@@ -113,5 +114,37 @@ func TestHandleDeleteProject(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &body)
 	if len(body.Projects) != 0 {
 		t.Errorf("deleted project still listed: %v", body.Projects)
+	}
+}
+
+func TestProjectStatsAndDetach(t *testing.T) {
+	s, _ := newFullTestServer(t)
+	r := s.Router()
+	token, uid := registerAndFund(t, s, 100)
+	rec := doJSON(t, r, http.MethodPost, "/api/v1/projects", createProjectRequest{Name: "Coastal"}, token)
+	var created map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &created)
+	bizID := created["biz_id"].(string)
+
+	rec = doJSON(t, r, http.MethodPost, "/api/v1/jobs", map[string]any{"workflow_name": "image.single", "spec": map[string]any{"text": "tram"}, "project_id": bizID}, token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create job: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = doJSON(t, r, http.MethodGet, "/api/v1/projects/"+bizID, nil, token)
+	if !strings.Contains(rec.Body.String(), `"job_count":1`) {
+		t.Fatalf("project detail lacks job count: %s", rec.Body.String())
+	}
+	rec = doJSON(t, r, http.MethodGet, "/api/v1/projects?q=oast", nil, token)
+	if !strings.Contains(rec.Body.String(), bizID) {
+		t.Fatalf("search did not match: %s", rec.Body.String())
+	}
+	rec = doJSON(t, r, http.MethodDelete, "/api/v1/projects/"+bizID, nil, token)
+	if !strings.Contains(rec.Body.String(), `"jobs":1`) {
+		t.Fatalf("delete should detach the job: %s", rec.Body.String())
+	}
+	var n int64
+	s.db.Table("jobs").Where("user_id = ? AND project_id IS NOT NULL", uid).Count(&n)
+	if n != 0 {
+		t.Fatalf("%d jobs still point at the deleted project", n)
 	}
 }

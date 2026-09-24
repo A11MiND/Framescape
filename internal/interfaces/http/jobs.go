@@ -18,6 +18,9 @@ type createJobRequest struct {
 	WorkflowName string      `json:"workflow_name" binding:"required"`
 	Spec         jobsvc.Spec `json:"spec" binding:"required"`
 	ProjectID    string      `json:"project_id,omitempty"`
+	// QuoteTotal is the reservation the user confirmed; when present and the
+	// current price differs, the job is refused instead of charging more.
+	QuoteTotal *int `json:"quote_total,omitempty"`
 }
 
 func (s *Server) handleCreateJob(c *gin.Context) {
@@ -43,6 +46,12 @@ func (s *Server) handleCreateJob(c *gin.Context) {
 	// original job instead of holding credits or submitting twice. See
 	// jobsvc.Service.Create's doc for the full mechanism.
 	idemKey := c.GetHeader("Idempotency-Key")
+	if req.QuoteTotal != nil {
+		if current, err := jobsvc.EstimateCredits(req.WorkflowName, req.Spec); err == nil && current != *req.QuoteTotal {
+			c.JSON(http.StatusConflict, gin.H{"code": "price_changed", "message": "the price changed since it was quoted", "credits_total": current})
+			return
+		}
+	}
 
 	job, err := s.jobs.Create(c.Request.Context(), userID(c), req.WorkflowName, req.Spec, idemKey, projectID)
 	if errors.Is(err, jobsvc.ErrComicAINotEnabled) {
@@ -112,77 +121,132 @@ func writeResumeError(c *gin.Context, err error) {
 	}
 }
 
-// handleListJobs is GET /api/v1/jobs?status=&cursor=&limit= (F7.1): the job
-// list PRD §13.2 always specced but the frontend never had a backend for —
-// jobsvc.Service.List's own doc covers the cursor shape.
+// handleListJobs is GET /api/v1/jobs: the user's jobs newest first.
+// Filters: bucket (needs_review|active|succeeded|failed|cancelled) or an
+// exact status, workflow, q (title contains), project_id; paged by cursor.
 func (s *Server) handleListJobs(c *gin.Context) {
+	ctx := c.Request.Context()
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	cursor, _ := strconv.ParseUint(c.DefaultQuery("cursor", "0"), 10, 64)
-
-	var projectID *uint64
+	f := jobsvc.ListFilter{Status: c.Query("status"), Bucket: c.Query("bucket"), Workflow: c.Query("workflow"),
+		Query: c.Query("q"), Cursor: cursor, Limit: limit}
 	if pid := c.Query("project_id"); pid != "" {
-		resolved, ok := s.resolveProjectID(c.Request.Context(), userID(c), pid)
+		resolved, ok := s.resolveProjectID(ctx, userID(c), pid)
 		if !ok {
 			c.JSON(http.StatusNotFound, errBody("not_found", "project not found"))
 			return
 		}
-		projectID = &resolved
+		f.ProjectID = &resolved
 	}
-
-	rows, next, err := s.jobs.List(c.Request.Context(), userID(c), c.Query("status"), cursor, limit, projectID)
+	rows, next, err := s.jobs.List(ctx, userID(c), f)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, errBody("internal", "list jobs"))
+		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
 		return
 	}
 
-	// Batch-resolve retry_of_job_id -> biz_id once for the whole page, same
-	// reasoning as handleListAssets' project_id resolution — the frontend
-	// renders its own locale-aware retry indicator from this rather than
-	// parsing any hardcoded-language text (jobsvc.RetryNode's own doc).
-	retryOfIDs := make([]uint64, 0)
-	seen := map[uint64]bool{}
+	retryOf, projects, covers := map[uint64]string{}, map[uint64]string{}, map[string]persistence.Asset{}
+	var retryIDs, projectIDs []uint64
+	var coverIDs []string
 	for _, j := range rows {
-		if j.RetryOfJobID != nil && !seen[*j.RetryOfJobID] {
-			seen[*j.RetryOfJobID] = true
-			retryOfIDs = append(retryOfIDs, *j.RetryOfJobID)
+		if j.RetryOfJobID != nil {
+			retryIDs = append(retryIDs, *j.RetryOfJobID)
+		}
+		if j.ProjectID != nil {
+			projectIDs = append(projectIDs, *j.ProjectID)
+		}
+		if j.CoverAssetID != "" {
+			coverIDs = append(coverIDs, j.CoverAssetID)
 		}
 	}
-	retryOfBizByID := make(map[uint64]string, len(retryOfIDs))
-	if len(retryOfIDs) > 0 {
-		var srcJobs []persistence.Job
-		_ = s.db.WithContext(c.Request.Context()).Where("id IN ?", retryOfIDs).Find(&srcJobs).Error
-		for _, sj := range srcJobs {
-			retryOfBizByID[sj.ID] = sj.BizID
+	if len(retryIDs) > 0 {
+		var src []persistence.Job
+		s.db.WithContext(ctx).Select("id", "biz_id").Where("id IN ?", retryIDs).Find(&src)
+		for _, j := range src {
+			retryOf[j.ID] = j.BizID
+		}
+	}
+	if len(projectIDs) > 0 {
+		var ps []persistence.Project
+		s.db.WithContext(ctx).Select("id", "biz_id").Where("id IN ? AND deleted_at IS NULL", projectIDs).Find(&ps)
+		for _, p := range ps {
+			projects[p.ID] = p.BizID
+		}
+	}
+	if len(coverIDs) > 0 {
+		var as []persistence.Asset
+		s.db.WithContext(ctx).Select("biz_id", "type", "public_url", "thumb_url").Where("biz_id IN ? AND deleted_at IS NULL", coverIDs).Find(&as)
+		for _, a := range as {
+			covers[a.BizID] = a
 		}
 	}
 
 	out := make([]gin.H, 0, len(rows))
 	for _, j := range rows {
-		retryOfBizID := ""
-		if j.RetryOfJobID != nil {
-			retryOfBizID = retryOfBizByID[*j.RetryOfJobID]
+		row := gin.H{
+			"biz_id": j.BizID, "workflow_name": j.WorkflowName, "title": j.Title, "status": j.Status,
+			"node_total": j.NodeTotal, "node_done": j.NodeDone, "node_failed": j.NodeFailed,
+			"credit_estimated": j.CreditEstimated, "credit_held": j.CreditHeld, "credit_settled": j.CreditSettled,
+			"error_code": j.ErrorCode, "error_msg": j.ErrorMsg,
+			"created_at": j.CreatedAt, "started_at": j.StartedAt, "finished_at": j.FinishedAt,
+			"retry_of_job_id": "", "project_id": "", "cover_asset_id": "", "cover_url": "", "cover_type": "",
 		}
-		out = append(out, gin.H{
-			"biz_id":           j.BizID,
-			"workflow_name":    j.WorkflowName,
-			"title":            j.Title,
-			"status":           j.Status,
-			"node_total":       j.NodeTotal,
-			"node_done":        j.NodeDone,
-			"node_failed":      j.NodeFailed,
-			"credit_estimated": j.CreditEstimated,
-			"credit_held":      j.CreditHeld,
-			"credit_settled":   j.CreditSettled,
-			"created_at":       j.CreatedAt,
-			"finished_at":      j.FinishedAt,
-			"retry_of_job_id":  retryOfBizID,
-		})
+		if j.RetryOfJobID != nil {
+			row["retry_of_job_id"] = retryOf[*j.RetryOfJobID]
+		}
+		if j.ProjectID != nil {
+			row["project_id"] = projects[*j.ProjectID]
+		}
+		if a, ok := covers[j.CoverAssetID]; ok {
+			row["cover_asset_id"], row["cover_url"], row["cover_type"] = a.BizID, thumbOrOriginal(a), a.Type
+		}
+		out = append(out, row)
 	}
 	resp := gin.H{"jobs": out}
 	if next > 0 {
 		resp["next_cursor"] = strconv.FormatUint(next, 10)
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+// handleJobsSummary is GET /api/v1/jobs/summary: job counts per bucket,
+// optionally within one project.
+func (s *Server) handleJobsSummary(c *gin.Context) {
+	ctx := c.Request.Context()
+	var projectID *uint64
+	if pid := c.Query("project_id"); pid != "" {
+		resolved, ok := s.resolveProjectID(ctx, userID(c), pid)
+		if !ok {
+			c.JSON(http.StatusNotFound, errBody("not_found", "project not found"))
+			return
+		}
+		projectID = &resolved
+	}
+	counts, err := s.jobs.Summary(ctx, userID(c), projectID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "summarize jobs"))
+		return
+	}
+	c.JSON(http.StatusOK, counts)
+}
+
+// handleUpdateJob is PATCH /api/v1/jobs/{bizID}: rename a job.
+func (s *Server) handleUpdateJob(c *gin.Context) {
+	var req struct {
+		Title string `json:"title" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
+		return
+	}
+	err := s.jobs.Rename(c.Request.Context(), userID(c), c.Param("bizID"), req.Title)
+	switch {
+	case errors.Is(err, jobsvc.ErrNotFound):
+		c.JSON(http.StatusNotFound, errBody("not_found", "job not found"))
+	case err != nil:
+		c.JSON(http.StatusUnprocessableEntity, errBody("invalid_title", err.Error()))
+	default:
+		c.Status(http.StatusNoContent)
+	}
 }
 
 // handleEstimateJob is POST /api/v1/jobs/estimate (§13.3): quotes the same

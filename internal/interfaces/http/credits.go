@@ -7,6 +7,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -43,9 +44,13 @@ func (s *Server) handleCreditsLedger(c *gin.Context) {
 	}
 	cursor, _ := strconv.ParseUint(c.DefaultQuery("cursor", "0"), 10, 64)
 
-	q := s.db.WithContext(c.Request.Context()).Where("user_id = ?", userID(c))
+	ctx := c.Request.Context()
+	q := s.db.WithContext(ctx).Where("user_id = ?", userID(c))
 	if cursor > 0 {
 		q = q.Where("id < ?", cursor)
+	}
+	if jobID := c.Query("job_id"); jobID != "" {
+		q = q.Where("ref_type = 'job' AND ref_id = ?", jobID)
 	}
 	var rows []persistence.CreditLedger
 	if err := q.Order("id DESC").Limit(limit).Find(&rows).Error; err != nil {
@@ -53,9 +58,10 @@ func (s *Server) handleCreditsLedger(c *gin.Context) {
 		return
 	}
 
+	jobs := s.ledgerJobs(ctx, rows)
 	out := make([]gin.H, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, gin.H{
+		entry := gin.H{
 			"direction":     r.Direction,
 			"amount":        r.Amount,
 			"balance_after": r.BalanceAfter,
@@ -64,7 +70,12 @@ func (s *Server) handleCreditsLedger(c *gin.Context) {
 			"ref_id":        r.RefID,
 			"remark":        parseRemark(r.Remark),
 			"created_at":    r.CreatedAt,
-		})
+			"job":           nil,
+		}
+		if j, ok := jobs[r.RefType+":"+r.RefID]; ok {
+			entry["job"] = j
+		}
+		out = append(out, entry)
 	}
 	resp := gin.H{"entries": out}
 	if len(rows) == limit {
@@ -80,16 +91,18 @@ func (s *Server) handleCreditsLedger(c *gin.Context) {
 // showing its plain-English text verbatim rather than breaking.
 func parseRemark(raw string) gin.H {
 	var p struct {
-		Kind     string  `json:"kind"`
-		Amount   int     `json:"amount"`
-		Workflow string  `json:"workflow"`
-		CostYuan float64 `json:"cost_yuan"`
-		Text     string  `json:"text"`
+		Kind      string  `json:"kind"`
+		Amount    int     `json:"amount"`
+		Workflow  string  `json:"workflow"`
+		CostYuan  float64 `json:"cost_yuan"`
+		Text      string  `json:"text"`
+		Node      string  `json:"node"`
+		Shortfall int     `json:"shortfall"`
 	}
 	if err := json.Unmarshal([]byte(raw), &p); err != nil || p.Kind == "" {
 		return gin.H{"kind": "", "amount": 0, "workflow": "", "cost_yuan": 0, "text": raw}
 	}
-	return gin.H{"kind": p.Kind, "amount": p.Amount, "workflow": p.Workflow, "cost_yuan": p.CostYuan, "text": p.Text}
+	return gin.H{"kind": p.Kind, "amount": p.Amount, "workflow": p.Workflow, "cost_yuan": p.CostYuan, "text": p.Text, "node": p.Node, "shortfall": p.Shortfall}
 }
 
 // handleCreditsTopup is POST /api/v1/credits/topup: see demoTopupCredits'
@@ -112,4 +125,55 @@ func (s *Server) handleCreditsTopup(c *gin.Context) {
 	var acct persistence.CreditAccount
 	_ = s.db.WithContext(c.Request.Context()).First(&acct, "user_id = ?", uid).Error
 	c.JSON(http.StatusOK, gin.H{"balance": acct.Balance, "held": acct.Held, "credited": demoTopupCredits})
+}
+
+// ledgerJobs resolves the job behind each ledger row: current rows point at
+// the job directly, older commit rows at one of its task runs.
+func (s *Server) ledgerJobs(ctx context.Context, rows []persistence.CreditLedger) map[string]gin.H {
+	var bizIDs, taskRuns []string
+	for _, r := range rows {
+		switch r.RefType {
+		case "job":
+			bizIDs = append(bizIDs, r.RefID)
+		case "task_run":
+			taskRuns = append(taskRuns, r.RefID)
+		}
+	}
+	type jobRow struct {
+		BizID, Title, WorkflowName, CoverAssetID, TaskRunID string
+	}
+	var found []jobRow
+	if len(bizIDs) > 0 {
+		s.db.WithContext(ctx).Table("jobs").Select("biz_id, title, workflow_name, cover_asset_id").Where("biz_id IN ?", bizIDs).Scan(&found)
+	}
+	if len(taskRuns) > 0 {
+		var viaNodes []jobRow
+		s.db.WithContext(ctx).Table("job_nodes").Select("jobs.biz_id, jobs.title, jobs.workflow_name, jobs.cover_asset_id, job_nodes.task_run_id").
+			Joins("JOIN jobs ON jobs.id = job_nodes.job_id").Where("job_nodes.task_run_id IN ?", taskRuns).Scan(&viaNodes)
+		found = append(found, viaNodes...)
+	}
+	var coverIDs []string
+	for _, j := range found {
+		if j.CoverAssetID != "" {
+			coverIDs = append(coverIDs, j.CoverAssetID)
+		}
+	}
+	covers := map[string]string{}
+	if len(coverIDs) > 0 {
+		var as []persistence.Asset
+		s.db.WithContext(ctx).Select("biz_id", "type", "public_url", "thumb_url").Where("biz_id IN ?", coverIDs).Find(&as)
+		for _, a := range as {
+			covers[a.BizID] = thumbOrOriginal(a)
+		}
+	}
+	out := map[string]gin.H{}
+	for _, j := range found {
+		v := gin.H{"biz_id": j.BizID, "title": j.Title, "workflow_name": j.WorkflowName, "cover_url": covers[j.CoverAssetID]}
+		if j.TaskRunID != "" {
+			out["task_run:"+j.TaskRunID] = v
+		} else {
+			out["job:"+j.BizID] = v
+		}
+	}
+	return out
 }

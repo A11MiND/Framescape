@@ -12,7 +12,9 @@ import (
 	"math/rand/v2"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
@@ -399,20 +401,63 @@ func EstimateBreakdown(workflowName string, spec Spec) ([]EstimateItem, int, err
 	return items, total, nil
 }
 
+// Status buckets group job statuses the way the task center shows them.
+const (
+	BucketNeedsReview = "needs_review"
+	BucketActive      = "active"
+	BucketSucceeded   = "succeeded"
+	BucketFailed      = "failed"
+	BucketCancelled   = "cancelled"
+)
+
+var bucketStatuses = map[string][]string{
+	BucketNeedsReview: {workflow.JobAwaitingReview},
+	BucketActive:      {workflow.JobQueued, workflow.JobRunning, workflow.JobCancelling},
+	BucketSucceeded:   {workflow.JobSucceeded},
+	BucketFailed:      {workflow.JobFailed, workflow.JobPartial},
+	BucketCancelled:   {workflow.JobCancelled},
+}
+
+// ListFilter narrows a job listing. Status is an exact status; Bucket a
+// group of statuses; Query matches the title.
+type ListFilter struct {
+	Status    string
+	Bucket    string
+	Workflow  string
+	Query     string
+	ProjectID *uint64
+	Cursor    uint64
+	Limit     int
+}
+
 // List returns a user's jobs newest first, paged by id cursor.
-func (s *Service) List(ctx context.Context, userID uint64, status string, cursor uint64, limit int, projectID *uint64) ([]persistence.Job, uint64, error) {
+func (s *Service) List(ctx context.Context, userID uint64, f ListFilter) ([]persistence.Job, uint64, error) {
+	limit := f.Limit
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
 	q := s.db.WithContext(ctx).Where("user_id = ? AND deleted_at IS NULL", userID)
-	if status != "" {
-		q = q.Where("status = ?", status)
+	switch {
+	case f.Status != "":
+		q = q.Where("status = ?", f.Status)
+	case f.Bucket != "":
+		statuses, ok := bucketStatuses[f.Bucket]
+		if !ok {
+			return nil, 0, fmt.Errorf("unknown bucket %q", f.Bucket)
+		}
+		q = q.Where("status IN ?", statuses)
 	}
-	if cursor > 0 {
-		q = q.Where("id < ?", cursor)
+	if f.Workflow != "" {
+		q = q.Where("workflow_name = ?", f.Workflow)
 	}
-	if projectID != nil {
-		q = q.Where("project_id = ?", *projectID)
+	if f.Query != "" {
+		q = q.Where("title LIKE ?", "%"+escapeLike(f.Query)+"%")
+	}
+	if f.Cursor > 0 {
+		q = q.Where("id < ?", f.Cursor)
+	}
+	if f.ProjectID != nil {
+		q = q.Where("project_id = ?", *f.ProjectID)
 	}
 	var rows []persistence.Job
 	if err := q.Order("id DESC").Limit(limit).Find(&rows).Error; err != nil {
@@ -423,6 +468,49 @@ func (s *Service) List(ctx context.Context, userID uint64, status string, cursor
 		next = rows[len(rows)-1].ID
 	}
 	return rows, next, nil
+}
+
+func escapeLike(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return r.Replace(s)
+}
+
+// Summary counts a user's jobs per bucket.
+func (s *Service) Summary(ctx context.Context, userID uint64, projectID *uint64) (map[string]int, error) {
+	q := s.db.WithContext(ctx).Model(&persistence.Job{}).Where("user_id = ? AND deleted_at IS NULL", userID)
+	if projectID != nil {
+		q = q.Where("project_id = ?", *projectID)
+	}
+	var rows []struct {
+		Status string
+		N      int
+	}
+	if err := q.Select("status, COUNT(*) AS n").Group("status").Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("summarize jobs: %w", err)
+	}
+	out := map[string]int{BucketNeedsReview: 0, BucketActive: 0, BucketSucceeded: 0, BucketFailed: 0, BucketCancelled: 0, "total": 0}
+	for _, r := range rows {
+		out["total"] += r.N
+		for bucket, statuses := range bucketStatuses {
+			if slices.Contains(statuses, r.Status) {
+				out[bucket] += r.N
+			}
+		}
+	}
+	return out, nil
+}
+
+// Rename changes a job's title.
+func (s *Service) Rename(ctx context.Context, userID uint64, bizID, title string) error {
+	title = strings.TrimSpace(title)
+	if title == "" || utf8.RuneCountInString(title) > 128 {
+		return fmt.Errorf("title must contain 1..128 characters")
+	}
+	job, err := s.load(ctx, userID, bizID)
+	if err != nil {
+		return err
+	}
+	return s.db.WithContext(ctx).Model(&persistence.Job{}).Where("id = ?", job.ID).Update("title", title).Error
 }
 
 // Get returns a user's job and its nodes.

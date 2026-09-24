@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"aigc-platform/internal/pkg/config"
 	"fmt"
 	"time"
 
@@ -15,8 +16,8 @@ const (
 	tokenAccess  tokenType = "access"
 	tokenRefresh tokenType = "refresh"
 
-	accessTTL  = 7 * 24 * time.Hour // F1.1: "token 7 天"
-	refreshTTL = 30 * 24 * time.Hour
+	defaultAccessTTL = time.Hour
+	refreshTTL       = 30 * 24 * time.Hour
 )
 
 type claims struct {
@@ -55,4 +56,13 @@ func parseToken(secret string, raw string, want tokenType) (*claims, error) {
 		return nil, fmt.Errorf("wrong token type: want %s got %s", want, c.Type)
 	}
 	return &c, nil
+}
+
+// accessTTL is how long an access token lives (JWT_ACCESS_TTL_MINUTES,
+// default one hour); clients renew it with the refresh token.
+func accessTTL() time.Duration {
+	if m := config.JWTAccessTTLMinutes(); m > 0 {
+		return time.Duration(m) * time.Minute
+	}
+	return defaultAccessTTL
 }

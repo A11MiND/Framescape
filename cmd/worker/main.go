@@ -21,6 +21,7 @@ import (
 
 	"aigc-platform/internal/application/creditsvc"
 	"aigc-platform/internal/application/jobsvc"
+	"aigc-platform/internal/application/media"
 	"aigc-platform/internal/application/review"
 	"aigc-platform/internal/application/upkeep"
 	"aigc-platform/internal/infra/cache"
@@ -108,6 +109,7 @@ func main() {
 		Plugins: registry,
 	})
 	reviewer := review.New(sqlDB, minimaxClient, sink)
+	thumbnailer := media.NewThumbnailer(sqlDB, objectStore)
 
 	go orch.ListenCancel(ctx, redisClient)
 	go orch.RunSweeper(ctx, 5*time.Second, func(err error) { log.Warn("sweep failed", zap.Error(err)) })
@@ -126,6 +128,7 @@ func main() {
 
 	handlers := orch.Handlers()
 	handlers[jobsvc.TaskAssetReview] = func(ctx context.Context, t *asynq.Task) error { return reviewer.Handle(ctx, t.Payload()) }
+	handlers[media.TaskThumbnail] = func(ctx context.Context, t *asynq.Task) error { return thumbnailer.Handle(ctx, t.Payload()) }
 	mux2 := asynq.NewServeMux()
 	for kind, h := range handlers {
 		mux2.HandleFunc(kind, h)

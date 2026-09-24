@@ -66,6 +66,7 @@ func TestHandleEmailSendCodeNotConfigured(t *testing.T) {
 // test), matching how a real code would land there via handleEmailSendCode.
 func TestHandleRegisterWithEmailCode(t *testing.T) {
 	t.Setenv("EMAIL_PROVIDER_API_KEY", "test-key-not-a-real-provider")
+	withEmailSender(t)
 	s := newTestServer(t)
 	r := s.Router()
 	email := uniqueEmail(t)
@@ -102,6 +103,7 @@ func TestHandleRegisterWithEmailCode(t *testing.T) {
 
 func TestHandleRegisterWithExpiredEmailCode(t *testing.T) {
 	t.Setenv("EMAIL_PROVIDER_API_KEY", "test-key-not-a-real-provider")
+	withEmailSender(t)
 	s := newTestServer(t)
 	r := s.Router()
 	email := uniqueEmail(t)
@@ -205,4 +207,13 @@ func TestCheckVerifyRateLimitNilRedis(t *testing.T) {
 	if err := s.checkVerifyRateLimit(context.Background(), "test", "whoever"); err != nil {
 		t.Fatalf("expected nil-redis to fail open, got %v", err)
 	}
+}
+
+// withEmailSender treats the email sender as implemented for one test, so
+// the code-verification path can be exercised with seeded codes.
+func withEmailSender(t *testing.T) {
+	t.Helper()
+	prev := emailSenderImplemented
+	emailSenderImplemented = true
+	t.Cleanup(func() { emailSenderImplemented = prev })
 }

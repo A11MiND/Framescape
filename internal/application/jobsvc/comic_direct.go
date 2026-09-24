@@ -43,11 +43,11 @@ func directComicPrompt(spec Spec) (string, error) {
 	if len(spec.ReferenceImageAssetIDs) > comic.MaxReferences {
 		return "", fmt.Errorf("at most %d character/style reference images", comic.MaxReferences)
 	}
-	if strings.TrimSpace(spec.Text) == "" || utf8.RuneCountInString(spec.Text) > 20000 {
-		return "", fmt.Errorf("comic brief must contain 1..20000 characters")
+	if strings.TrimSpace(spec.Text) == "" || utf8.RuneCountInString(spec.Text) > comic.MaxComposedChars {
+		return "", fmt.Errorf("comic brief must contain 1..%d characters", comic.MaxComposedChars)
 	}
-	if utf8.RuneCountInString(spec.ComicContext) > 8000 {
-		return "", fmt.Errorf("reviewed source excerpts must not exceed 8000 characters")
+	if utf8.RuneCountInString(spec.ComicContext) > comic.MaxContextChars {
+		return "", fmt.Errorf("reviewed source excerpts must not exceed %d characters", comic.MaxContextChars)
 	}
 	text := spec.Text
 	if spec.ComicContext != "" {
@@ -63,8 +63,8 @@ func directComicPrompt(spec Spec) (string, error) {
 		}
 	}
 	// Never silently truncate an approved brief.
-	if utf8.RuneCountInString(text) > 32000 {
-		return "", fmt.Errorf("compiled comic prompt exceeds 32000 characters")
+	if utf8.RuneCountInString(text) > comic.MaxCompiledChars {
+		return "", fmt.Errorf("compiled comic prompt exceeds %d characters", comic.MaxCompiledChars)
 	}
 	return text, nil
 }
@@ -92,15 +92,17 @@ func directComicCredits(spec Spec) int {
 	return creditsvc.CreditsFromYuan(usd * config.OpenAIUSDToCNY())
 }
 
-// ComicAIAllowed is the gray-release gate: admins, plus accounts an admin
-// switched on (users.comic_ai_enabled). Checked at job creation; the
-// frontend only mirrors it via GET /me.
+// ComicAIAllowed is the OpenAI gray-release gate: admins, plus accounts
+// granted the openai_image entitlement. Enforced at job creation.
 func (s *Service) ComicAIAllowed(ctx context.Context, userID uint64) (bool, error) {
 	var u persistence.User
-	if err := s.db.WithContext(ctx).Select("is_admin", "comic_ai_enabled").First(&u, userID).Error; err != nil {
+	if err := s.db.WithContext(ctx).Select("is_admin").First(&u, userID).Error; err != nil {
 		return false, err
 	}
-	return u.IsAdmin || u.ComicAIEnabled, nil
+	if u.IsAdmin {
+		return true, nil
+	}
+	return persistence.HasEntitlement(ctx, s.db, userID, persistence.EntitlementOpenAIImage)
 }
 
 func (s *Service) prepareDirectComic(ctx context.Context, userID uint64, spec Spec) (*workflow.Plan, string, error) {

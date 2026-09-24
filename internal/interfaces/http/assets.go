@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"aigc-platform/internal/application/media"
 	"archive/zip"
 	"context"
 	"encoding/json"
@@ -700,6 +701,9 @@ func (s *Server) handleCompleteAsset(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, errBody("internal", "insert asset"))
 		return
 	}
+	if s.orch != nil {
+		_ = s.orch.Enqueue(c.Request.Context(), media.ThumbnailTask(row.BizID))
+	}
 	c.JSON(http.StatusOK, assetToJSON(row, "")) // newly uploaded assets are never pre-assigned to a project
 }
 
@@ -773,7 +777,9 @@ func assetToJSON(a persistence.Asset, projectBizID string) gin.H {
 		"biz_id":         a.BizID,
 		"type":           a.Type,
 		"public_url":     a.PublicURL,
+		"thumb_url":      thumbOrOriginal(a),
 		"mime":           a.Mime,
+		"duration_ms":    a.DurationMs,
 		"width":          a.Width,
 		"height":         a.Height,
 		"resolution_tag": a.ResolutionTag,
@@ -819,4 +825,16 @@ func (s *Server) assetDetailJSON(ctx context.Context, a persistence.Asset) gin.H
 	}
 	out["job_biz_id"] = jobBizID
 	return out
+}
+
+// thumbOrOriginal is the grid preview URL: the thumbnail once generated,
+// otherwise the original image (videos have no fallback preview).
+func thumbOrOriginal(a persistence.Asset) string {
+	if a.ThumbURL != "" {
+		return a.ThumbURL
+	}
+	if a.Type == "image" {
+		return a.PublicURL
+	}
+	return ""
 }

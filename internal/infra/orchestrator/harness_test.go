@@ -229,7 +229,7 @@ func (h *harness) owns(nodeID uint64) bool {
 // nothing is left or max steps ran.
 func (h *harness) drain(max int) {
 	h.t.Helper()
-	for i := 0; i < max; i++ {
+	for i, foreign := 0, 0; i < max && foreign < 100000; i++ {
 		t, ok, next := h.disp.pop(h.clock.now())
 		if !ok {
 			if next.IsZero() {
@@ -239,6 +239,8 @@ func (h *harness) drain(max int) {
 			continue
 		}
 		if !h.owns(t.NodeID) {
+			i--
+			foreign++
 			continue
 		}
 		var err error

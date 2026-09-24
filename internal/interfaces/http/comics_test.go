@@ -167,7 +167,7 @@ func TestDirectComicHTTPNoPlannerAndOwnedRefs(t *testing.T) {
 
 func enableComicAI(t *testing.T, s *Server, uid uint64) {
 	t.Helper()
-	if err := s.db.Model(&persistence.User{}).Where("id = ?", uid).Update("comic_ai_enabled", true).Error; err != nil {
+	if err := persistence.SetEntitlement(context.Background(), s.db, uid, persistence.EntitlementOpenAIImage, true, 0); err != nil {
 		t.Fatal(err)
 	}
 }

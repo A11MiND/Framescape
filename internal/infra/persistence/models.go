@@ -111,6 +111,7 @@ type Asset struct {
 	StorageKey    string `gorm:"column:storage_key"`
 	PublicURL     string `gorm:"column:public_url"`
 	ThumbKey      string `gorm:"column:thumb_key"`
+	ThumbURL      string `gorm:"column:thumb_url"`
 	Mime          string
 	Width         int
 	Height        int

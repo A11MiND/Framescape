@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -10,7 +11,6 @@ import (
 	"gorm.io/gorm"
 
 	"aigc-platform/internal/infra/persistence"
-	"aigc-platform/internal/pkg/config"
 	"aigc-platform/internal/pkg/id"
 )
 
@@ -43,7 +43,7 @@ type tokenPair struct {
 }
 
 func (s *Server) issueTokens(userID uint64) (tokenPair, error) {
-	access, err := signToken(s.jwtSecret, userID, tokenAccess, accessTTL)
+	access, err := signToken(s.jwtSecret, userID, tokenAccess, accessTTL())
 	if err != nil {
 		return tokenPair{}, err
 	}
@@ -81,7 +81,7 @@ func (s *Server) handleRegister(c *gin.Context) {
 		return
 	}
 
-	if config.EmailProviderAPIKey() != "" {
+	if emailAvailable() {
 		if err := s.checkVerifyRateLimit(c.Request.Context(), "email", req.Email); err != nil {
 			c.JSON(http.StatusTooManyRequests, errBody("too_many_attempts", err.Error()))
 			return
@@ -191,14 +191,21 @@ func (s *Server) handleMe(c *gin.Context) {
 	var acct persistence.CreditAccount
 	_ = s.db.First(&acct, "user_id = ?", user.ID).Error
 
+	entitlements, _ := persistence.Entitlements(c.Request.Context(), s.db, user.ID)
+	if entitlements == nil {
+		entitlements = []string{}
+	}
+	openAI := user.IsAdmin || slices.Contains(entitlements, persistence.EntitlementOpenAIImage)
 	c.JSON(http.StatusOK, gin.H{
 		"biz_id":   user.BizID,
 		"email":    user.Email,
+		"phone":    user.Phone,
 		"balance":  acct.Balance,
+		"held":     acct.Held,
 		"is_admin": user.IsAdmin,
-		// Gray-release gate for OpenAI comics (jobsvc.ComicAIAllowed, which
-		// is what job creation actually enforces).
-		"comic_ai": user.IsAdmin || user.ComicAIEnabled,
+		// Mirrors what job creation enforces (jobsvc.ComicAIAllowed).
+		"comic_ai":     openAI,
+		"entitlements": entitlements,
 	})
 }
 

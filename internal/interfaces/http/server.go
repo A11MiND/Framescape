@@ -4,6 +4,7 @@ package httpapi
 
 import (
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"aigc-platform/internal/infra/orchestrator"
 	"aigc-platform/internal/infra/realtime"
 	"aigc-platform/internal/infra/storage"
+	"aigc-platform/internal/pkg/config"
 	"aigc-platform/internal/pkg/metrics"
 )
 
@@ -104,6 +106,8 @@ func (s *Server) Router() *gin.Engine {
 		authed.POST("/prompts/rewrite", s.handleRewritePrompt)
 		authed.POST("/jobs", s.handleCreateJob)
 		authed.GET("/jobs", s.handleListJobs)
+		authed.GET("/jobs/summary", s.handleJobsSummary)
+		authed.PATCH("/jobs/:bizID", s.handleUpdateJob)
 		authed.POST("/jobs/estimate", s.handleEstimateJob)
 		authed.GET("/jobs/:bizID", s.handleGetJob)
 		authed.GET("/jobs/:bizID/events", s.handleJobEvents)
@@ -137,6 +141,7 @@ func (s *Server) Router() *gin.Engine {
 		authed.GET("/credits/ledger", s.handleCreditsLedger)
 		authed.POST("/projects", s.handleCreateProject)
 		authed.GET("/projects", s.handleListProjects)
+		authed.GET("/projects/:bizID", s.handleGetProject)
 		authed.PATCH("/projects/:bizID", s.handleUpdateProject)
 		authed.DELETE("/projects/:bizID", s.handleDeleteProject)
 
@@ -178,14 +183,24 @@ func metricsMiddleware() gin.HandlerFunc {
 	}
 }
 
-// corsMiddleware is a permissive dev-only CORS policy so the Vite dev server
-// (a different origin) can call the API directly without a proxy. Tighten
-// before anything beyond local POC use.
+// corsMiddleware allows cross-origin calls from CORS_ALLOWED_ORIGINS; with
+// none configured it allows any origin in development and only same-origin
+// requests in production.
 func corsMiddleware() gin.HandlerFunc {
+	allowed := config.CORSAllowedOrigins()
+	allowAll := len(allowed) == 0 && config.Env() != "prod"
 	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, Idempotency-Key")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+		origin := c.GetHeader("Origin")
+		if origin != "" && (allowAll || slices.Contains(allowed, origin)) {
+			if allowAll {
+				c.Header("Access-Control-Allow-Origin", "*")
+			} else {
+				c.Header("Access-Control-Allow-Origin", origin)
+				c.Header("Vary", "Origin")
+			}
+			c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, Idempotency-Key, Last-Event-ID")
+			c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+		}
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
