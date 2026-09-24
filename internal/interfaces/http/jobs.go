@@ -3,13 +3,14 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 
+	"aigc-platform/internal/application/creditsvc"
 	"aigc-platform/internal/application/jobsvc"
+	"aigc-platform/internal/infra/orchestrator"
 	"aigc-platform/internal/infra/persistence"
 )
 
@@ -48,6 +49,10 @@ func (s *Server) handleCreateJob(c *gin.Context) {
 		c.JSON(http.StatusForbidden, errBody("comic_ai_not_enabled", err.Error()))
 		return
 	}
+	if errors.Is(err, creditsvc.ErrInsufficientBalance) {
+		c.JSON(http.StatusPaymentRequired, errBody("insufficient_credits", err.Error()))
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusUnprocessableEntity, errBody("submit_failed", err.Error()))
 		return
@@ -59,11 +64,8 @@ func (s *Server) handleCreateJob(c *gin.Context) {
 	})
 }
 
-// handleResumeJob is POST /api/v1/jobs/{bizID}/resume (§13.4): the preview
-// gate's decision for a video.sequence job. Only meaningful while the job's
-// `gate` task is Suspended — jobsvc.Resume/Aether's own Resume() are no-ops
-// (not errors) if it already moved on, matching Resume's documented
-// "no-op if the task is no longer in PhaseRunning" semantics.
+// handleResumeJob is POST /api/v1/jobs/{bizID}/resume: applies the preview
+// gate decision of a video.sequence job, reserving the quoted amount.
 func (s *Server) handleResumeJob(c *gin.Context) {
 	var req jobsvc.ResumeVideoSequenceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -71,13 +73,43 @@ func (s *Server) handleResumeJob(c *gin.Context) {
 		return
 	}
 	if err := s.jobs.Resume(c.Request.Context(), userID(c), c.Param("bizID"), req); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, errBody("resume_failed", err.Error()))
+		writeResumeError(c, err)
 		return
 	}
-	// 204, not 200: see handleUpdateAsset's identical comment — a 200 with
-	// no body makes the frontend's request() helper throw on resp.json(),
-	// so the preview-gate resume looked like it failed even after succeeding.
 	c.Status(http.StatusNoContent)
+}
+
+// handleQuoteResume is POST /api/v1/jobs/{bizID}/resume/quote: what a gate
+// decision would reserve, itemized, plus the all-upgrade comparison.
+func (s *Server) handleQuoteResume(c *gin.Context) {
+	var req jobsvc.ResumeVideoSequenceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
+		return
+	}
+	q, err := s.jobs.QuoteResume(c.Request.Context(), userID(c), c.Param("bizID"), req)
+	if err != nil {
+		writeResumeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, q)
+}
+
+func writeResumeError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, jobsvc.ErrNotFound):
+		c.JSON(http.StatusNotFound, errBody("not_found", "job not found"))
+	case errors.Is(err, orchestrator.ErrGateNotSuspended), errors.Is(err, orchestrator.ErrJobTerminal):
+		c.JSON(http.StatusConflict, errBody("not_awaiting_review", "the job is not waiting for a preview decision"))
+	case errors.Is(err, jobsvc.ErrQuoteChanged):
+		c.JSON(http.StatusConflict, errBody("price_changed", err.Error()))
+	case errors.Is(err, creditsvc.ErrInsufficientBalance):
+		c.JSON(http.StatusPaymentRequired, errBody("insufficient_credits", err.Error()))
+	case errors.Is(err, jobsvc.ErrNotSupported):
+		c.JSON(http.StatusUnprocessableEntity, errBody("not_supported", err.Error()))
+	default:
+		c.JSON(http.StatusUnprocessableEntity, errBody("resume_failed", err.Error()))
+	}
 }
 
 // handleListJobs is GET /api/v1/jobs?status=&cursor=&limit= (F7.1): the job
@@ -225,88 +257,40 @@ func (s *Server) handleRetryNode(c *gin.Context) {
 }
 
 func (s *Server) handleGetJob(c *gin.Context) {
-	job, run, err := s.jobs.Get(c.Request.Context(), userID(c), c.Param("bizID"))
+	ctx := c.Request.Context()
+	job, run, err := s.jobs.Get(ctx, userID(c), c.Param("bizID"))
 	if err != nil {
 		c.JSON(http.StatusNotFound, errBody("not_found", err.Error()))
 		return
 	}
-
-	// job_nodes is the projection table (populated by
-	// internal/application/projection), not the engine's own live state —
-	// it's the only place credit_cost/started_at/finished_at exist at all
-	// (the workflow.Engine port has no notion of credits, and only tracks
-	// UpdatedAt, not a first-seen-Running timestamp). Keyed by
-	// name|loop_index to match run.Nodes below, the same identity pair
-	// job_nodes' own uk constraint uses.
-	var projRows []persistence.JobNode
-	_ = s.db.WithContext(c.Request.Context()).Where("job_id = ?", job.ID).Find(&projRows).Error
-	projByKey := make(map[string]persistence.JobNode, len(projRows))
-	for _, r := range projRows {
-		projByKey[fmt.Sprintf("%s|%d", r.NodeName, r.LoopIndex)] = r
-	}
-
 	nodes := make([]gin.H, 0)
 	if run != nil {
 		for _, n := range run.Nodes {
-			row := gin.H{
-				"name":    n.Name,
-				"phase":   n.Phase,
-				"outputs": n.Outputs,
-				"error":   n.ErrorMsg,
-				// loop_index (-1 outside a loop) was already resolved
-				// correctly by the engine (workflow.NodeState.LoopIndex,
-				// itself real scope-tree data — see LoopIndexFromScope's
-				// doc, not a stub) but never made it into this response.
-				// Without it every image.comic4/image.sequence iteration
-				// shares one name ("gen-one-panel" ×4), so the frontend's
-				// DAG view could only ever show one aggregated "3/4 done"
-				// blob instead of each panel's own status — see
-				// jobGraph.ts's buildJobGraph for the consumer this unlocks.
-				"loop_index": n.LoopIndex,
-			}
-			if pr, ok := projByKey[fmt.Sprintf("%s|%d", n.Name, n.LoopIndex)]; ok {
-				row["credit_cost"] = pr.CreditCost
-				row["started_at"] = pr.StartedAt
-				row["finished_at"] = pr.FinishedAt
-			}
-			nodes = append(nodes, row)
+			nodes = append(nodes, gin.H{
+				"name": n.Name, "phase": n.Phase, "status": n.Status, "executor": n.Executor,
+				"outputs": n.Outputs, "error": n.ErrorMsg, "error_code": n.ErrorCode, "loop_index": n.LoopIndex,
+				"attempt": n.Attempt, "queue_reason": n.QueueReason, "credit_cost": n.CreditCost,
+				"started_at": n.StartedAt, "finished_at": n.FinishedAt, "display": n.Display,
+			})
 		}
 	}
-
 	retryOfBizID := ""
 	if job.RetryOfJobID != nil {
-		_ = s.db.WithContext(c.Request.Context()).Model(&persistence.Job{}).
-			Select("biz_id").Where("id = ?", *job.RetryOfJobID).Scan(&retryOfBizID).Error
+		_ = s.db.WithContext(ctx).Model(&persistence.Job{}).Select("biz_id").Where("id = ?", *job.RetryOfJobID).Scan(&retryOfBizID).Error
 	}
-
 	projectBizID := ""
 	if job.ProjectID != nil {
-		_ = s.db.WithContext(c.Request.Context()).Model(&persistence.Project{}).
-			Select("biz_id").Where("id = ?", *job.ProjectID).Scan(&projectBizID).Error
+		_ = s.db.WithContext(ctx).Model(&persistence.Project{}).Select("biz_id").Where("id = ?", *job.ProjectID).Scan(&projectBizID).Error
 	}
-
 	c.JSON(http.StatusOK, gin.H{
-		"biz_id":          job.BizID,
-		"workflow_name":   job.WorkflowName,
-		"title":           job.Title,
-		"status":          job.Status,
-		"workflow_run_id": job.WorkflowRunID,
-		"retry_of_job_id": retryOfBizID,
-		"project_id":      projectBizID,
-		// credit_estimated/held/settled were already tracked on this row
-		// (W7) but never echoed to the detail response — the job detail
-		// page's "已消耗 / 預估" comparison bar (§19.4.3) needs both numbers
-		// at once rather than requiring a second trip to /credits/ledger.
-		"credit_estimated": job.CreditEstimated,
-		"credit_held":      job.CreditHeld,
-		"credit_settled":   job.CreditSettled,
-		"nodes":            nodes,
-		// json.RawMessage so job.Spec's already-valid JSON bytes embed
-		// directly rather than being marshaled as a base64 string. Needed so
-		// /jobs/{bizID} (F7.2's DAG view) is fully reconstructible from the
-		// URL alone — e.g. the embedded preview gate needs the original
-		// duration_seconds back to estimate the 2K-upgrade cost, and that's
-		// only ever been persisted in Spec, never echoed elsewhere.
+		"biz_id": job.BizID, "workflow_name": job.WorkflowName, "title": job.Title, "status": job.Status,
+		"workflow_run_id": job.WorkflowRunID, "retry_of_job_id": retryOfBizID, "project_id": projectBizID,
+		"credit_estimated": job.CreditEstimated, "credit_held": job.CreditHeld, "credit_settled": job.CreditSettled,
+		"error_code": job.ErrorCode, "error_msg": job.ErrorMsg, "cover_asset_id": job.CoverAssetID,
+		"created_at": job.CreatedAt, "started_at": job.StartedAt, "finished_at": job.FinishedAt,
+		"nodes": nodes,
+		// The raw spec lets a client rebuild the request (for example the
+		// preview gate's shot duration).
 		"spec": json.RawMessage(job.Spec),
 	})
 }

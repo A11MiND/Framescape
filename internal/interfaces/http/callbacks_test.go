@@ -2,12 +2,10 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 )
 
 func postCallback(t *testing.T, r http.Handler, path string, body string) *httptest.ResponseRecorder {
@@ -72,44 +70,27 @@ func TestHandleMiniMaxCallbackUnrecognizedShape(t *testing.T) {
 	}
 }
 
-// TestHandleMiniMaxCallbackStatusPushDedup covers §11.3's "同一 task_id 的同一
-// 状态重复推送要吃掉" — the second identical push must not re-publish to the
-// video-wait channel, since minimax.VideoPlugin.wait() reacting twice to the
-// same status transition is exactly the bug this dedup exists to prevent.
-func TestHandleMiniMaxCallbackStatusPushDedup(t *testing.T) {
-	s, _ := newFullTestServer(t)
-	if s.redis == nil {
-		t.Skip("no local Redis available, skipping dedup test")
-	}
+// TestMiniMaxCallbackNudge: a status push schedules an
+// immediate poll of the node waiting on that remote task; the poll itself
+// re-checks the provider, so duplicates are harmless.
+func TestMiniMaxCallbackNudge(t *testing.T) {
+	s, eng := newFullTestServer(t)
 	r := s.Router()
-	taskID := uniqueGoogleSub(t) // any short unique string stands in for a task id here
-
-	sub := s.redis.Subscribe(context.Background(), "minimax:video:"+taskID)
-	defer sub.Close()
-	msgs := sub.Channel()
-
-	push := `{"task":{"id":"` + taskID + `","status":"success"}}`
-	rec := postCallback(t, r, "/internal/callbacks/minimax", push)
+	token, _ := registerAndFund(t, s, 1000)
+	bizID := createJob(t, s, token)
+	taskID := "cb-" + uniqueGoogleSub(t)
+	if _, err := eng.db.Exec(`UPDATE job_nodes n JOIN jobs j ON j.id = n.job_id SET n.status = 'waiting', n.provider_task_id = ? WHERE j.biz_id = ?`, taskID, bizID); err != nil {
+		t.Fatal(err)
+	}
+	rec := postCallback(t, r, "/internal/callbacks/minimax", `{"task":{"id":"`+taskID+`","status":"success"}}`)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("first push: status = %d, body = %s", rec.Code, rec.Body.String())
+		t.Fatalf("push: status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	rec = postCallback(t, r, "/internal/callbacks/minimax", push)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("second (duplicate) push: status = %d, body = %s", rec.Code, rec.Body.String())
+	if n := eng.nudges(); n != 1 {
+		t.Fatalf("nudged %d polls, want 1", n)
 	}
-
-	select {
-	case msg := <-msgs:
-		if msg.Payload != "success" {
-			t.Errorf("published payload = %q, want %q", msg.Payload, "success")
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("expected exactly one publish from the first push, got none")
-	}
-	select {
-	case msg := <-msgs:
-		t.Errorf("got a second publish %+v — the duplicate push should have been deduped", msg)
-	case <-time.After(300 * time.Millisecond):
-		// expected: no second message
+	rec = postCallback(t, r, "/internal/callbacks/minimax", `{"task":{"id":"unknown-task","status":"success"}}`)
+	if rec.Code != http.StatusOK || eng.nudges() != 1 {
+		t.Fatalf("unknown task: status %d, nudges %d", rec.Code, eng.nudges())
 	}
 }

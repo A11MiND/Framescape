@@ -10,13 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"aigc-platform/internal/infra/executor/spi/executor"
-	"aigc-platform/internal/infra/executor/spi/model"
-	"github.com/redis/go-redis/v9"
-
 	"aigc-platform/internal/domain/capability"
 	"aigc-platform/internal/domain/prompt"
 	"aigc-platform/internal/infra/executor/assetstore"
+	"aigc-platform/internal/infra/executor/spi/executor"
+	"aigc-platform/internal/infra/executor/spi/model"
 )
 
 // PRD §12.1/§10.5's video pricing table. §10.5 also lists a discounted
@@ -27,43 +25,18 @@ var costPerSecondYuan = map[string]float64{"768P": 0.50, "2K": 0.80}
 
 const (
 	videoModel        = "MiniMax-H3"
-	videoPollInterval = 10 * time.Second // MiniMax's suggested polling cadence (§3.2/§11.3)
-	videoMaxWait      = 25 * time.Minute // deliberately under Aether's 30m task timeout (§10.3)
+	videoPollInterval = 10 * time.Second // MiniMax's suggested polling cadence
 )
 
-// OrphanTaskStore persists a MiniMax video task_id across Aether retries of
-// the same node — see VideoOrphanTask's own doc in
-// internal/infra/persistence/models.go for why this exists (a wait-timeout
-// used to abandon the task_id forever, wasting whatever MiniMax billed for
-// it if the generation went on to succeed unseen) and why task_run_id is
-// the right key. Optional (nil disables recovery, falling back to the old
-// always-create-a-new-task behavior) so tests and any caller without a DB
-// handle don't need a fake implementation.
-type OrphanTaskStore interface {
-	// Put records a newly-created MiniMax task as pending recovery.
-	Put(ctx context.Context, taskRunID, minimaxTaskID string) error
-	// Get returns the still-unresolved MiniMax task_id left over from a
-	// prior attempt at this exact node, if any (ok=false if none).
-	Get(ctx context.Context, taskRunID string) (minimaxTaskID string, ok bool, err error)
-	// Resolve marks the row done — called once a terminal result has
-	// actually been reached, regardless of which path found it, so it's
-	// never checked again.
-	Resolve(ctx context.Context, taskRunID string) error
-}
-
-// videoBase holds the dependencies and submit/wait/materialize pipeline
-// shared by minimax.video and minimax.video.regen (video.go / video_regen.go)
-// — both submit to the same /v2/video_generation endpoint and only differ in
-// how their `content` array and target resolution get built.
+// videoBase is the submit/poll/materialize pipeline shared by minimax.video
+// and minimax.video.regen; they differ only in content and resolution.
 type videoBase struct {
 	client      *Client
 	sink        assetstore.Sink
 	reader      assetstore.Reader
 	cache       FileCache
-	redis       *redis.Client // optional: nil disables callback fast-path, falls back to pure polling
-	callbackURL string        // optional: only set on the request if this deployment has a public endpoint MiniMax can reach
-	limiter     *VideoLimiter // optional: nil means unbounded, see VideoLimiter.Acquire
-	orphans     OrphanTaskStore // optional: nil disables orphan-task recovery, see its own doc
+	callbackURL string        // set only when MiniMax can reach this deployment
+	limiter     *VideoLimiter // nil means unbounded
 }
 
 // VideoConfig is minimax.video's declared input contract (Aether kebab-case
@@ -96,67 +69,60 @@ type VideoConfig struct {
 	ShotIndex string `json:"shot-index,omitempty"`
 }
 
-// VideoPlugin is minimax.video (PRD §10.3, option A: Execute blocks until a
-// terminal task state — the Worker pool for q:video is sized to MiniMax's
-// concurrency quota, §11.1, so a blocked slot isn't wasted capacity).
+// VideoPlugin is minimax.video. The orchestrator submits the remote task
+// and polls it without holding a worker; Execute runs both in one call for
+// direct use.
 type VideoPlugin struct {
 	base *videoBase
 }
 
-// NewVideoPlugin's redis/callbackURL are both optional (pass nil/"" to run
-// polling-only, the only mode exercisable from a dev machine behind NAT —
-// MiniMax cannot reach a callback URL that isn't publicly routable). limiter
-// may also be nil (unbounded, see VideoLimiter.Acquire), as may orphans (nil
-// disables orphan-task recovery, see OrphanTaskStore's own doc).
-func NewVideoPlugin(client *Client, sink assetstore.Sink, reader assetstore.Reader, cache FileCache, redisClient *redis.Client, callbackURL string, limiter *VideoLimiter, orphans OrphanTaskStore) *VideoPlugin {
-	return &VideoPlugin{base: &videoBase{
-		client: client, sink: sink, reader: reader, cache: cache,
-		redis: redisClient, callbackURL: callbackURL, limiter: limiter, orphans: orphans,
-	}}
+func NewVideoPlugin(client *Client, sink assetstore.Sink, reader assetstore.Reader, cache FileCache, callbackURL string, limiter *VideoLimiter) *VideoPlugin {
+	return &VideoPlugin{base: &videoBase{client: client, sink: sink, reader: reader, cache: cache, callbackURL: callbackURL, limiter: limiter}}
 }
 
 func (p *VideoPlugin) Type() string { return "minimax.video" }
 
 func (p *VideoPlugin) Schema() model.ExecutorSchema {
 	return executor.SchemaOf[VideoConfig, executor.DynamicOutputs](
-		"minimax.video", "1.0", "MiniMax-H3 asynchronous video generation: t2va/i2va/r2va (PRD §3.2/§10.3)",
+		"minimax.video", "1.0", "MiniMax-H3 asynchronous video generation: t2va/i2va/r2va",
 	)
 }
 
-func (p *VideoPlugin) Execute(ctx context.Context, req *executor.ExecuteRequest) (*model.ExecOutputs, error) {
+func (p *VideoPlugin) params(ctx context.Context, req *executor.ExecuteRequest) (submitParams, *model.ExecOutputs, error) {
 	var cfg VideoConfig
 	if err := executor.BindInputs(req.Inputs, &cfg); err != nil {
-		return nil, fmt.Errorf("bind minimax.video inputs: %w", err)
+		return submitParams{}, nil, fmt.Errorf("bind minimax.video inputs: %w", err)
 	}
-
-	duration := normalizeDuration(cfg.Duration)
-	cfg.Resolution = normalizeResolution(cfg.Resolution)
-
-	content, mode, ratio, errOut := p.base.buildContent(ctx, videoRefs{
-		Prompt:                 cfg.Prompt,
-		Ratio:                  cfg.Ratio,
-		FirstFrameAssetID:      cfg.FirstFrameAssetID,
-		LastFrameAssetID:       cfg.LastFrameAssetID,
-		ReferenceImageAssetIDs: cfg.ReferenceImageAssetIDs,
-		ReferenceVideoAssetIDs: cfg.ReferenceVideoAssetIDs,
-		ReferenceAudioAssetIDs: cfg.ReferenceAudioAssetIDs,
-	})
-	if errOut != nil {
-		return errOut, nil
+	resolution := normalizeResolution(cfg.Resolution)
+	params := submitParams{
+		Resolution: resolution, Duration: normalizeDuration(cfg.Duration), Prompt: cfg.Prompt, UserID: cfg.UserID,
+		AigcWatermark: cfg.AigcWatermark, CostPerSecond: costPerSecondYuan[resolution], ShotIndex: cfg.ShotIndex,
+		refs: videoRefs{
+			Prompt: cfg.Prompt, Ratio: cfg.Ratio, FirstFrameAssetID: cfg.FirstFrameAssetID, LastFrameAssetID: cfg.LastFrameAssetID,
+			ReferenceImageAssetIDs: cfg.ReferenceImageAssetIDs, ReferenceVideoAssetIDs: cfg.ReferenceVideoAssetIDs, ReferenceAudioAssetIDs: cfg.ReferenceAudioAssetIDs,
+		},
 	}
+	return params, nil, nil
+}
 
-	return p.base.submitWaitMaterialize(ctx, req, submitParams{
-		Content:       content,
-		Resolution:    cfg.Resolution,
-		Duration:      duration,
-		Ratio:         ratio,
-		Mode:          mode,
-		Prompt:        cfg.Prompt,
-		UserID:        cfg.UserID,
-		AigcWatermark: cfg.AigcWatermark,
-		CostPerSecond: costPerSecondYuan[cfg.Resolution],
-		ShotIndex:     cfg.ShotIndex,
-	})
+func (p *VideoPlugin) Submit(ctx context.Context, req *executor.ExecuteRequest) (executor.ProviderRef, *model.ExecOutputs, error) {
+	params, _, err := p.params(ctx, req)
+	if err != nil {
+		return executor.ProviderRef{}, nil, err
+	}
+	return p.base.submit(ctx, req, params)
+}
+
+func (p *VideoPlugin) Poll(ctx context.Context, req *executor.ExecuteRequest, ref executor.ProviderRef) (executor.PollResult, error) {
+	params, _, err := p.params(ctx, req)
+	if err != nil {
+		return executor.PollResult{}, err
+	}
+	return p.base.poll(ctx, req, ref, params)
+}
+
+func (p *VideoPlugin) Execute(ctx context.Context, req *executor.ExecuteRequest) (*model.ExecOutputs, error) {
+	return runToCompletion(ctx, p, req)
 }
 
 // videoRefs is buildContent's input: everything needed to assemble one
@@ -226,119 +192,95 @@ func (b *videoBase) buildContent(ctx context.Context, r videoRefs) (content []Vi
 	return content, mode, ratio, nil
 }
 
-// submitParams is everything submitWaitMaterialize needs beyond content
-// itself — kept as one struct so both callers (VideoPlugin, VideoRegenPlugin)
-// pass a single value instead of a long positional argument list.
 type submitParams struct {
-	Content       []VideoContentItem
+	refs          videoRefs
 	Resolution    string
 	Duration      int
-	Ratio         string
-	Mode          string
 	Prompt        string
 	UserID        string
 	AigcWatermark *bool
 	CostPerSecond float64
-	// RegenOf is set only by VideoRegenPlugin — the 768P source asset being
-	// upscaled, recorded in the resulting 2K asset's Meta for traceability.
-	RegenOf string
-	// ShotIndex is pass-through only, see VideoConfig.ShotIndex's doc.
+	// RegenOf is the preview asset a 2K upgrade replaces, kept in the new
+	// asset's metadata.
+	RegenOf   string
 	ShotIndex string
 }
 
-// submitWaitMaterialize is §10.3's phases two and three (submit already
-// happened by the time Content is built; this does submit -> wait ->
-// materialize) shared verbatim by minimax.video and minimax.video.regen.
-func (b *videoBase) submitWaitMaterialize(ctx context.Context, req *executor.ExecuteRequest, p submitParams) (*model.ExecOutputs, error) {
-	mmReq := VideoGenerationRequest{
-		Model:      videoModel,
-		Content:    p.Content,
-		Resolution: p.Resolution,
-		Duration:   p.Duration,
-		Ratio:      p.Ratio,
+// submit starts the remote task. The limiter slot is held until the task
+// finishes, since MiniMax counts running tasks against the account quota.
+func (b *videoBase) submit(ctx context.Context, req *executor.ExecuteRequest, p submitParams) (executor.ProviderRef, *model.ExecOutputs, error) {
+	content, _, ratio, errOut := b.buildContent(ctx, p.refs)
+	if errOut != nil {
+		return executor.ProviderRef{}, errOut, nil
 	}
+	if b.limiter != nil {
+		ok, err := b.limiter.Hold(ctx, req.TaskRunID)
+		if err != nil {
+			return executor.ProviderRef{}, nil, fmt.Errorf("rate limiter: %w", err)
+		}
+		if !ok {
+			return executor.ProviderRef{}, nil, &executor.NoCapacityError{Reason: "provider_capacity", RetryAfter: 15 * time.Second}
+		}
+	}
+	mmReq := VideoGenerationRequest{Model: videoModel, Content: content, Resolution: p.Resolution, Duration: p.Duration, Ratio: ratio, CallbackURL: b.callbackURL}
 	if p.AigcWatermark != nil {
 		mmReq.AigcWatermark = *p.AigcWatermark
 	}
-	if b.callbackURL != "" {
-		mmReq.CallbackURL = b.callbackURL
+	created, err := b.client.CreateVideoTask(ctx, mmReq)
+	if err != nil {
+		b.release(req.TaskRunID)
+		var httpErr *HTTPStatusError
+		if errors.As(err, &httpErr) && httpErr.StatusCode == 429 {
+			return executor.ProviderRef{}, nil, &executor.NoCapacityError{Reason: "provider_rate_limited", RetryAfter: 30 * time.Second}
+		}
+		return executor.ProviderRef{}, classifyVideoError(err), nil
 	}
+	if created.TaskID == "" {
+		b.release(req.TaskRunID)
+		return executor.ProviderRef{}, errOutputs(model.ExecCodeError, fmt.Sprintf("no task id (status %d: %s)", created.BaseResp.StatusCode, created.BaseResp.StatusMsg)), nil
+	}
+	return executor.ProviderRef{Provider: "minimax", TaskID: created.TaskID, SubmittedAt: time.Now().UTC()}, nil, nil
+}
 
+func (b *videoBase) release(token string) {
 	if b.limiter != nil {
-		release, ok, err := b.limiter.Acquire(ctx, req.TaskRunID)
-		if err != nil {
-			return errOutputs(model.ExecCodeError, "rate_limiter: "+err.Error()), nil
-		}
-		if !ok {
-			// Not a business failure — §11.2's "拿不到令牌返回 ExecCodeError,
-			// 引擎按退避策略重试". The slot is only worth holding for the
-			// submit+wait+download below, not the validation done before it.
-			return errOutputs(model.ExecCodeError, "no_capacity: video concurrency limit reached"), nil
-		}
-		defer release()
+		b.limiter.Release(context.Background(), token)
 	}
+}
 
-	// A retry of this exact node (same TaskRunID, see OrphanTaskStore's own
-	// doc) may have a MiniMax task left over from a prior attempt that we
-	// gave up waiting on but never checked back on — recover it instead of
-	// paying for and waiting on a brand new one. req.RetryCount == 0 skips
-	// the lookup entirely: a first attempt can't have a prior task yet.
-	var taskID string
-	if b.orphans != nil && req.RetryCount > 0 {
-		if pending, ok, err := b.orphans.Get(ctx, req.TaskRunID); err == nil && ok {
-			taskID = pending
-		}
+// poll checks the task and, once it succeeded, downloads and stores the clip
+// immediately: MiniMax's result URL is temporary.
+func (b *videoBase) poll(ctx context.Context, req *executor.ExecuteRequest, ref executor.ProviderRef, p submitParams) (executor.PollResult, error) {
+	task, err := b.client.QueryVideoTask(ctx, ref.TaskID)
+	if err != nil {
+		return executor.PollResult{}, err
 	}
-
-	if taskID == "" {
-		created, err := b.client.CreateVideoTask(ctx, mmReq)
-		if err != nil {
-			return classifyVideoError(err), nil
-		}
-		taskID = created.TaskID
-		if b.orphans != nil {
-			// Best-effort: a tracking-write failure shouldn't fail a
-			// generation that otherwise has every chance of succeeding —
-			// it only means this specific attempt won't be recoverable if
-			// the wait below times out, no worse than before this fix.
-			_ = b.orphans.Put(ctx, req.TaskRunID, taskID)
-		}
-	}
-
-	task, waitErr := b.wait(ctx, taskID)
-	if waitErr != nil {
-		return errOutputs(model.ExecCodeTimeout, "wait_timeout: "+waitErr.Error()), nil
-	}
-	if b.orphans != nil {
-		// Reached a terminal MiniMax status one way or another — nothing
-		// left to recover on a future retry, whatever happens from here.
-		_ = b.orphans.Resolve(ctx, req.TaskRunID)
-	}
-
 	switch task.Task.Status {
+	case "succeeded":
 	case "failed":
+		b.release(req.TaskRunID)
 		msg := "failed"
 		if task.Task.Error != nil {
 			msg = task.Task.Error.Code + ": " + task.Task.Error.Message
 		}
-		return errOutputs(model.ExecCodeFailed, msg), nil
+		return executor.PollResult{Done: true, Outputs: errOutputs(model.ExecCodeFailed, msg)}, nil
 	case "cancelled":
-		return errOutputs(model.ExecCodeFailed, "cancelled_upstream"), nil
-	case "succeeded":
-		// continue below
+		b.release(req.TaskRunID)
+		return executor.PollResult{Done: true, Outputs: errOutputs(model.ExecCodeFailed, "cancelled_upstream")}, nil
 	default:
-		return errOutputs(model.ExecCodeError, "unexpected terminal status: "+task.Task.Status), nil
+		if b.limiter != nil {
+			_, _ = b.limiter.Hold(ctx, req.TaskRunID)
+		}
+		return executor.PollResult{After: videoPollInterval}, nil
 	}
 	if task.Task.Content == nil || task.Task.Content.URL == "" {
-		return errOutputs(model.ExecCodeError, "succeeded task has no content.url"), nil
+		b.release(req.TaskRunID)
+		return executor.PollResult{Done: true, Outputs: errOutputs(model.ExecCodeError, "succeeded task has no content.url")}, nil
 	}
-
-	// §R3: materialize immediately — MiniMax's URL is temporary.
 	data, err := b.client.DownloadVideo(ctx, task.Task.Content.URL)
 	if err != nil {
-		return errOutputs(model.ExecCodeError, "download video: "+err.Error()), nil
+		return executor.PollResult{}, fmt.Errorf("download video: %w", err)
 	}
-
 	outputSeconds := p.Duration
 	if task.Task.Usage != nil && task.Task.Usage.OutputSeconds > 0 {
 		outputSeconds = task.Task.Usage.OutputSeconds
@@ -347,50 +289,23 @@ func (b *videoBase) submitWaitMaterialize(ctx context.Context, req *executor.Exe
 	if resolutionTag == "" {
 		resolutionTag = p.Resolution
 	}
-
-	meta := map[string]any{
-		"model":           videoModel,
-		"mode":            p.Mode,
-		"prompt":          p.Prompt,
-		"minimax_task_id": taskID,
-	}
+	_, mode, _, _ := b.modeOnly(p.refs)
+	meta := map[string]any{"model": videoModel, "mode": mode, "prompt": p.Prompt, "minimax_task_id": ref.TaskID}
 	if p.RegenOf != "" {
 		meta["regen_of_asset_id"] = p.RegenOf
 	}
-
-	// width/height were never populated here — unlike local.ffmpeg's
-	// extract/concat outputs, which run ffprobe on their own products, the
-	// raw video.single/video.sequence output straight off MiniMax's URL had
-	// no dimension probe of its own, so every such asset row had width=0
-	// height=0 (DEV_PLAN.md's long-recorded gap). Best-effort: a missing
-	// ffprobe binary or a decode failure degrades to 0/0 exactly as before,
-	// it never fails the job over a cosmetic field.
 	width, height := probeVideoDimensions(ctx, data)
-
 	assetID, err := b.sink.MaterializeBytes(ctx, assetstore.NewAssetBytes{
-		UserID:        parseUserID(p.UserID),
-		Type:          "video",
-		Source:        "generated",
-		FromTaskRunID: req.TaskRunID,
-		Body:          bytesReader(data),
-		SizeBytes:     int64(len(data)),
-		Ext:           "mp4",
-		Mime:          "video/mp4",
-		Width:         width,
-		Height:        height,
-		DurationMs:    outputSeconds * 1000,
-		ResolutionTag: resolutionTag,
-		Meta:          meta,
+		UserID: parseUserID(p.UserID), Type: "video", Source: "generated", FromTaskRunID: req.TaskRunID,
+		Body: bytesReader(data), SizeBytes: int64(len(data)), Ext: "mp4", Mime: "video/mp4",
+		Width: width, Height: height, DurationMs: outputSeconds * 1000, ResolutionTag: resolutionTag, Meta: meta,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("materialize video: %w", err)
+		return executor.PollResult{}, fmt.Errorf("materialize video: %w", err)
 	}
-
-	return executor.OutputFrom(struct {
-		AssetID string `json:"asset-id"`
-		// AssetIDs (plural) mirrors image.go's convention even though video
-		// only ever produces one asset — job_nodes' projection (§6/W2) only
-		// reads the plural key when populating its own asset_ids column.
+	b.release(req.TaskRunID)
+	out, err := executor.OutputFrom(struct {
+		AssetID       string   `json:"asset-id"`
 		AssetIDs      []string `json:"asset-ids"`
 		OutputSeconds int      `json:"output-seconds"`
 		Resolution    string   `json:"resolution"`
@@ -398,14 +313,49 @@ func (b *videoBase) submitWaitMaterialize(ctx context.Context, req *executor.Exe
 		MinimaxTaskID string   `json:"minimax-task-id"`
 		ShotIndex     string   `json:"shot-index,omitempty"`
 	}{
-		AssetID:       assetID,
-		AssetIDs:      []string{assetID},
-		OutputSeconds: outputSeconds,
-		Resolution:    resolutionTag,
-		CostYuan:      float64(outputSeconds) * p.CostPerSecond,
-		MinimaxTaskID: taskID,
-		ShotIndex:     p.ShotIndex,
+		AssetID: assetID, AssetIDs: []string{assetID}, OutputSeconds: outputSeconds, Resolution: resolutionTag,
+		CostYuan: float64(outputSeconds) * p.CostPerSecond, MinimaxTaskID: ref.TaskID, ShotIndex: p.ShotIndex,
 	})
+	if err != nil {
+		return executor.PollResult{}, err
+	}
+	return executor.PollResult{Done: true, Outputs: out}, nil
+}
+
+// modeOnly reports the generation mode for metadata without resolving refs.
+func (b *videoBase) modeOnly(r videoRefs) ([]VideoContentItem, string, string, error) {
+	mode, ratio, _, err := prompt.CompileVideoRefs(prompt.VideoRefs{
+		Ratio: r.Ratio, FirstFrameAssetID: r.FirstFrameAssetID, LastFrameAssetID: r.LastFrameAssetID,
+		ReferenceImageAssetIDs: r.ReferenceImageAssetIDs, ReferenceVideoAssetIDs: r.ReferenceVideoAssetIDs, ReferenceAudioAssetIDs: r.ReferenceAudioAssetIDs,
+	})
+	return nil, mode, ratio, err
+}
+
+// runToCompletion drives an async plugin synchronously for callers outside
+// the orchestrator. Exhausted capacity is reported as a retryable error.
+func runToCompletion(ctx context.Context, a executor.AsyncPlugin, req *executor.ExecuteRequest) (*model.ExecOutputs, error) {
+	ref, out, err := a.Submit(ctx, req)
+	if nc, ok := executor.AsNoCapacity(err); ok {
+		return errOutputs(model.ExecCodeError, "no_capacity: "+nc.Reason), nil
+	}
+	if out != nil || err != nil {
+		return out, err
+	}
+	for {
+		res, err := a.Poll(ctx, req, ref)
+		if err == nil && res.Done {
+			return res.Outputs, nil
+		}
+		wait := res.After
+		if wait <= 0 {
+			wait = videoPollInterval
+		}
+		select {
+		case <-ctx.Done():
+			return errOutputs(model.ExecCodeTimeout, "wait_timeout: "+ctx.Err().Error()), nil
+		case <-time.After(wait):
+		}
+	}
 }
 
 // refItem resolves a local asset to a MiniMax mm_file:// reference, uploading
@@ -428,45 +378,6 @@ func (b *videoBase) refItem(ctx context.Context, assetBizID, itemType, role stri
 		item.AudioURL = ref
 	}
 	return item, nil
-}
-
-// wait implements §11.3's "callback-first, polling-fallback" strategy: if a
-// redis client is wired, it subscribes to the channel the callback handler
-// publishes to (see internal/interfaces/http's callback route) as a
-// fast-path wakeup, but always still polls on videoPollInterval regardless —
-// a missed/undeliverable callback (this dev environment has no public URL at
-// all) must never stall the wait.
-func (b *videoBase) wait(ctx context.Context, taskID string) (*VideoTaskStatus, error) {
-	deadline := time.Now().Add(videoMaxWait)
-
-	var wake <-chan *redis.Message
-	if b.redis != nil {
-		sub := b.redis.Subscribe(ctx, videoCallbackChannel(taskID))
-		defer sub.Close()
-		wake = sub.Channel()
-	}
-
-	ticker := time.NewTicker(videoPollInterval)
-	defer ticker.Stop()
-
-	for {
-		// A single flaky poll (network blip, upstream 5xx) must not abort a
-		// 25-minute wait — only ctx cancellation or the deadline itself ends
-		// it early; any other query error just gets retried on the next tick.
-		if status, err := b.client.QueryVideoTask(ctx, taskID); err == nil && isTerminalVideoStatus(status.Task.Status) {
-			return status, nil
-		}
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("exceeded %s", videoMaxWait)
-		}
-
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-wake:
-		case <-ticker.C:
-		}
-	}
 }
 
 func normalizeDuration(s string) int {
@@ -505,11 +416,6 @@ func isTerminalVideoStatus(status string) bool {
 		return false
 	}
 }
-
-// videoCallbackChannel is the Redis Pub/Sub channel the callback HTTP
-// handler publishes to on every status push — shared naming contract with
-// internal/interfaces/http's callback route.
-func videoCallbackChannel(taskID string) string { return "minimax:video:" + taskID }
 
 // classifyVideoError implements §10.4's video column: real HTTP status codes
 // (unlike image_generation's body-embedded base_resp.status_code). A plain
@@ -576,4 +482,4 @@ func probeVideoDimensions(ctx context.Context, data []byte) (width, height int) 
 	return w, h
 }
 
-var _ executor.Plugin = (*VideoPlugin)(nil)
+var _ executor.AsyncPlugin = (*VideoPlugin)(nil)

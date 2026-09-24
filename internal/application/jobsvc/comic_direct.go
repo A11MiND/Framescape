@@ -2,22 +2,19 @@ package jobsvc
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"aigc-platform/internal/application/creditsvc"
+	"aigc-platform/internal/application/workflows"
 	"aigc-platform/internal/domain/comic"
 	"aigc-platform/internal/domain/workflow"
 	"aigc-platform/internal/infra/executor/openai"
 	"aigc-platform/internal/infra/persistence"
 	"aigc-platform/internal/pkg/config"
-	"aigc-platform/internal/pkg/id"
 )
 
 // ErrComicAINotEnabled is returned for accounts outside the gray release;
@@ -106,122 +103,34 @@ func (s *Service) ComicAIAllowed(ctx context.Context, userID uint64) (bool, erro
 	return u.IsAdmin || u.ComicAIEnabled, nil
 }
 
-func buildDirectComicWorkflow(text string, refs []string) []byte {
-	if refs == nil {
-		refs = []string{}
-	}
-	doc := map[string]any{
-		"apiVersion": "aether/v1", "kind": "Workflow", "metadata": map[string]any{"name": "image-comic4-direct"},
-		"spec": map[string]any{
-			"entrypoint": "main", "arguments": map[string]any{"parameters": []any{map[string]any{"name": "user-id", "type": "string"}}},
-			"templates": []any{
-				map[string]any{"dag": map[string]any{"name": "main", "tasks": []any{map[string]any{
-					"name": "compose", "template": "render-page", "dependencies": []string{},
-					"arguments": map[string]any{"parameters": []any{literal("prompt", text), literal("reference-image-asset-ids", refs), fromWorkflow("user-id", "user-id")}},
-				}}}},
-				map[string]any{"task": map[string]any{
-					"name": "render-page", "executor": map[string]any{"type": "openai.image"},
-					"inputs": map[string]any{"parameters": []any{
-						map[string]any{"name": "prompt", "type": "string"}, map[string]any{"name": "reference-image-asset-ids", "type": "array"}, map[string]any{"name": "user-id", "type": "string"},
-					}},
-					"retry": map[string]any{"limit": 0}, "timeout": "6m",
-				}},
-			},
-		},
-	}
-	b, _ := json.Marshal(doc)
-	return b
-}
-
-func (s *Service) createDirectComic(ctx context.Context, userID uint64, spec Spec, idemKey string, projectID *uint64) (*persistence.Job, error) {
+func (s *Service) prepareDirectComic(ctx context.Context, userID uint64, spec Spec) (*workflow.Plan, string, error) {
 	text, err := directComicPrompt(spec)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if !OpenAIComicEnabled() {
-		return nil, fmt.Errorf("OpenAI image generation is not configured; ask the administrator to set OPENAI_API_KEY and a priced OPENAI_IMAGE_MODEL on the API and worker")
+		return nil, "", fmt.Errorf("OpenAI image generation is not configured; ask the administrator to set OPENAI_API_KEY and a priced OPENAI_IMAGE_MODEL on the API and worker")
 	}
 	if allowed, err := s.ComicAIAllowed(ctx, userID); err != nil {
-		return nil, err
+		return nil, "", err
 	} else if !allowed {
-		return nil, ErrComicAINotEnabled
-	}
-	// A database unique key checked after Submit is too late to prevent two
-	// simultaneous requests from dispatching two paid calls. Serialize only this
-	// user's idempotency key across API processes, then re-check the winner.
-	if idemKey != "" {
-		release, err := s.lockComicSubmission(ctx, userID, idemKey)
-		if err != nil {
-			return nil, err
-		}
-		defer release()
-		if existing, err := s.findByIdemKey(ctx, userID, idemKey); err != nil {
-			return nil, err
-		} else if existing != nil {
-			return existing, nil
-		}
+		return nil, "", ErrComicAINotEnabled
 	}
 	refs := directComicRefs(spec)
-	// Asset URLs are resolved only after ownership and media validation.
 	for _, ref := range refs {
 		var asset persistence.Asset
 		if err := s.db.WithContext(ctx).Where("biz_id = ? AND user_id = ? AND deleted_at IS NULL AND type = ?", ref, userID, "image").First(&asset).Error; err != nil {
-			return nil, fmt.Errorf("reference image unavailable")
+			return nil, "", fmt.Errorf("reference image unavailable")
 		}
 		if !comic.ImageMime(asset.Mime) {
-			return nil, fmt.Errorf("reference images must be PNG, JPEG or WebP")
+			return nil, "", fmt.Errorf("reference images must be PNG, JPEG or WebP")
 		}
 		if asset.SizeBytes > openai.MaxReferenceBytes {
-			return nil, fmt.Errorf("reference images must be at most 20 MB")
+			return nil, "", fmt.Errorf("reference images must be at most 20 MB")
 		}
 		if asset.PublicURL == "" {
-			return nil, fmt.Errorf("reference image upload is incomplete")
+			return nil, "", fmt.Errorf("reference image upload is incomplete")
 		}
 	}
-	estimate := directComicCredits(spec)
-	bizID := id.New()
-	if err := s.credits.Hold(ctx, userID, "job:"+bizID+":hold", "job", bizID, estimate, "job", "image.comic4"); err != nil {
-		return nil, fmt.Errorf("hold credits: %w", err)
-	}
-	// Preserve the platform's job/credit lifecycle and idempotency semantics.
-	specJSON, _ := json.Marshal(spec)
-	job := &persistence.Job{BizID: bizID, UserID: userID, ProjectID: projectID, WorkflowName: "image.comic4", Title: truncate(spec.Text, 128), Status: "running", Spec: specJSON, CreditEstimated: estimate, CreditHeld: estimate, IdemKey: nullableIdemKey(idemKey), StartedAt: ptrTime(time.Now())}
-	// Existing engine contracts return run ID only after Submit, so persist and
-	// dispatch retain that contract; reconciliation handles fast completions.
-	runID, err := s.eng.Submit(ctx, &workflow.Definition{Name: "image-comic4-direct", JSON: buildDirectComicWorkflow(text, refs)}, map[string]any{"user-id": strconv.FormatUint(userID, 10)})
-	if err != nil {
-		_ = s.credits.Refund(ctx, userID, "job:"+bizID+":refund", bizID, estimate)
-		return nil, fmt.Errorf("submit workflow: %w", err)
-	}
-	job.WorkflowRunID = string(runID)
-	if err := s.db.WithContext(ctx).Create(job).Error; err != nil {
-		_ = s.eng.Cancel(ctx, runID)
-		_ = s.credits.Refund(ctx, userID, "job:"+bizID+":refund", bizID, estimate)
-		return s.handleDuplicateIdemKey(ctx, err, userID, idemKey, bizID, estimate)
-	}
-	return job, nil
-}
-
-func (s *Service) lockComicSubmission(ctx context.Context, userID uint64, key string) (func(), error) {
-	db, err := s.db.DB()
-	if err != nil {
-		return nil, err
-	}
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		return nil, err
-	}
-	sum := sha256.Sum256([]byte(fmt.Sprintf("comic:%d:%s", userID, key)))
-	name := fmt.Sprintf("%x", sum)
-	var acquired int
-	if err := conn.QueryRowContext(ctx, "SELECT GET_LOCK(?, 10)", name).Scan(&acquired); err != nil || acquired != 1 {
-		conn.Close()
-		return nil, fmt.Errorf("another submission with this idempotency key is still being processed; retry with the same key")
-	}
-	return func() {
-		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_, _ = conn.ExecContext(releaseCtx, "SELECT RELEASE_LOCK(?)", name)
-		_ = conn.Close()
-	}, nil
+	return workflows.DirectComicPlan(userID, text, refs), spec.Text, nil
 }

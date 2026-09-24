@@ -10,9 +10,12 @@ import (
 )
 
 // Config is the subset of connection settings needed to open the DB. Loaded
-// from env by cmd/api and cmd/scheduler's own main.go, not by this package.
+// from env by cmd/api and cmd/worker's own main.go, not by this package.
 type Config struct {
-	DSN string // e.g. "user:pass@tcp(127.0.0.1:3306)/aigc?parseTime=true&loc=UTC&charset=utf8mb4"
+	// MaxOpen/MaxIdle size the pool; zero keeps the defaults (50/25).
+	MaxOpen int
+	MaxIdle int
+	DSN     string // e.g. "user:pass@tcp(127.0.0.1:3306)/aigc?parseTime=true&loc=UTC&charset=utf8mb4"
 }
 
 // Open connects to MySQL. AutoMigrate is never called (PRD §15.1) — schema
@@ -29,8 +32,15 @@ func Open(cfg Config) (*gorm.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get sql.DB: %w", err)
 	}
-	sqlDB.SetMaxOpenConns(20)
-	sqlDB.SetMaxIdleConns(10)
+	maxOpen, maxIdle := cfg.MaxOpen, cfg.MaxIdle
+	if maxOpen <= 0 {
+		maxOpen = 50
+	}
+	if maxIdle <= 0 {
+		maxIdle = 25
+	}
+	sqlDB.SetMaxOpenConns(maxOpen)
+	sqlDB.SetMaxIdleConns(maxIdle)
 	sqlDB.SetConnMaxLifetime(30 * time.Minute)
 	return db, nil
 }

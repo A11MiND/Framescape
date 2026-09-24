@@ -10,7 +10,8 @@ import (
 	"time"
 
 	"aigc-platform/internal/application/jobsvc"
-	"aigc-platform/internal/application/projection"
+	"aigc-platform/internal/infra/orchestrator"
+	"aigc-platform/internal/infra/realtime"
 )
 
 // startSSE runs handleJobEvents in a goroutine against a cancellable
@@ -33,111 +34,111 @@ func startSSE(s *Server, path, token string) (rec *httptest.ResponseRecorder, ca
 	return rec, cancelFn, d
 }
 
-func TestHandleJobEvents(t *testing.T) {
+func streamServer(t *testing.T) (*Server, *orchestrator.RedisPublisher) {
+	t.Helper()
 	s, _ := newFullTestServer(t)
 	if s.redis == nil {
 		t.Skip("no local Redis available, skipping SSE test")
 	}
-	r := s.Router()
-	token, _ := registerAndFund(t, s, 1000)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	s.hub = realtime.NewHub(ctx, s.redis)
+	return s, orchestrator.NewRedisPublisher(s.redis)
+}
 
-	rec := doJSON(t, r, http.MethodPost, "/api/v1/jobs",
+func createJob(t *testing.T, s *Server, token string) string {
+	t.Helper()
+	rec := doJSON(t, s.Router(), http.MethodPost, "/api/v1/jobs",
 		createJobRequest{WorkflowName: "image.single", Spec: jobsvc.Spec{Text: "a cat"}}, token)
 	var created map[string]any
 	_ = json.Unmarshal(rec.Body.Bytes(), &created)
-	bizID := created["biz_id"].(string)
-	runID := created["workflow_run_id"].(string)
+	bizID, _ := created["biz_id"].(string)
+	if bizID == "" {
+		t.Fatalf("create job: %s", rec.Body.String())
+	}
+	return bizID
+}
 
-	sseRec, cancel, done := startSSE(s, "/api/v1/jobs/"+bizID+"/events", token)
-
-	// Give the handler time to Subscribe before publishing — a message
-	// published before the subscription is live would simply be dropped,
-	// same as any pub/sub system (no durable queue behind it).
-	waitForSubscriber(t, s, projection.ChannelForRun(runID))
-
-	ev := projection.Event{Type: "node_update", Node: "gen", Phase: "Running", WorkflowRunID: runID}
-	payload, _ := json.Marshal(ev)
-	if err := s.redis.Publish(context.Background(), projection.ChannelForRun(runID), payload).Err(); err != nil {
+func publish(t *testing.T, pub *orchestrator.RedisPublisher, userID uint64, bizID, typ string, payload map[string]any) {
+	t.Helper()
+	raw, _ := json.Marshal(payload)
+	if err := pub.PublishEvents(context.Background(), []orchestrator.Event{{ID: 1 << 40, UserID: userID, JobBizID: bizID, Type: typ, Payload: raw}}); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
+}
 
+func TestHandleJobEvents(t *testing.T) {
+	s, pub := streamServer(t)
+	token, uid := registerAndFund(t, s, 1000)
+	bizID := createJob(t, s, token)
+
+	sseRec, cancel, done := startSSE(s, "/api/v1/jobs/"+bizID+"/events", token)
+	waitForSubscriber(t, s, orchestrator.UserChannel(uid))
+	publish(t, pub, uid, "someone-else", orchestrator.EventNodeStatus, map[string]any{"node": "x", "status": "running"})
+	publish(t, pub, uid, bizID, orchestrator.EventNodeStatus, map[string]any{"node": "gen", "status": "running"})
 	time.Sleep(150 * time.Millisecond)
 	cancel()
 	<-done
 
 	body := sseRec.Body.String()
-	if !strings.Contains(body, ": connected") {
-		t.Errorf("SSE body missing the initial connected comment, got: %q", body)
+	if !strings.Contains(body, ": connected") || !strings.Contains(body, "event: node_update") || !strings.Contains(body, `"phase":"Running"`) {
+		t.Errorf("unexpected SSE body: %q", body)
 	}
-	if !strings.Contains(body, "event: node_update") {
-		t.Errorf("SSE body missing node_update event, got: %q", body)
-	}
-	if !strings.Contains(body, `"phase":"Running"`) {
-		t.Errorf("SSE body missing expected phase, got: %q", body)
+	if strings.Contains(body, `"node":"x"`) {
+		t.Errorf("another job's event leaked into this stream: %q", body)
 	}
 }
 
-// TestHandleJobEventsTerminalCloses covers the handler's own auto-close
-// behavior: a job_update carrying a terminal phase ends the stream with an
-// explicit "done" event, with no need for the client to disconnect first.
 func TestHandleJobEventsTerminalCloses(t *testing.T) {
-	s, _ := newFullTestServer(t)
-	if s.redis == nil {
-		t.Skip("no local Redis available, skipping SSE test")
-	}
-	r := s.Router()
-	token, _ := registerAndFund(t, s, 1000)
-
-	rec := doJSON(t, r, http.MethodPost, "/api/v1/jobs",
-		createJobRequest{WorkflowName: "image.single", Spec: jobsvc.Spec{Text: "a cat"}}, token)
-	var created map[string]any
-	_ = json.Unmarshal(rec.Body.Bytes(), &created)
-	bizID := created["biz_id"].(string)
-	runID := created["workflow_run_id"].(string)
+	s, pub := streamServer(t)
+	token, uid := registerAndFund(t, s, 1000)
+	bizID := createJob(t, s, token)
 
 	sseRec, cancel, done := startSSE(s, "/api/v1/jobs/"+bizID+"/events", token)
-	defer cancel() // no-op if the handler already returned on its own
-
-	waitForSubscriber(t, s, projection.ChannelForRun(runID))
-
-	ev := projection.Event{Type: "job_update", Phase: "Succeeded", WorkflowRunID: runID}
-	payload, _ := json.Marshal(ev)
-	if err := s.redis.Publish(context.Background(), projection.ChannelForRun(runID), payload).Err(); err != nil {
-		t.Fatalf("publish: %v", err)
-	}
+	defer cancel()
+	waitForSubscriber(t, s, orchestrator.UserChannel(uid))
+	publish(t, pub, uid, bizID, orchestrator.EventJobFinished, map[string]any{"status": "succeeded"})
 
 	select {
 	case <-done:
 	case <-time.After(3 * time.Second):
-		t.Fatal("handler did not close on its own after a terminal job_update")
+		t.Fatal("handler did not close after the job finished")
 	}
-
-	body := sseRec.Body.String()
-	if !strings.Contains(body, "event: done") {
-		t.Errorf("SSE body missing the closing done event, got: %q", body)
+	if body := sseRec.Body.String(); !strings.Contains(body, "event: done") {
+		t.Errorf("SSE body missing the done event: %q", body)
 	}
 }
 
 func TestHandleJobEventsOwnershipBoundary(t *testing.T) {
-	s, _ := newFullTestServer(t)
-	if s.redis == nil {
-		t.Skip("no local Redis available, skipping SSE test")
-	}
-	r := s.Router()
+	s, _ := streamServer(t)
 	tokenA, _ := registerAndFund(t, s, 1000)
 	tokenB, _ := registerAndFund(t, s, 1000)
-
-	rec := doJSON(t, r, http.MethodPost, "/api/v1/jobs",
-		createJobRequest{WorkflowName: "image.single", Spec: jobsvc.Spec{Text: "a cat"}}, tokenA)
-	var created map[string]any
-	_ = json.Unmarshal(rec.Body.Bytes(), &created)
-	bizID := created["biz_id"].(string)
-
-	// handleJobEvents' own jobsvc.Get call 404s before ever entering the
-	// streaming loop, so this returns immediately — no goroutine needed.
-	rec = doJSON(t, r, http.MethodGet, "/api/v1/jobs/"+bizID+"/events", nil, tokenB)
+	bizID := createJob(t, s, tokenA)
+	rec := doJSON(t, s.Router(), http.MethodGet, "/api/v1/jobs/"+bizID+"/events", nil, tokenB)
 	if rec.Code != http.StatusNotFound {
-		t.Fatalf("other user's SSE: status = %d, want %d, body = %s", rec.Code, http.StatusNotFound, rec.Body.String())
+		t.Fatalf("other user's SSE: status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+// TestHandleStreamReplaysThenStreamsLive: a client resuming from event 0
+// first gets the job.created event stored at submission, then live events.
+func TestHandleStreamReplaysThenStreamsLive(t *testing.T) {
+	s, pub := streamServer(t)
+	token, uid := registerAndFund(t, s, 1000)
+	bizID := createJob(t, s, token)
+
+	sseRec, cancel, done := startSSE(s, "/api/v1/stream?last_event_id=0", token)
+	waitForSubscriber(t, s, orchestrator.UserChannel(uid))
+	publish(t, pub, uid, bizID, orchestrator.EventNeedsReview, map[string]any{})
+	time.Sleep(150 * time.Millisecond)
+	cancel()
+	<-done
+
+	body := sseRec.Body.String()
+	created := strings.Index(body, "event: job.created")
+	live := strings.Index(body, "event: job.needs_review")
+	if created < 0 || live < created || !strings.Contains(body, "id: ") {
+		t.Fatalf("expected replayed job.created then live needs_review, got %q", body)
 	}
 }
 

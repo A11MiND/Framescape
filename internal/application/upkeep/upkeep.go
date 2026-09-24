@@ -1,15 +1,7 @@
-// Package upkeep implements two of §11.4's Scheduler-process background
-// duties: suspended-job timeout cleanup and daily credit reconciliation.
-// (The other three — poll-fallback scan, orphan-task reconciliation against
-// MiniMax's own task list, and provider_files expiry cleanup — are
-// deliberately not built yet; see DEV_PLAN.md's W7 section for why each is
-// deferred rather than half-implemented.)
-//
-// Both duties here run on a plain time.Ticker rather than true wall-clock
-// cron scheduling (§11.4 says suspended cleanup is hourly and financial
-// reconciliation is specifically 03:00) — a POC-scale simplification: what
-// matters for correctness is that both run periodically and are idempotent
-// against re-running, not that reconciliation fires at exactly 3am.
+// Package upkeep runs periodic maintenance in every worker process. Each
+// duty takes a Redis lease for its interval, so running many workers does
+// not multiply the work; if the lease holder dies the next interval runs
+// elsewhere. Job execution recovery lives in the orchestrator's sweeper.
 package upkeep
 
 import (
@@ -17,195 +9,73 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
-	"aigc-platform/internal/application/jobsvc"
-	"aigc-platform/internal/domain/workflow"
+	"aigc-platform/internal/application/creditsvc"
+	"aigc-platform/internal/infra/orchestrator"
 	"aigc-platform/internal/infra/storage"
 	"aigc-platform/internal/pkg/logger"
 )
 
-// SuspendedTimeout is §11.4's "Suspended 超 7 天未 Resume → 自动取消并退积分".
-const SuspendedTimeout = 7 * 24 * time.Hour
-
-// TrashRetentionDays is §07's "刪除先掉到回收箱，30天後自動回收" ask —
-// handleListTrash (internal/interfaces/http) imports this rather than
-// keeping its own copy, so the "N days left" countdown it shows can never
-// drift from what autoPurgeTrash actually enforces below.
+// TrashRetentionDays is how long a deleted asset stays restorable.
 const TrashRetentionDays = 30
-
-const (
-	suspendedCheckInterval      = 1 * time.Hour
-	reconciliationCheckInterval = 6 * time.Hour
-	// skipPreviewCheckInterval is much shorter than suspendedCheckInterval
-	// on purpose — Spec.SkipPreview's whole point is generation that feels
-	// automatic, not a decision sitting Suspended for up to an hour before
-	// anyone/anything looks at it.
-	skipPreviewCheckInterval = 15 * time.Second
-	trashPurgeCheckInterval  = 1 * time.Hour
-)
 
 type Runner struct {
 	db      *sql.DB
-	eng     workflow.Engine
-	jobs    *jobsvc.Service
+	redis   *redis.Client
+	credits *creditsvc.Service
+	orch    *orchestrator.Orchestrator
 	objects *storage.Store
+	owner   string
 
-	// suspendedTimeout is a field (not the SuspendedTimeout constant
-	// directly) so tests/manual verification can inject a short threshold
-	// without waiting 7 real days for a Suspended row to qualify.
-	suspendedTimeout time.Duration
-	// trashRetentionDays mirrors suspendedTimeout's own reasoning — a field
-	// defaulting to TrashRetentionDays, overridable for verification.
 	trashRetentionDays int
 }
 
-func New(db *sql.DB, eng workflow.Engine, jobs *jobsvc.Service, objects *storage.Store) *Runner {
-	return &Runner{db: db, eng: eng, jobs: jobs, objects: objects, suspendedTimeout: SuspendedTimeout, trashRetentionDays: TrashRetentionDays}
+func New(db *sql.DB, rdb *redis.Client, credits *creditsvc.Service, orch *orchestrator.Orchestrator, objects *storage.Store, owner string) *Runner {
+	return &Runner{db: db, redis: rdb, credits: credits, orch: orch, objects: objects, owner: owner, trashRetentionDays: TrashRetentionDays}
 }
 
-// WithSuspendedTimeout overrides the default 7-day threshold — used for
-// manual/automated verification so a Suspended row can qualify for cleanup
-// without waiting a full week.
-func (r *Runner) WithSuspendedTimeout(d time.Duration) *Runner {
-	r.suspendedTimeout = d
-	return r
-}
-
-// WithTrashRetentionDays overrides the default 30-day grace period — same
-// verification-without-waiting-a-month reasoning as WithSuspendedTimeout.
+// WithTrashRetentionDays overrides the retention for verification.
 func (r *Runner) WithTrashRetentionDays(days int) *Runner {
 	r.trashRetentionDays = days
 	return r
 }
 
-// Start launches every duty as its own background goroutine. Returns
-// immediately; all loops run until ctx is cancelled.
+// Start launches every duty; they stop when ctx ends.
 func (r *Runner) Start(ctx context.Context) {
-	go r.loop(ctx, suspendedCheckInterval, r.cleanupSuspended)
-	go r.loop(ctx, reconciliationCheckInterval, r.checkReconciliation)
-	go r.loop(ctx, skipPreviewCheckInterval, r.autoResumeSkipPreview)
-	go r.loop(ctx, trashPurgeCheckInterval, r.autoPurgeTrash)
+	go r.loop(ctx, "trash-purge", time.Hour, r.autoPurgeTrash)
+	go r.loop(ctx, "credit-reconciliation", 6*time.Hour, r.checkReconciliation)
+	go r.loop(ctx, "event-retention", time.Hour, r.purgeEvents)
 }
 
-func (r *Runner) loop(ctx context.Context, interval time.Duration, fn func(context.Context)) {
+func (r *Runner) loop(ctx context.Context, name string, interval time.Duration, fn func(context.Context)) {
+	run := func() {
+		ok, err := r.redis.SetNX(ctx, "maint:"+name, r.owner, interval-time.Second).Result()
+		if err != nil || !ok {
+			return
+		}
+		fn(ctx)
+	}
+	run()
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	fn(ctx) // run once immediately, don't wait a full interval for the first pass
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			fn(ctx)
+			run()
 		}
 	}
 }
 
-// cleanupSuspended implements §11.4's "挂起超时清理": any workflow with a
-// task that's been Suspended longer than suspendedTimeout gets cancelled.
-// The credit refund isn't done here directly — Engine.Cancel transitions
-// the workflow to Cancelled, which fires the exact same OnWorkflowRun path
-// (internal/application/projection's maybeRefundCredits) every other
-// terminal transition already goes through, so cancellation and refund stay
-// on one code path instead of two.
-func (r *Runner) cleanupSuspended(ctx context.Context) {
-	log := logger.From(ctx)
-	cutoff := time.Now().Add(-r.suspendedTimeout)
-
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT DISTINCT workflow_run_id FROM aether_task_runs
-		WHERE status = 'Suspended' AND updated_at < ?`, cutoff)
-	if err != nil {
-		log.Error("upkeep: query suspended task runs failed", zap.Error(err))
-		return
-	}
-	defer rows.Close()
-
-	var runIDs []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			log.Error("upkeep: scan suspended workflow_run_id failed", zap.Error(err))
-			continue
-		}
-		runIDs = append(runIDs, id)
-	}
-
-	for _, runID := range runIDs {
-		if err := r.eng.Cancel(ctx, workflow.RunID(runID)); err != nil {
-			log.Error("upkeep: cancel timed-out suspended workflow failed", zap.String("workflow_run_id", runID), zap.Error(err))
-			continue
-		}
-		log.Info("upkeep: cancelled workflow suspended past timeout", zap.String("workflow_run_id", runID), zap.Duration("timeout", r.suspendedTimeout))
-	}
-}
-
-// autoResumeSkipPreview implements Spec.SkipPreview (jobsvc.go's own doc):
-// a video.sequence job that opted out of the 768P preview gate still goes
-// through the exact same gate/Suspend mechanics as every other one (its
-// draft just already ran at 2K, per video_sequence.go's own doc) — this is
-// what stands in for the human decision an ordinary PreviewGate submission
-// makes, calling Resume with every field empty (no shots picked for redo or
-// upgrade), which jobsvc.Service.Resume's own doc confirms buckets every
-// shot into "keep" and hands that straight to concat.
-func (r *Runner) autoResumeSkipPreview(ctx context.Context) {
-	log := logger.From(ctx)
-
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT DISTINCT j.biz_id, j.user_id FROM aether_task_runs t
-		JOIN jobs j ON j.workflow_run_id = t.workflow_run_id
-		WHERE t.task_name = 'gate' AND t.status = 'Suspended'
-		  AND j.workflow_name = 'video.sequence'
-		  AND JSON_EXTRACT(j.spec, '$.skip_preview') = true`)
-	if err != nil {
-		log.Error("upkeep: query skip-preview suspended gates failed", zap.Error(err))
-		return
-	}
-	defer rows.Close()
-
-	type pending struct {
-		bizID  string
-		userID uint64
-	}
-	var jobs []pending
-	for rows.Next() {
-		var p pending
-		if err := rows.Scan(&p.bizID, &p.userID); err != nil {
-			log.Error("upkeep: scan skip-preview job failed", zap.Error(err))
-			continue
-		}
-		jobs = append(jobs, p)
-	}
-
-	for _, p := range jobs {
-		if err := r.jobs.Resume(ctx, p.userID, p.bizID, jobsvc.ResumeVideoSequenceRequest{}); err != nil {
-			// Not necessarily a real failure — a slower prior tick's Resume
-			// call can still be landing in the engine when this one fires,
-			// so "gate already resumed" is an expected, harmless race here,
-			// same as cleanupSuspended's own error handling below: log and
-			// let the next tick's query (which won't find this row anymore
-			// once the resume actually lands) settle it.
-			log.Warn("upkeep: auto-resume skip-preview gate failed", zap.String("biz_id", p.bizID), zap.Error(err))
-			continue
-		}
-		log.Info("upkeep: auto-resumed skip-preview gate", zap.String("biz_id", p.bizID))
-	}
-}
-
-// autoPurgeTrash implements TrashRetentionDays: any asset soft-deleted
-// (handleDeleteAsset) longer than trashRetentionDays ago gets actually
-// removed — both its storage object (thumb included, when it has one) and
-// its row. Deliberately a real DELETE, not another timestamp column: a
-// recycle bin that never actually empties isn't one, and this is the one
-// place in the codebase that ever hard-deletes an asset at all.
+// autoPurgeTrash permanently removes assets deleted longer ago than the
+// retention, object first so a failure never orphans storage.
 func (r *Runner) autoPurgeTrash(ctx context.Context) {
 	log := logger.From(ctx)
-	cutoff := time.Now().AddDate(0, 0, -r.trashRetentionDays)
-
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, storage_key, thumb_key FROM assets
-		WHERE deleted_at IS NOT NULL AND deleted_at < ?`, cutoff)
+	cutoff := time.Now().UTC().AddDate(0, 0, -r.trashRetentionDays)
+	rows, err := r.db.QueryContext(ctx, `SELECT id, storage_key, thumb_key FROM assets WHERE deleted_at IS NOT NULL AND deleted_at < ? LIMIT 1000`, cutoff)
 	if err != nil {
 		log.Error("upkeep: query trash-eligible assets failed", zap.Error(err))
 		return
@@ -217,66 +87,62 @@ func (r *Runner) autoPurgeTrash(ctx context.Context) {
 	var assets []purgeable
 	for rows.Next() {
 		var p purgeable
-		if err := rows.Scan(&p.id, &p.storageKey, &p.thumbKey); err != nil {
-			log.Error("upkeep: scan trash-eligible asset failed", zap.Error(err))
-			continue
+		if err := rows.Scan(&p.id, &p.storageKey, &p.thumbKey); err == nil {
+			assets = append(assets, p)
 		}
-		assets = append(assets, p)
 	}
 	rows.Close()
-
 	for _, a := range assets {
 		if a.storageKey != "" {
 			if err := r.objects.Delete(ctx, a.storageKey); err != nil {
-				log.Error("upkeep: purge asset storage object failed", zap.Uint64("asset_id", a.id), zap.Error(err))
-				continue // leave the row for the next tick rather than orphan the object
+				log.Error("upkeep: purge asset object failed", zap.Uint64("asset_id", a.id), zap.Error(err))
+				continue
 			}
 		}
 		if a.thumbKey != "" {
 			if err := r.objects.Delete(ctx, a.thumbKey); err != nil {
-				log.Error("upkeep: purge asset thumb object failed", zap.Uint64("asset_id", a.id), zap.Error(err))
+				log.Error("upkeep: purge asset thumb failed", zap.Uint64("asset_id", a.id), zap.Error(err))
 				continue
 			}
 		}
 		if _, err := r.db.ExecContext(ctx, `DELETE FROM assets WHERE id = ?`, a.id); err != nil {
 			log.Error("upkeep: delete purged asset row failed", zap.Uint64("asset_id", a.id), zap.Error(err))
-			continue
 		}
-		log.Info("upkeep: purged trashed asset past retention", zap.Uint64("asset_id", a.id), zap.Int("retention_days", r.trashRetentionDays))
 	}
 }
 
-// checkReconciliation runs §12.3's invariant check and logs (not silently
-// swallows) any user whose balance+held has drifted from their ledger sum —
-// this POC has no alerting pipeline, so "logged at Error level" is the
-// deliverable, not a paging integration.
+// checkReconciliation logs every user whose credits break an invariant.
 func (r *Runner) checkReconciliation(ctx context.Context) {
 	log := logger.From(ctx)
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT a.user_id, a.balance, a.held,
-		       (SELECT COALESCE(SUM(amount),0) FROM credit_ledger l WHERE l.user_id = a.user_id) AS ledger_sum
+		       (SELECT COALESCE(SUM(amount), 0) FROM credit_ledger l WHERE l.user_id = a.user_id)
 		FROM credit_accounts a
-		WHERE a.balance + a.held <>
-		      (SELECT COALESCE(SUM(amount),0) FROM credit_ledger l WHERE l.user_id = a.user_id)`)
+		WHERE a.balance + a.held <> (SELECT COALESCE(SUM(amount), 0) FROM credit_ledger l WHERE l.user_id = a.user_id)`)
 	if err != nil {
 		log.Error("upkeep: reconciliation query failed", zap.Error(err))
 		return
 	}
-	defer rows.Close()
-
-	mismatches := 0
 	for rows.Next() {
 		var userID uint64
-		var balance, held, ledgerSum int
-		if err := rows.Scan(&userID, &balance, &held, &ledgerSum); err != nil {
-			log.Error("upkeep: scan reconciliation row failed", zap.Error(err))
-			continue
+		var balance, held, ledger int
+		if err := rows.Scan(&userID, &balance, &held, &ledger); err == nil {
+			log.Error("upkeep: credit ledger mismatch", zap.Uint64("user_id", userID), zap.Int("balance", balance), zap.Int("held", held), zap.Int("ledger_sum", ledger))
 		}
-		mismatches++
-		log.Error("upkeep: credit reconciliation mismatch",
-			zap.Uint64("user_id", userID), zap.Int("balance", balance), zap.Int("held", held), zap.Int("ledger_sum", ledgerSum))
 	}
-	if mismatches == 0 {
-		log.Debug("upkeep: credit reconciliation passed, no mismatches")
+	rows.Close()
+	mismatches, err := r.credits.AuditHolds(ctx)
+	if err != nil {
+		log.Error("upkeep: reservation audit failed", zap.Error(err))
+		return
+	}
+	for _, m := range mismatches {
+		log.Error("upkeep: reservation mismatch", zap.Uint64("user_id", m.UserID), zap.Int("held", m.Held), zap.Int("open_holds", m.OpenHoldSum))
+	}
+}
+
+func (r *Runner) purgeEvents(ctx context.Context) {
+	if _, err := r.orch.PurgeEvents(ctx); err != nil {
+		logger.From(ctx).Error("upkeep: purge events failed", zap.Error(err))
 	}
 }

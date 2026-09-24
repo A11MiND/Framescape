@@ -15,8 +15,13 @@ services:
       retries: 20
     restart: unless-stopped
 
+  # AOF persistence keeps queued work across a Redis restart; MySQL remains
+  # the source of truth either way, the sweeper re-dispatches anything lost.
   redis:
     image: redis:7
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -53,33 +58,6 @@ services:
         condition: service_healthy
     restart: "no"
 
-  scheduler:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
-      target: scheduler
-    env_file: ../.env
-    environment:
-      MYSQL_DSN: "root:${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}@tcp(mysql:3306)/aigc?parseTime=true&loc=UTC&charset=utf8mb4"
-      REDIS_ADDR: "redis:6379"
-      MINIO_ENDPOINT: "minio:9000"
-      # Public asset URLs are served to the browser through the nginx `web`
-      # origin, not the docker network — PUBLIC_BASE_URL is whatever address
-      # actually reaches the `web` service (bare IP/localhost behind a
-      # Cloudflare quick tunnel, a real domain later).
-      MINIO_PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-http://localhost}/aigc-assets"
-      SCHEDULER_ADDR: ":8090"
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-    restart: unless-stopped
-
   worker:
     build:
       context: ..
@@ -106,6 +84,8 @@ services:
     # nginx port.
     extra_hosts:
       - "localhost:host-gateway"
+    deploy:
+      replicas: 2
     depends_on:
       mysql:
         condition: service_healthy
@@ -126,7 +106,6 @@ services:
     environment:
       MYSQL_DSN: "root:${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}@tcp(mysql:3306)/aigc?parseTime=true&loc=UTC&charset=utf8mb4"
       REDIS_ADDR: "redis:6379"
-      SCHEDULER_URL: "http://scheduler:8090"
       API_ADDR: ":8080"
       # cmd/api has its own MinIO client (direct asset upload, trash purge) —
       # without these it silently falls back to config.go's 127.0.0.1:9000
@@ -140,8 +119,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-      scheduler:
-        condition: service_started
+    deploy:
+      replicas: 2
     restart: unless-stopped
 
   # Single public entrypoint: serves the built frontend and reverse-proxies
@@ -168,7 +147,7 @@ services:
       - "9090:9090"
     depends_on:
       - api
-      - scheduler
+      - worker
 
   grafana:
     image: grafana/grafana:latest
@@ -186,6 +165,7 @@ services:
 
 volumes:
   mysql_data:
+  redis_data:
   minio_data:
   prometheus_data:
   grafana_data:

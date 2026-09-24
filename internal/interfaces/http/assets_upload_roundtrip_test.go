@@ -20,7 +20,7 @@ import (
 // presign -> PUT -> complete path end to end instead of stopping at the
 // "MinIO not configured" 503 branch (see assets_test.go's
 // TestHandleAssetUploadFlowNotConfigured).
-func newFullTestServerWithObjects(t *testing.T) (*Server, *fakeEngine) {
+func newFullTestServerWithObjects(t *testing.T) (*Server, *testEngine) {
 	t.Helper()
 	s, eng := newFullTestServer(t)
 	store, err := storage.New(context.Background(), storage.Config{

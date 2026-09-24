@@ -2,11 +2,13 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"math/rand"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/redis/go-redis/v9"
@@ -15,6 +17,7 @@ import (
 	"aigc-platform/internal/application/creditsvc"
 	"aigc-platform/internal/application/jobsvc"
 	"aigc-platform/internal/infra/cache"
+	"aigc-platform/internal/infra/orchestrator"
 	"aigc-platform/internal/infra/persistence"
 	"aigc-platform/internal/pkg/config"
 )
@@ -52,7 +55,7 @@ func newTestServer(t *testing.T) *Server {
 // needs either — see server.go's own field docs for what actually depends
 // on them). Use this over the plain newTestServer whenever a test needs to
 // create/read/cancel/delete a job or touch an asset's publish flag.
-func newFullTestServer(t *testing.T) (*Server, *fakeEngine) {
+func newFullTestServer(t *testing.T) (*Server, *testEngine) {
 	t.Helper()
 	db, err := persistence.Open(persistence.Config{DSN: config.MySQLDSN()})
 	if err != nil {
@@ -65,11 +68,57 @@ func newFullTestServer(t *testing.T) (*Server, *fakeEngine) {
 	if err := sqlDB.Ping(); err != nil {
 		t.Skipf("no local MySQL available, skipping: %v", err)
 	}
-	eng := newFakeEngine()
+	eng := &testEngine{db: sqlDB}
 	credits := creditsvc.New(sqlDB)
 	community := communitysvc.New(sqlDB, credits)
-	jobs := jobsvc.New(db, eng, credits, nil)
-	return NewServer(db, jobs, credits, community, testRedisClient(t), testJWTSecret, nil, nil), eng
+	eng.orch = orchestrator.New(orchestrator.Options{DB: sqlDB, Dispatcher: eng, Billing: jobsvc.Billing{Credits: credits}})
+	jobs := jobsvc.New(db, eng.orch, credits, nil)
+	return NewServer(db, jobs, credits, community, testRedisClient(t), testJWTSecret, nil, nil).WithEvents(eng.orch, nil), eng
+}
+
+// testEngine is the real orchestrator with a dispatcher that only records:
+// nothing executes, so tests drive job state explicitly.
+type testEngine struct {
+	db   *sql.DB
+	orch *orchestrator.Orchestrator
+	mu   sync.Mutex
+	next int // root node dispatches, one per submitted single-step job
+	poll int
+}
+
+func (e *testEngine) Enqueue(_ context.Context, t orchestrator.Task) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if t.Kind == orchestrator.TaskRun && t.Seq == 0 {
+		e.next++
+	}
+	if t.Kind == orchestrator.TaskPoll && t.Nudge {
+		e.poll++
+	}
+	return nil
+}
+
+func (e *testEngine) nudges() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.poll
+}
+
+func (e *testEngine) submissions() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.next
+}
+
+// finish marks a job as finished with the given status, as if it ran.
+func (e *testEngine) finish(t *testing.T, bizID, status string) {
+	t.Helper()
+	if _, err := e.db.Exec(`UPDATE job_nodes n JOIN jobs j ON j.id = n.job_id SET n.status = 'succeeded', n.phase = 'Succeeded' WHERE j.biz_id = ?`, bizID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.db.Exec(`UPDATE jobs SET status = ?, finished_at = NOW(3) WHERE biz_id = ?`, status, bizID); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // registerAndFund creates a fresh account through the real /auth/register

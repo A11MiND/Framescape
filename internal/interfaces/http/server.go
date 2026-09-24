@@ -1,7 +1,5 @@
-// Package httpapi is cmd/api's Gin layer: handlers + routing + JWT
-// middleware. It depends on jobsvc and the workflow.Engine port (via
-// whatever implementation cmd/api wires in — the rpc.Client in production,
-// see cmd/api/main.go) but never on aether directly (PRD §2.3 闸门三).
+// Package httpapi is cmd/api's Gin layer: handlers, routing and JWT
+// middleware.
 package httpapi
 
 import (
@@ -18,6 +16,8 @@ import (
 	"aigc-platform/internal/application/creditsvc"
 	"aigc-platform/internal/application/jobsvc"
 	"aigc-platform/internal/infra/executor/minimax"
+	"aigc-platform/internal/infra/orchestrator"
+	"aigc-platform/internal/infra/realtime"
 	"aigc-platform/internal/infra/storage"
 	"aigc-platform/internal/pkg/metrics"
 )
@@ -47,10 +47,19 @@ type Server struct {
 	// *creditsvc.Service handle, separate from the one above, since a
 	// streak bonus is granted independently of any job/topup flow.
 	community *communitysvc.Service
+	// orch and hub serve event streams and provider callbacks.
+	orch *orchestrator.Orchestrator
+	hub  *realtime.Hub
 }
 
 func NewServer(db *gorm.DB, jobs *jobsvc.Service, credits *creditsvc.Service, community *communitysvc.Service, redisClient *redis.Client, jwtSecret string, minimaxClient *minimax.Client, objectStore *storage.Store) *Server {
 	return &Server{db: db, jobs: jobs, credits: credits, community: community, redis: redisClient, jwtSecret: jwtSecret, minimax: minimaxClient, objects: objectStore}
+}
+
+// WithEvents enables the event stream and provider callback wake-ups.
+func (s *Server) WithEvents(orch *orchestrator.Orchestrator, hub *realtime.Hub) *Server {
+	s.orch, s.hub = orch, hub
+	return s
 }
 
 func (s *Server) Router() *gin.Engine {
@@ -98,6 +107,8 @@ func (s *Server) Router() *gin.Engine {
 		authed.POST("/jobs/estimate", s.handleEstimateJob)
 		authed.GET("/jobs/:bizID", s.handleGetJob)
 		authed.GET("/jobs/:bizID/events", s.handleJobEvents)
+		authed.GET("/stream", s.handleStream)
+		authed.POST("/jobs/:bizID/resume/quote", s.handleQuoteResume)
 		authed.POST("/jobs/:bizID/resume", s.handleResumeJob)
 		authed.POST("/jobs/:bizID/cancel", s.handleCancelJob)
 		authed.DELETE("/jobs/:bizID", s.handleDeleteJob)

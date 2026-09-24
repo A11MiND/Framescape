@@ -1,9 +1,5 @@
-// Package metrics defines this project's Prometheus metrics (one shared
-// registry so api and scheduler's /metrics endpoints — see their Router()
-// wiring — expose a consistent metric namespace, "aigc_"). Kept in its own
-// tiny package rather than scattered ad-hoc prometheus.MustRegister calls,
-// same reasoning as internal/pkg/config: one small file per cross-cutting
-// concern instead of an abstraction the POC doesn't need yet.
+// Package metrics defines the Prometheus metrics exposed by api and worker
+// under the "aigc_" namespace.
 package metrics
 
 import (
@@ -25,15 +21,12 @@ var (
 	}, []string{"method", "path"})
 )
 
-// Job/task metrics — incremented from internal/application/projection's
-// existing OnTaskRun/OnWorkflowRun hooks, which already see every state
-// transition centrally in cmd/scheduler regardless of which cmd/worker
-// instance actually executed a task — the natural single point to count
-// from rather than duplicating counters into cmd/worker as well.
+// Job and node metrics, counted by the orchestrator hooks in the process that
+// finished the node (a worker, or the api for cancellations).
 var (
 	TaskRunsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "aigc_task_runs_total",
-		Help: "Total Aether task runs reaching a terminal phase, by executor type and phase.",
+		Help: "Total node executions reaching a terminal status, by executor type and phase.",
 	}, []string{"executor_type", "phase"})
 
 	JobsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -43,6 +36,6 @@ var (
 
 	CreditsCommittedYuan = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "aigc_credits_committed_yuan_total",
-		Help: "Total real MiniMax spend committed via credit settlement, by executor type.",
+		Help: "Total real provider spend (CNY) settled, by executor type.",
 	}, []string{"executor_type"})
 )

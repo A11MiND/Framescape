@@ -1,10 +1,10 @@
 package httpapi
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -15,23 +15,12 @@ import (
 // for idempotency (§11.3: "同一 task_id 的同一状态重复推送要吃掉") — a status
 // only transitions a handful of times over a task's life, so this only ever
 // needs to outlive the video wait itself.
-const callbackDedupeTTL = 30 * time.Minute
-
-// handleMiniMaxCallback is POST /internal/callbacks/minimax (§3.3/§11.3).
-// MiniMax's own docs don't specify a request-signing scheme in what this
-// project has seen, so "来源校验" here is a shared secret baked into the
-// callback_url itself (?token=...) rather than a header signature — set via
-// MINIMAX_CALLBACK_TOKEN; a request with the wrong (or, if configured, a
-// missing) token is rejected before any parsing happens.
-//
-// Everything else is deliberately trivial: no DB reads, no business logic —
-// §11.3/§3.3 require the challenge handshake to complete within 3 seconds,
-// and status pushes just publish to Redis for whichever minimax.video
-// Execute() is waiting (video.go's wait()); that wait loop polls
-// independently regardless, so a lost or malformed callback here can never
-// stall a job — it only ever misses the fast-path wakeup.
+// handleMiniMaxCallback is POST /internal/callbacks/minimax. The callback
+// URL carries a shared token (MINIMAX_CALLBACK_TOKEN) since MiniMax does not
+// sign requests. The handshake must answer within 3 seconds, so the handler
+// does no work beyond scheduling an immediate poll of the waiting node.
 func (s *Server) handleMiniMaxCallback(c *gin.Context) {
-	if expected := config.MiniMaxCallbackToken(); expected != "" && c.Query("token") != expected {
+	if expected := config.MiniMaxCallbackToken(); expected != "" && subtle.ConstantTimeCompare([]byte(c.Query("token")), []byte(expected)) != 1 {
 		c.Status(http.StatusUnauthorized)
 		return
 	}
@@ -63,16 +52,11 @@ func (s *Server) handleMiniMaxCallback(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-	dedupeKey := "mmcb:" + push.Task.ID + ":" + push.Task.Status
-	if s.redis != nil {
-		ok, err := s.redis.SetNX(ctx, dedupeKey, 1, callbackDedupeTTL).Result()
-		if err == nil && ok {
-			// Channel name shared with minimax.VideoPlugin.wait()'s subscribe
-			// side (videoCallbackChannel) — publish is best-effort, the wait
-			// loop's own polling ticker is the source of truth regardless.
-			s.redis.Publish(ctx, "minimax:video:"+push.Task.ID, push.Task.Status)
-		}
+	// The callback only wakes the waiting node's poll early; the poll itself
+	// verifies the task status with the provider, so a forged or duplicate
+	// callback cannot complete anything.
+	if s.orch != nil {
+		_ = s.orch.Nudge(c.Request.Context(), push.Task.ID)
 	}
 	c.Status(http.StatusOK)
 }

@@ -104,9 +104,11 @@ type Billing interface {
 	ReleaseTx(ctx context.Context, tx *sql.Tx, job JobRef) (int, error)
 }
 
-// Hooks lets the application react to finished nodes transactionally.
+// Hooks lets the application react to finished nodes and jobs inside the
+// same transaction. Returned tasks are dispatched after commit.
 type Hooks interface {
 	NodeFinishedTx(ctx context.Context, tx *sql.Tx, job JobRef, node FinishedNode) ([]Task, error)
+	JobFinishedTx(ctx context.Context, tx *sql.Tx, job JobRef, status string) error
 }
 
 // FinishedNode describes a node execution that just ended.

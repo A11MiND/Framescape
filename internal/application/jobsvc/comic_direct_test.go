@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"aigc-platform/internal/application/workflows"
 )
 
 func directSpec() Spec {
@@ -16,25 +18,15 @@ func TestDirectComicPreservesPrompt(t *testing.T) {
 	if err != nil || text != s.Text {
 		t.Fatalf("prompt changed: %v", err)
 	}
-	raw := buildDirectComicWorkflow(text, []string{"阿健", "小智"})
-	tasks := mainTasks(t, raw)
-	if len(tasks) != 1 || tasks["compose"].Template != "render-page" {
-		t.Fatalf("tasks = %v", tasks)
+	plan := workflows.DirectComicPlan(1, text, []string{"阿健", "小智"})
+	if len(plan.Nodes) != 1 || plan.Nodes[0].Name != "compose" || plan.Nodes[0].Executor != "openai.image" {
+		t.Fatalf("nodes = %+v", plan.Nodes)
 	}
-	if param(t, tasks["compose"], "prompt").Value != s.Text {
+	var got string
+	if err := json.Unmarshal(plan.Nodes[0].Inputs["prompt"].Value, &got); err != nil || got != s.Text {
 		t.Fatal("prompt was rewritten")
 	}
-	for _, bad := range []string{"minimax", "enhance", "stylize", "gen-one-panel"} {
-		if strings.Contains(string(raw), bad) {
-			t.Fatalf("unexpected legacy stage: %s", bad)
-		}
-	}
-	var doc map[string]any
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		t.Fatal(err)
-	}
-	tpl := doc["spec"].(map[string]any)["templates"].([]any)[1].(map[string]any)["task"].(map[string]any)
-	if tpl["retry"].(map[string]any)["limit"] != float64(0) {
+	if plan.Nodes[0].MaxAttempts != 1 {
 		t.Fatal("paid generation must not automatically retry")
 	}
 }

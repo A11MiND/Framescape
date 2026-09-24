@@ -24,10 +24,8 @@ const (
 // permanent library (register to keep it). The generated image's temporary
 // MiniMax URL (valid ~24h, PRD R3) is returned directly instead of being
 // materialized into our own storage — this is the one deliberate exception
-// to "cmd/api never talks to MiniMax directly" (see main.go): an anonymous,
-// job-free, credit-free request doesn't fit the authenticated pipeline at
-// all, so routing it through cmd/scheduler/worker would need substantially
-// more plumbing (an ownerless job, a system user hack) for no benefit.
+// to generation running in workers: an anonymous, job-free, credit-free
+// request has no owner a job could belong to.
 func (s *Server) handleTrialImage(c *gin.Context) {
 	var req struct {
 		Prompt   string `json:"prompt"`

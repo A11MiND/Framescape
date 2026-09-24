@@ -20,7 +20,7 @@ func OpenAIBaseURL() string {
 }
 func OpenAIImageModel() string { return getEnv("OPENAI_IMAGE_MODEL", "gpt-image-2.5-flare") }
 
-// Accounting conversion, not a live exchange-rate quote. Set consistently on API/scheduler/worker.
+// Accounting conversion, not a live exchange-rate quote. Set consistently on API and worker.
 func OpenAIUSDToCNY() float64 { return positiveFloat("OPENAI_USD_TO_CNY", 7) }
 
 // Per-call credit reservation, also billed when OpenAI omits usage. Not a
@@ -76,17 +76,26 @@ func RedisAddr() string { return getEnv("REDIS_ADDR", "127.0.0.1:6379") }
 // "fall back to RedisAddr", same as before this variable existed.
 func RedisURL() string { return getEnv("REDIS_URL", "") }
 
-// WorkerConcurrency bounds how many tasks cmd/worker executes at once.
-func WorkerConcurrency() int { return getEnvInt("WORKER_CONCURRENCY", 8) }
+// WorkerQueues lists the queues this worker serves (comma separated):
+// interactive, video, media, system. Empty means all of them.
+func WorkerQueues() string { return getEnv("WORKER_QUEUES", "") }
+
+// Per-queue worker pool sizes. Provider calls are I/O bound, so the
+// interactive and video pools are large; media runs ffmpeg and is CPU bound.
+func WorkerConcurrencyInteractive() int { return getEnvInt("WORKER_CONCURRENCY_INTERACTIVE", 64) }
+func WorkerConcurrencyVideo() int       { return getEnvInt("WORKER_CONCURRENCY_VIDEO", 32) }
+func WorkerConcurrencyMedia() int       { return getEnvInt("WORKER_CONCURRENCY_MEDIA", 0) }
+func WorkerConcurrencySystem() int      { return getEnvInt("WORKER_CONCURRENCY_SYSTEM", 4) }
+
+// WorkerMetricsAddr serves the worker's /metrics and health endpoints.
+func WorkerMetricsAddr() string { return getEnv("WORKER_METRICS_ADDR", ":8091") }
+
+// MySQLMaxOpenConns/MySQLMaxIdleConns size each process's connection pool.
+func MySQLMaxOpenConns() int { return getEnvInt("MYSQL_MAX_OPEN_CONNS", 50) }
+func MySQLMaxIdleConns() int { return getEnvInt("MYSQL_MAX_IDLE_CONNS", 25) }
 
 // APIAddr is the address cmd/api's Gin server listens on.
 func APIAddr() string { return getEnv("API_ADDR", ":8080") }
-
-// SchedulerAddr is the address cmd/scheduler's internal HTTP server listens on.
-func SchedulerAddr() string { return getEnv("SCHEDULER_ADDR", ":8090") }
-
-// SchedulerURL is how cmd/api reaches cmd/scheduler's internal API.
-func SchedulerURL() string { return getEnv("SCHEDULER_URL", "http://127.0.0.1:8090") }
 
 // JWTSecret signs access/refresh tokens. Falls back to a known literal for
 // zero-config local dev, but refuses to start under APP_ENV=prod with that
@@ -140,14 +149,12 @@ func MiniMaxCallbackToken() string { return getEnv("MINIMAX_CALLBACK_TOKEN", "")
 // be set to the real granted quota before any concurrent load.
 func MiniMaxVideoConcurrency() int { return getEnvInt("MINIMAX_VIDEO_CONCURRENCY", 0) }
 
-// --- Scheduler upkeep (§11.4) ---
+// --- Orchestration ---
 
-// SuspendedTimeout overrides upkeep.SuspendedTimeout's 7-day default (0 or
-// unset means "use the default"). Exists for verification (waiting 7 real
-// days to confirm the cleanup path works isn't practical) and so ops can
-// tune it without a recompile.
-func SuspendedTimeout() time.Duration {
-	seconds := getEnvInt("SUSPENDED_TIMEOUT_SECONDS", 0)
+// GateTTL is how long a preview gate waits for a decision before the job is
+// cancelled and its reservation released; 0 keeps the 7-day default.
+func GateTTL() time.Duration {
+	seconds := getEnvInt("GATE_TTL_SECONDS", 0)
 	if seconds <= 0 {
 		return 0
 	}

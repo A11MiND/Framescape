@@ -46,9 +46,7 @@ func TestComicConcurrentSubmit(t *testing.T) {
 			t.Fatal("duplicate jobs")
 		}
 	}
-	eng.mu.Lock()
-	submissions := eng.next
-	eng.mu.Unlock()
+	submissions := eng.submissions()
 	if submissions != 1 {
 		t.Fatalf("paid workflow dispatched %d times", submissions)
 	}

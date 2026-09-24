@@ -125,13 +125,17 @@ func (p *PromptEnhancePlugin) Execute(ctx context.Context, req *executor.Execute
 	})
 }
 
-// wait polls QueryH3ContextIRTask on the same cadence/deadline as
-// minimax.video's wait — H3-Context-IR shares the video task family's
-// queueing behavior even though it's much faster in practice (text-only
-// output, no rendering).
+// H3-Context-IR returns text only, so its tasks finish far sooner than a
+// video; it is waited on inline.
+const (
+	enhanceMaxWait      = 5 * time.Minute
+	enhancePollInterval = 5 * time.Second
+)
+
+// wait polls the H3-Context-IR task until it reaches a terminal status.
 func (p *PromptEnhancePlugin) wait(ctx context.Context, taskID string) (*H3ContextIRTaskStatus, error) {
-	deadline := time.Now().Add(videoMaxWait)
-	ticker := time.NewTicker(videoPollInterval)
+	deadline := time.Now().Add(enhanceMaxWait)
+	ticker := time.NewTicker(enhancePollInterval)
 	defer ticker.Stop()
 
 	for {
@@ -139,7 +143,7 @@ func (p *PromptEnhancePlugin) wait(ctx context.Context, taskID string) (*H3Conte
 			return status, nil
 		}
 		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("exceeded %s", videoMaxWait)
+			return nil, fmt.Errorf("exceeded %s", enhanceMaxWait)
 		}
 		select {
 		case <-ctx.Done():

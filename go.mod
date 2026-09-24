@@ -2,12 +2,8 @@ module aigc-platform
 
 go 1.25.7
 
-replace github.com/BabySid/aether => ./third_party/aether
-
 require (
 	cloud.google.com/go/auth v0.9.3
-	github.com/BabySid/aether v0.0.0-00010101000000-000000000000
-	github.com/expr-lang/expr v1.17.8
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/golang-jwt/jwt/v5 v5.3.1

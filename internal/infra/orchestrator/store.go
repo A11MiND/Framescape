@@ -466,6 +466,11 @@ func (o *Orchestrator) finalizeJob(ctx context.Context, tx *sql.Tx, job *jobRow,
 		}); err != nil {
 			return out, err
 		}
+		if o.hooks != nil {
+			if err := o.hooks.JobFinishedTx(ctx, tx, job.JobRef, out.Status); err != nil {
+				return out, err
+			}
+		}
 	}
 	job.Status = out.Status
 	return out, nil

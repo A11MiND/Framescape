@@ -148,9 +148,13 @@ type Job struct {
 	RetryOfLoopIndex *int    `gorm:"column:retry_of_loop_index"`
 	WorkflowName     string  `gorm:"column:workflow_name"`
 	WorkflowRunID    string  `gorm:"column:workflow_run_id"`
-	Title            string
-	Status           string
-	Spec             []byte `gorm:"column:spec;type:json"`
+	// Engine is "v2" for jobs run by the orchestrator, "aether" for history.
+	Engine       string     `gorm:"column:engine;default:v2"`
+	CoverAssetID string     `gorm:"column:cover_asset_id"`
+	DeadlineAt   *time.Time `gorm:"column:deadline_at"`
+	Title        string
+	Status       string
+	Spec         []byte `gorm:"column:spec;type:json"`
 
 	NodeTotal  int `gorm:"column:node_total"`
 	NodeDone   int `gorm:"column:node_done"`

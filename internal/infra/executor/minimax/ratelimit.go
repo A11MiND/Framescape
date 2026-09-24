@@ -23,6 +23,11 @@ local maxConcurrency = tonumber(ARGV[3])
 local token = ARGV[4]
 
 redis.call('ZREMRANGEBYSCORE', key, 0, now - leaseTTL)
+if redis.call('ZSCORE', key, token) then
+  redis.call('ZADD', key, now, token)
+  redis.call('EXPIRE', key, leaseTTL)
+  return 1
+end
 if redis.call('ZCARD', key) < maxConcurrency then
   redis.call('ZADD', key, now, token)
   redis.call('EXPIRE', key, leaseTTL)
@@ -75,3 +80,18 @@ func (l *VideoLimiter) Acquire(ctx context.Context, taskRunID string) (release f
 }
 
 func (l *VideoLimiter) key() string { return "sem:minimax:video:" + l.accountID }
+
+// Hold takes or refreshes token's slot. Holding the same token again never
+// needs a second slot, so an async task can refresh its lease on every poll.
+func (l *VideoLimiter) Hold(ctx context.Context, token string) (bool, error) {
+	_, ok, err := l.Acquire(ctx, token)
+	return ok, err
+}
+
+// Release frees token's slot.
+func (l *VideoLimiter) Release(ctx context.Context, token string) {
+	if l.redis == nil || l.maxConcurrency <= 0 {
+		return
+	}
+	l.redis.ZRem(ctx, l.key(), token)
+}

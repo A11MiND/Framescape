@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"aigc-platform/internal/application/jobsvc"
@@ -25,11 +26,8 @@ func TestHandleCreateJobImageSingle(t *testing.T) {
 	if body["biz_id"] == "" || body["biz_id"] == nil {
 		t.Errorf("biz_id missing/empty: %v", body)
 	}
-	if body["status"] != "running" {
-		t.Errorf("status = %v, want %q", body["status"], "running")
-	}
-	if body["workflow_run_id"] == "" || body["workflow_run_id"] == nil {
-		t.Errorf("workflow_run_id missing/empty: %v", body)
+	if body["status"] != "queued" {
+		t.Errorf("status = %v, want %q", body["status"], "queued")
 	}
 }
 
@@ -54,11 +52,11 @@ func TestHandleCreateJobInsufficientBalance(t *testing.T) {
 
 	rec := doJSON(t, r, http.MethodPost, "/api/v1/jobs",
 		createJobRequest{WorkflowName: "image.single", Spec: jobsvc.Spec{Text: "a cat"}}, token)
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, want %d, body = %s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
+	if rec.Code != http.StatusPaymentRequired || !strings.Contains(rec.Body.String(), "insufficient_credits") {
+		t.Fatalf("status = %d, want %d insufficient_credits, body = %s", rec.Code, http.StatusPaymentRequired, rec.Body.String())
 	}
-	if eng.next != 0 {
-		t.Errorf("engine.Submit was called %d time(s), want 0 — a failed hold must never reach Submit", eng.next)
+	if eng.submissions() != 0 {
+		t.Errorf("%d job(s) dispatched, want 0: a failed hold must never dispatch", eng.submissions())
 	}
 }
 
@@ -93,8 +91,8 @@ func TestHandleCreateJobIdempotencyKey(t *testing.T) {
 	if first["biz_id"] != second["biz_id"] {
 		t.Errorf("biz_id differs between the two requests: %v vs %v, want identical", first["biz_id"], second["biz_id"])
 	}
-	if eng.next != 1 {
-		t.Errorf("engine.Submit was called %d time(s), want exactly 1 — a repeated Idempotency-Key must not submit twice", eng.next)
+	if eng.submissions() != 1 {
+		t.Errorf("%d job(s) dispatched, want exactly 1: a repeated Idempotency-Key must not submit twice", eng.submissions())
 	}
 }
 
@@ -181,8 +179,8 @@ func TestHandleCancelJob(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("cancel: status = %d, want %d, body = %s", rec.Code, http.StatusNoContent, rec.Body.String())
 	}
-	if eng.next != 1 {
-		t.Fatalf("expected exactly 1 run submitted, got %d", eng.next)
+	if eng.submissions() != 1 {
+		t.Fatalf("expected exactly 1 job dispatched, got %d", eng.submissions())
 	}
 
 	// Cancelling an already-cancelled job is a documented no-op, not an error.
@@ -207,7 +205,6 @@ func TestHandleDeleteJob(t *testing.T) {
 	var created map[string]any
 	_ = json.Unmarshal(rec.Body.Bytes(), &created)
 	bizID := created["biz_id"].(string)
-	runID := created["workflow_run_id"].(string)
 
 	// Still running — must refuse, not silently soft-delete a live job.
 	rec = doJSON(t, r, http.MethodDelete, "/api/v1/jobs/"+bizID, nil, token)
@@ -215,7 +212,7 @@ func TestHandleDeleteJob(t *testing.T) {
 		t.Fatalf("delete while running: status = %d, want %d, body = %s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
 	}
 
-	eng.setPhase(workflowRunIDFrom(runID), "Succeeded")
+	eng.finish(t, bizID, "succeeded")
 
 	rec = doJSON(t, r, http.MethodDelete, "/api/v1/jobs/"+bizID, nil, token)
 	if rec.Code != http.StatusNoContent {

@@ -6,7 +6,6 @@ import (
 
 	"aigc-platform/internal/infra/executor/spi/executor"
 	"aigc-platform/internal/infra/executor/spi/model"
-	"github.com/redis/go-redis/v9"
 
 	"aigc-platform/internal/infra/executor/assetstore"
 )
@@ -61,11 +60,8 @@ type VideoRegenPlugin struct {
 	base *videoBase
 }
 
-func NewVideoRegenPlugin(client *Client, sink assetstore.Sink, reader assetstore.Reader, cache FileCache, redisClient *redis.Client, callbackURL string, limiter *VideoLimiter, orphans OrphanTaskStore) *VideoRegenPlugin {
-	return &VideoRegenPlugin{base: &videoBase{
-		client: client, sink: sink, reader: reader, cache: cache,
-		redis: redisClient, callbackURL: callbackURL, limiter: limiter, orphans: orphans,
-	}}
+func NewVideoRegenPlugin(client *Client, sink assetstore.Sink, reader assetstore.Reader, cache FileCache, callbackURL string, limiter *VideoLimiter) *VideoRegenPlugin {
+	return &VideoRegenPlugin{base: &videoBase{client: client, sink: sink, reader: reader, cache: cache, callbackURL: callbackURL, limiter: limiter}}
 }
 
 func (p *VideoRegenPlugin) Type() string { return "minimax.video.regen" }
@@ -76,40 +72,41 @@ func (p *VideoRegenPlugin) Schema() model.ExecutorSchema {
 	)
 }
 
-func (p *VideoRegenPlugin) Execute(ctx context.Context, req *executor.ExecuteRequest) (*model.ExecOutputs, error) {
+func (p *VideoRegenPlugin) params(req *executor.ExecuteRequest) (submitParams, error) {
 	var cfg VideoRegenConfig
 	if err := executor.BindInputs(req.Inputs, &cfg); err != nil {
-		return nil, fmt.Errorf("bind minimax.video.regen inputs: %w", err)
+		return submitParams{}, fmt.Errorf("bind minimax.video.regen inputs: %w", err)
 	}
-
-	duration := normalizeDuration(cfg.Duration)
-
-	content, mode, ratio, errOut := p.base.buildContent(ctx, videoRefs{
-		Prompt:                 cfg.Prompt,
-		Ratio:                  cfg.Ratio,
-		FirstFrameAssetID:      cfg.FirstFrameAssetID,
-		LastFrameAssetID:       cfg.LastFrameAssetID,
-		ReferenceImageAssetIDs: cfg.ReferenceImageAssetIDs,
-		ReferenceVideoAssetIDs: cfg.ReferenceVideoAssetIDs,
-		ReferenceAudioAssetIDs: cfg.ReferenceAudioAssetIDs,
-	})
-	if errOut != nil {
-		return errOut, nil
-	}
-
-	return p.base.submitWaitMaterialize(ctx, req, submitParams{
-		Content:       content,
-		Resolution:    "2K",
-		Duration:      duration,
-		Ratio:         ratio,
-		Mode:          mode,
-		Prompt:        cfg.Prompt,
-		UserID:        cfg.UserID,
-		AigcWatermark: cfg.AigcWatermark,
-		CostPerSecond: costPerSecondYuan["2K"], // no discounted "regen" rate — this is a fresh 2K generation, see doc above
-		RegenOf:       cfg.BaseVideoAssetID,
-		ShotIndex:     cfg.ShotIndex,
-	})
+	// A 2K version is a fresh 2K generation of the same content at the full
+	// 2K rate; MiniMax has no upscale operation.
+	return submitParams{
+		Resolution: "2K", Duration: normalizeDuration(cfg.Duration), Prompt: cfg.Prompt, UserID: cfg.UserID,
+		AigcWatermark: cfg.AigcWatermark, CostPerSecond: costPerSecondYuan["2K"], RegenOf: cfg.BaseVideoAssetID, ShotIndex: cfg.ShotIndex,
+		refs: videoRefs{
+			Prompt: cfg.Prompt, Ratio: cfg.Ratio, FirstFrameAssetID: cfg.FirstFrameAssetID, LastFrameAssetID: cfg.LastFrameAssetID,
+			ReferenceImageAssetIDs: cfg.ReferenceImageAssetIDs, ReferenceVideoAssetIDs: cfg.ReferenceVideoAssetIDs, ReferenceAudioAssetIDs: cfg.ReferenceAudioAssetIDs,
+		},
+	}, nil
 }
 
-var _ executor.Plugin = (*VideoRegenPlugin)(nil)
+func (p *VideoRegenPlugin) Submit(ctx context.Context, req *executor.ExecuteRequest) (executor.ProviderRef, *model.ExecOutputs, error) {
+	params, err := p.params(req)
+	if err != nil {
+		return executor.ProviderRef{}, nil, err
+	}
+	return p.base.submit(ctx, req, params)
+}
+
+func (p *VideoRegenPlugin) Poll(ctx context.Context, req *executor.ExecuteRequest, ref executor.ProviderRef) (executor.PollResult, error) {
+	params, err := p.params(req)
+	if err != nil {
+		return executor.PollResult{}, err
+	}
+	return p.base.poll(ctx, req, ref, params)
+}
+
+func (p *VideoRegenPlugin) Execute(ctx context.Context, req *executor.ExecuteRequest) (*model.ExecOutputs, error) {
+	return runToCompletion(ctx, p, req)
+}
+
+var _ executor.AsyncPlugin = (*VideoRegenPlugin)(nil)
