@@ -108,11 +108,11 @@ func (o *Orchestrator) RunNode(ctx context.Context, nodeID uint64, seq int) erro
 
 	plugin, found := o.plugins.Get(n.Executor)
 	if !found {
-		return o.finish(ctx, n, outcome{status: workflow.NodeFailed, code: "executor_unavailable", message: "no executor registered for " + n.Executor})
+		return o.finish(ctx, n, outcome{status: workflow.NodeFailed, code: CodeExecutorUnavailable, message: "no executor registered for " + n.Executor})
 	}
 	inputs, err := resolveInputs(ctx, o.db, n)
 	if err != nil {
-		return o.finish(ctx, n, outcome{status: workflow.NodeFailed, code: "input_unresolved", message: err.Error()})
+		return o.finish(ctx, n, outcome{status: workflow.NodeFailed, code: CodeInputUnresolved, message: err.Error()})
 	}
 	req := o.request(n, inputs)
 
@@ -158,7 +158,7 @@ func (o *Orchestrator) PollNode(ctx context.Context, nodeID uint64, seq int) err
 	}
 	var ref storedRef
 	if err := json.Unmarshal(n.ProviderRef, &ref); err != nil {
-		return o.finish(ctx, n, outcome{status: workflow.NodeFailed, code: "provider_ref_invalid", message: err.Error()})
+		return o.finish(ctx, n, outcome{status: workflow.NodeFailed, code: CodeProviderRefInvalid, message: err.Error()})
 	}
 	if n.CancelRequested {
 		if c, ok := plugin.(executor.Canceler); ok {
@@ -166,14 +166,14 @@ func (o *Orchestrator) PollNode(ctx context.Context, nodeID uint64, seq int) err
 			_ = c.Cancel(cctx, ref.ProviderRef)
 			cancel()
 		}
-		return o.finish(ctx, n, outcome{status: workflow.NodeCancelled, code: "cancelled", message: "cancelled"})
+		return o.finish(ctx, n, outcome{status: workflow.NodeCancelled, code: CodeCancelled, message: "cancelled"})
 	}
 	if n.Timeout > 0 && !ref.SubmittedAt.IsZero() && o.now().After(ref.SubmittedAt.Add(n.Timeout)) {
-		return o.finish(ctx, n, o.retryOrFail(n, "timeout", "remote task exceeded its deadline", nil))
+		return o.finish(ctx, n, o.retryOrFail(n, CodeTimeout, "remote task exceeded its deadline", nil))
 	}
 	inputs, err := resolveInputs(ctx, o.db, n)
 	if err != nil {
-		return o.finish(ctx, n, outcome{status: workflow.NodeFailed, code: "input_unresolved", message: err.Error()})
+		return o.finish(ctx, n, outcome{status: workflow.NodeFailed, code: CodeInputUnresolved, message: err.Error()})
 	}
 	pollCtx, stop := o.execContext(&Node{ID: n.ID, Timeout: 5 * time.Minute})
 	defer stop()
@@ -184,7 +184,7 @@ func (o *Orchestrator) PollNode(ctx context.Context, nodeID uint64, seq int) err
 	if err != nil {
 		ref.PollErrors++
 		if ref.PollErrors >= o.cfg.MaxPollErrors {
-			return o.finish(ctx, n, o.retryOrFail(n, "poll_failed", err.Error(), nil))
+			return o.finish(ctx, n, o.retryOrFail(n, CodePollFailed, err.Error(), nil))
 		}
 		return o.toWaiting(ctx, n, ref, o.pollDelay(ref, 0))
 	}
@@ -363,7 +363,7 @@ func (o *Orchestrator) settle(ctx, execCtx context.Context, n *Node, out *model.
 	case cause == errShutdown:
 		return o.finish(ctx, n, outcome{status: workflow.NodeReady, retryIn: time.Second, reason: "requeued", refunded: true, outputs: outputs, cost: cost})
 	case cause == errUserCancel:
-		return o.finish(ctx, n, outcome{status: workflow.NodeCancelled, code: "cancelled", message: "cancelled", outputs: outputs, cost: cost})
+		return o.finish(ctx, n, outcome{status: workflow.NodeCancelled, code: CodeCancelled, message: "cancelled", outputs: outputs, cost: cost})
 	}
 	if nc, ok := executor.AsNoCapacity(err); ok {
 		delay := nc.RetryAfter
@@ -373,22 +373,22 @@ func (o *Orchestrator) settle(ctx, execCtx context.Context, n *Node, out *model.
 		return o.finish(ctx, n, outcome{status: workflow.NodeReady, retryIn: delay, reason: nc.Reason, refunded: true})
 	}
 	if err != nil {
-		code := "executor_error"
+		code := CodeExecutorError
 		if errors.Is(err, context.DeadlineExceeded) {
-			code = "timeout"
+			code = CodeTimeout
 		}
 		oc := o.retryOrFail(n, code, err.Error(), outputs)
 		oc.cost = cost
 		return o.finish(ctx, n, oc)
 	}
 	if out == nil {
-		return o.finish(ctx, n, o.retryOrFail(n, "executor_error", "executor returned no result", outputs))
+		return o.finish(ctx, n, o.retryOrFail(n, CodeExecutorError, "executor returned no result", outputs))
 	}
 	oc := outcome{outputs: outputs, cost: cost, message: out.Message}
 	switch out.Code {
 	case model.ExecCodeSucceeded:
 		if n.Check == workflow.CheckAllRequested && !allRequested(outputs) {
-			oc.status, oc.code = workflow.NodeFailed, "incomplete_output"
+			oc.status, oc.code = workflow.NodeFailed, CodeIncompleteOutput
 			if oc.message == "" {
 				oc.message = "fewer outputs than requested"
 			}
@@ -396,17 +396,17 @@ func (o *Orchestrator) settle(ctx, execCtx context.Context, n *Node, out *model.
 			oc.status = workflow.NodeSucceeded
 		}
 	case model.ExecCodeFailed:
-		oc.status, oc.code = workflow.NodeFailed, failureCode(out.Message)
+		oc.status, oc.code = workflow.NodeFailed, failureCode(out.Message, CodeProviderRejected)
 	case model.ExecCodeError, model.ExecCodeTimeout:
-		code := "executor_error"
+		code := failureCode(out.Message, CodeExecutorError)
 		if out.Code == model.ExecCodeTimeout {
-			code = "timeout"
+			code = CodeTimeout
 		}
 		r := o.retryOrFail(n, code, out.Message, outputs)
 		r.cost = cost
 		oc = r
 	default:
-		oc.status, oc.code = workflow.NodeFailed, "unexpected_result"
+		oc.status, oc.code = workflow.NodeFailed, CodeUnexpectedResult
 	}
 	return o.finish(ctx, n, oc)
 }
@@ -421,13 +421,6 @@ func (o *Orchestrator) retryOrFail(n *Node, code, message string, outputs map[st
 		return outcome{status: workflow.NodeReady, code: code, message: message, outputs: outputs, retryIn: backoff, reason: "backoff"}
 	}
 	return outcome{status: workflow.NodeFailed, code: code, message: message, outputs: outputs}
-}
-
-func failureCode(message string) string {
-	if strings.HasPrefix(message, "sensitive_content:") {
-		return "moderation"
-	}
-	return "provider_rejected"
 }
 
 func allRequested(outputs map[string]any) bool {

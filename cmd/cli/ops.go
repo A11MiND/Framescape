@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"aigc-platform/internal/application/media"
 	"aigc-platform/internal/infra/cache"
 	"aigc-platform/internal/infra/orchestrator"
+	httpapi "aigc-platform/internal/interfaces/http"
 	"aigc-platform/internal/pkg/config"
 )
 
@@ -119,4 +121,11 @@ func cmdAudit(_ []string) {
 		os.Exit(1)
 	}
 	fmt.Println("audit passed")
+}
+
+// cmdErrorCodes prints every code clients must localize: API error codes
+// with their HTTP status, and job/step failure codes.
+func cmdErrorCodes() {
+	out, _ := json.MarshalIndent(map[string]any{"api": httpapi.ErrorCatalog, "failure": orchestrator.FailureCodes}, "", "  ")
+	fmt.Println(string(out))
 }

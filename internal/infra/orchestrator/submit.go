@@ -1,10 +1,10 @@
 package orchestrator
 
 import (
+	"aigc-platform/internal/pkg/apperr"
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -13,10 +13,10 @@ import (
 )
 
 // ErrGateNotSuspended is returned by Resume when the gate is not waiting.
-var ErrGateNotSuspended = errors.New("orchestrator: gate is not waiting for a decision")
+var ErrGateNotSuspended = apperr.New("not_awaiting_review", "the job is not waiting for a preview decision")
 
 // ErrJobTerminal is returned when an operation needs a job that is still live.
-var ErrJobTerminal = errors.New("orchestrator: job already finished")
+var ErrJobTerminal = apperr.New("job_finished", "the job has already finished")
 
 // Pending is post-commit work produced by a transactional call. Callers that
 // own the transaction must invoke Flush after a successful commit.

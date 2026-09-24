@@ -1,6 +1,7 @@
 package jobsvc
 
 import (
+	"aigc-platform/internal/pkg/apperr"
 	"context"
 	"fmt"
 	"strings"
@@ -43,7 +44,7 @@ type panelPlan struct {
 func comic4PanelCount(spec Spec) (int, error) {
 	if len(spec.Panels) >= minComic4Panels {
 		if len(spec.Panels) > capability.ImageMaxN {
-			return 0, fmt.Errorf("image.comic4 supports at most %d panels, got %d", capability.ImageMaxN, len(spec.Panels))
+			return 0, apperr.New("comic_panel_count", fmt.Sprintf("image.comic4 supports %d..%d panels, got %d", minComic4Panels, capability.ImageMaxN, len(spec.Panels)), "min", minComic4Panels, "max", capability.ImageMaxN)
 		}
 		return len(spec.Panels), nil
 	}
@@ -54,7 +55,7 @@ func comic4PanelCount(spec Spec) (int, error) {
 		}
 		return min(n, capability.ImageMaxN), nil
 	}
-	return 0, fmt.Errorf("image.comic4 requires at least %d panels, or a story to auto-split", minComic4Panels)
+	return 0, apperr.New("comic_panel_count", fmt.Sprintf("image.comic4 requires %d..%d panels, or a story to auto-split", minComic4Panels, capability.ImageMaxN), "min", minComic4Panels, "max", capability.ImageMaxN)
 }
 
 // comic4StylizeRefCount bounds the reference-stylizing passes: one per bound
@@ -111,13 +112,13 @@ func (s *Service) prepareImageComic4(ctx context.Context, userID uint64, spec Sp
 		texts = manual
 	default:
 		if s.minimax == nil {
-			return nil, "", fmt.Errorf("story auto-split is unavailable in this deployment")
+			return nil, "", apperr.New("provider_unavailable", "story auto-split is unavailable in this deployment")
 		}
 		if texts, _, err = minimax.SplitStory(ctx, s.minimax, spec.Story, count); err != nil {
 			return nil, "", fmt.Errorf("split story into panels: %w", err)
 		}
 		if len(texts) != count {
-			return nil, "", fmt.Errorf("story split returned %d panels, want %d", len(texts), count)
+			return nil, "", apperr.New("story_split_failed", fmt.Sprintf("story split returned %d panels, want %d", len(texts), count))
 		}
 	}
 

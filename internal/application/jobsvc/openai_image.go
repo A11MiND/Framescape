@@ -1,8 +1,8 @@
 package jobsvc
 
 import (
+	"aigc-platform/internal/pkg/apperr"
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 
@@ -17,10 +17,10 @@ import (
 
 // ErrOpenAINotEnabled is returned for accounts outside the OpenAI image gray
 // release (the openai_image entitlement).
-var ErrOpenAINotEnabled = errors.New("OpenAI image generation is in limited beta and not enabled for this account")
+var ErrOpenAINotEnabled = apperr.New("openai_not_enabled", "OpenAI image generation is in limited beta and not enabled for this account")
 
 // ErrOpenAIUnavailable is returned when this deployment cannot run OpenAI.
-var ErrOpenAIUnavailable = errors.New("OpenAI image generation is not configured on this deployment")
+var ErrOpenAIUnavailable = apperr.New("provider_unavailable", "OpenAI image generation is not configured on this deployment", "provider", "openai")
 
 // OpenAIImageEnabled gates job creation and GET /capabilities: a key plus a
 // model the executor can price (an unpriced model would settle at zero).
@@ -71,21 +71,21 @@ func (s *Service) openAIPrepare(ctx context.Context, userID uint64, workflowName
 // checkOpenAIRefs verifies every reference image can be sent to OpenAI.
 func (s *Service) checkOpenAIRefs(ctx context.Context, userID uint64, refs []string) error {
 	if len(refs) > openai.MaxReferences {
-		return fmt.Errorf("at most %d reference images can be sent to OpenAI", openai.MaxReferences)
+		return apperr.New("references_too_many", fmt.Sprintf("at most %d reference images can be sent to OpenAI", openai.MaxReferences), "max", openai.MaxReferences)
 	}
 	for _, ref := range refs {
 		var asset persistence.Asset
 		if err := s.db.WithContext(ctx).Where("biz_id = ? AND user_id = ? AND deleted_at IS NULL AND type = ?", ref, userID, "image").First(&asset).Error; err != nil {
-			return fmt.Errorf("reference image unavailable")
+			return apperr.New("reference_unavailable", "reference image unavailable")
 		}
 		if !comic.ImageMime(asset.Mime) {
-			return fmt.Errorf("reference images must be PNG, JPEG or WebP")
+			return apperr.New("reference_format", "reference images must be PNG, JPEG or WebP")
 		}
 		if asset.SizeBytes > openai.MaxReferenceBytes {
-			return fmt.Errorf("reference images must be at most 20 MB")
+			return apperr.New("reference_too_large", "reference images must be at most 20 MB", "max_mb", openai.MaxReferenceBytes>>20)
 		}
 		if asset.PublicURL == "" {
-			return fmt.Errorf("reference image upload is incomplete")
+			return apperr.New("reference_incomplete", "reference image upload is incomplete")
 		}
 	}
 	return nil
@@ -95,7 +95,7 @@ func (s *Service) checkOpenAIRefs(ctx context.Context, userID uint64, refs []str
 func checkProvider(workflowName string, spec Spec) error {
 	if spec.ImageProvider != workflows.ProviderOpenAI {
 		if spec.ImageSize != "" || spec.ImageQuality != "" {
-			return fmt.Errorf("image_size and image_quality apply to image_provider=openai only")
+			return apperr.New("provider_option_unsupported", "image_size and image_quality apply to image_provider=openai only")
 		}
 		return nil
 	}
@@ -106,7 +106,7 @@ func checkProvider(workflowName string, spec Spec) error {
 	case workflowName == "image.comic4" && spec.ComicMode != "":
 		return nil
 	}
-	return fmt.Errorf("image_provider=openai supports image.single, image.sequence and the direct or editable comic")
+	return apperr.New("provider_workflow_unsupported", "image_provider=openai supports image.single, image.sequence and the direct or editable comic", "provider", "openai")
 }
 
 // openAIOptions is what one general OpenAI generation call asks for.
@@ -131,13 +131,13 @@ func openAIImageOptions(workflowName string, spec Spec) (openAIOptions, error) {
 		o.Quality = openai.DefaultQuality
 	}
 	if maxN := min(config.OpenAIImageMaxN(), capability.ImageMaxN); o.N > maxN {
-		return o, fmt.Errorf("OpenAI generates at most %d images per job", maxN)
+		return o, apperr.New("image_count_exceeded", fmt.Sprintf("OpenAI generates at most %d images per job", maxN), "max", maxN)
 	}
 	if !slices.Contains(config.OpenAIImageSizes(), o.Size) {
-		return o, fmt.Errorf("image_size %q is not offered; choose one of %v", o.Size, config.OpenAIImageSizes())
+		return o, apperr.New("image_size_unsupported", fmt.Sprintf("image_size %q is not offered; choose one of %v", o.Size, config.OpenAIImageSizes()), "allowed", config.OpenAIImageSizes())
 	}
 	if !slices.Contains(config.OpenAIImageQualities(), o.Quality) {
-		return o, fmt.Errorf("image_quality %q is not offered; choose one of %v", o.Quality, config.OpenAIImageQualities())
+		return o, apperr.New("image_quality_unsupported", fmt.Sprintf("image_quality %q is not offered; choose one of %v", o.Quality, config.OpenAIImageQualities()), "allowed", config.OpenAIImageQualities())
 	}
 	return o, nil
 }

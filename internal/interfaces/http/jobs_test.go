@@ -171,8 +171,8 @@ func TestHandleCancelJob(t *testing.T) {
 
 	// Ownership boundary: user B can't cancel user A's job.
 	rec = doJSON(t, r, http.MethodPost, "/api/v1/jobs/"+bizID+"/cancel", nil, tokenB)
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("other user's cancel: status = %d, want %d, body = %s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("other user's cancel: status = %d, want %d, body = %s", rec.Code, http.StatusNotFound, rec.Body.String())
 	}
 
 	rec = doJSON(t, r, http.MethodPost, "/api/v1/jobs/"+bizID+"/cancel", nil, tokenA)
@@ -190,8 +190,8 @@ func TestHandleCancelJob(t *testing.T) {
 	}
 
 	rec = doJSON(t, r, http.MethodPost, "/api/v1/jobs/does-not-exist/cancel", nil, tokenA)
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("unknown bizID: status = %d, want %d, body = %s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown bizID: status = %d, want %d, body = %s", rec.Code, http.StatusNotFound, rec.Body.String())
 	}
 }
 
@@ -208,8 +208,8 @@ func TestHandleDeleteJob(t *testing.T) {
 
 	// Still running — must refuse, not silently soft-delete a live job.
 	rec = doJSON(t, r, http.MethodDelete, "/api/v1/jobs/"+bizID, nil, token)
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("delete while running: status = %d, want %d, body = %s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), `"code":"job_active"`) {
+		t.Fatalf("delete while running: status = %d, want %d, body = %s", rec.Code, http.StatusConflict, rec.Body.String())
 	}
 
 	eng.finish(t, bizID, "succeeded")

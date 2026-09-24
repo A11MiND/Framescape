@@ -139,9 +139,9 @@ func (o *Orchestrator) sweepExpiredLeases(ctx context.Context) (int, error) {
 			}
 		}
 		if n.CancelRequested {
-			err = o.finish(ctx, n, outcome{status: workflow.NodeCancelled, code: "cancelled", message: "cancelled"})
+			err = o.finish(ctx, n, outcome{status: workflow.NodeCancelled, code: CodeCancelled, message: "cancelled"})
 		} else {
-			err = o.finish(ctx, n, o.retryOrFail(n, "worker_lost", "the worker running this step stopped responding", nil))
+			err = o.finish(ctx, n, o.retryOrFail(n, CodeWorkerLost, "the worker running this step stopped responding", nil))
 		}
 		if err != nil {
 			return recovered, err
@@ -218,7 +218,7 @@ func (o *Orchestrator) sweepDeadlines(ctx context.Context) (int, error) {
 	}
 	rows.Close()
 	for _, id := range overdue {
-		if err := o.Abort(ctx, id, "deadline_exceeded", "the job ran longer than its time limit"); err == nil {
+		if err := o.Abort(ctx, id, CodeDeadlineExceeded, "the job ran longer than its time limit"); err == nil {
 			aborted++
 		}
 	}
@@ -247,7 +247,7 @@ func (o *Orchestrator) sweepDeadlines(ctx context.Context) (int, error) {
 		if !o.gateExpired(ctx, g.jobID, g.meta, now) {
 			continue
 		}
-		if err := o.Abort(ctx, g.jobID, "gate_expired", "the preview was not confirmed in time"); err == nil {
+		if err := o.Abort(ctx, g.jobID, CodeGateExpired, "the preview was not confirmed in time"); err == nil {
 			aborted++
 		}
 	}

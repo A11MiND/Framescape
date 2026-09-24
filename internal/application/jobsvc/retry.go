@@ -1,6 +1,7 @@
 package jobsvc
 
 import (
+	"aigc-platform/internal/pkg/apperr"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -26,7 +27,7 @@ func (s *Service) RetryNode(ctx context.Context, userID uint64, bizID, nodeName 
 		return nil, err
 	}
 	if retryableNodes[job.WorkflowName] != nodeName || loopIndex != -1 {
-		return nil, fmt.Errorf("node %q is not retryable for workflow %q", nodeName, job.WorkflowName)
+		return nil, apperr.New("not_supported", fmt.Sprintf("node %q is not retryable for workflow %q", nodeName, job.WorkflowName))
 	}
 	failed := false
 	for _, n := range run.Nodes {
@@ -35,7 +36,7 @@ func (s *Service) RetryNode(ctx context.Context, userID uint64, bizID, nodeName 
 		}
 	}
 	if !failed {
-		return nil, fmt.Errorf("node %q has not failed; nothing to retry", nodeName)
+		return nil, apperr.New("node_not_failed", fmt.Sprintf("node %q has not failed; nothing to retry", nodeName))
 	}
 
 	var spec Spec
@@ -43,7 +44,7 @@ func (s *Service) RetryNode(ctx context.Context, userID uint64, bizID, nodeName 
 		return nil, fmt.Errorf("decode job spec: %w", err)
 	}
 	if spec.Resolution != "" && !slices.Contains(capability.VideoResolutions, spec.Resolution) {
-		return nil, fmt.Errorf("resolution must be 768P or 2K, got %q", spec.Resolution)
+		return nil, errResolution(spec.Resolution)
 	}
 	characters, err := s.resolveCharacters(ctx, userID, spec.Characters)
 	if err != nil {

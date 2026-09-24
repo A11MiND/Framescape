@@ -8,7 +8,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"aigc-platform/internal/application/creditsvc"
 	"aigc-platform/internal/application/jobsvc"
 	"aigc-platform/internal/infra/orchestrator"
 	"aigc-platform/internal/infra/persistence"
@@ -54,20 +53,8 @@ func (s *Server) handleCreateJob(c *gin.Context) {
 	}
 
 	job, err := s.jobs.Create(c.Request.Context(), userID(c), req.WorkflowName, req.Spec, idemKey, projectID)
-	if errors.Is(err, jobsvc.ErrOpenAINotEnabled) {
-		c.JSON(http.StatusForbidden, errBody("comic_ai_not_enabled", err.Error()))
-		return
-	}
-	if errors.Is(err, jobsvc.ErrOpenAIUnavailable) {
-		c.JSON(http.StatusServiceUnavailable, errBody("provider_unavailable", err.Error()))
-		return
-	}
-	if errors.Is(err, creditsvc.ErrInsufficientBalance) {
-		c.JSON(http.StatusPaymentRequired, errBody("insufficient_credits", err.Error()))
-		return
-	}
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, errBody("submit_failed", err.Error()))
+		writeError(c, err, http.StatusUnprocessableEntity, "submit_failed")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -109,20 +96,10 @@ func (s *Server) handleQuoteResume(c *gin.Context) {
 }
 
 func writeResumeError(c *gin.Context, err error) {
-	switch {
-	case errors.Is(err, jobsvc.ErrNotFound):
-		c.JSON(http.StatusNotFound, errBody("not_found", "job not found"))
-	case errors.Is(err, orchestrator.ErrGateNotSuspended), errors.Is(err, orchestrator.ErrJobTerminal):
-		c.JSON(http.StatusConflict, errBody("not_awaiting_review", "the job is not waiting for a preview decision"))
-	case errors.Is(err, jobsvc.ErrQuoteChanged):
-		c.JSON(http.StatusConflict, errBody("price_changed", err.Error()))
-	case errors.Is(err, creditsvc.ErrInsufficientBalance):
-		c.JSON(http.StatusPaymentRequired, errBody("insufficient_credits", err.Error()))
-	case errors.Is(err, jobsvc.ErrNotSupported):
-		c.JSON(http.StatusUnprocessableEntity, errBody("not_supported", err.Error()))
-	default:
-		c.JSON(http.StatusUnprocessableEntity, errBody("resume_failed", err.Error()))
+	if errors.Is(err, orchestrator.ErrJobTerminal) {
+		err = orchestrator.ErrGateNotSuspended
 	}
+	writeError(c, err, http.StatusUnprocessableEntity, "resume_failed")
 }
 
 // handleListJobs is GET /api/v1/jobs: the user's jobs newest first.
@@ -144,7 +121,7 @@ func (s *Server) handleListJobs(c *gin.Context) {
 	}
 	rows, next, err := s.jobs.List(ctx, userID(c), f)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
+		writeError(c, err, http.StatusBadRequest, "bad_request")
 		return
 	}
 
@@ -242,15 +219,11 @@ func (s *Server) handleUpdateJob(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
 		return
 	}
-	err := s.jobs.Rename(c.Request.Context(), userID(c), c.Param("bizID"), req.Title)
-	switch {
-	case errors.Is(err, jobsvc.ErrNotFound):
-		c.JSON(http.StatusNotFound, errBody("not_found", "job not found"))
-	case err != nil:
-		c.JSON(http.StatusUnprocessableEntity, errBody("invalid_title", err.Error()))
-	default:
-		c.Status(http.StatusNoContent)
+	if err := s.jobs.Rename(c.Request.Context(), userID(c), c.Param("bizID"), req.Title); err != nil {
+		writeError(c, err, http.StatusInternalServerError, "internal")
+		return
 	}
+	c.Status(http.StatusNoContent)
 }
 
 // handleEstimateJob is POST /api/v1/jobs/estimate (§13.3): quotes the same
@@ -265,7 +238,7 @@ func (s *Server) handleEstimateJob(c *gin.Context) {
 	}
 	items, credits, err := jobsvc.EstimateBreakdown(req.WorkflowName, req.Spec)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, errBody("estimate_failed", err.Error()))
+		writeError(c, err, http.StatusUnprocessableEntity, "estimate_failed")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"credits_total": credits, "items": items})
@@ -276,7 +249,7 @@ func (s *Server) handleEstimateJob(c *gin.Context) {
 // directly.
 func (s *Server) handleCancelJob(c *gin.Context) {
 	if err := s.jobs.Cancel(c.Request.Context(), userID(c), c.Param("bizID")); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, errBody("cancel_failed", err.Error()))
+		writeError(c, err, http.StatusUnprocessableEntity, "cancel_failed")
 		return
 	}
 	// 204, not 200: see handleUpdateAsset's identical comment.
@@ -289,7 +262,7 @@ func (s *Server) handleCancelJob(c *gin.Context) {
 // qualify.
 func (s *Server) handleDeleteJob(c *gin.Context) {
 	if err := s.jobs.Delete(c.Request.Context(), userID(c), c.Param("bizID")); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, errBody("delete_failed", err.Error()))
+		writeError(c, err, http.StatusUnprocessableEntity, "delete_failed")
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -314,7 +287,7 @@ func (s *Server) handleRetryNode(c *gin.Context) {
 	}
 	job, err := s.jobs.RetryNode(c.Request.Context(), userID(c), c.Param("bizID"), c.Param("nodeName"), req.LoopIndex, req.PromptOverride)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, errBody("retry_failed", err.Error()))
+		writeError(c, err, http.StatusUnprocessableEntity, "retry_failed")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{

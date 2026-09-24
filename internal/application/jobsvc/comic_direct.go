@@ -1,6 +1,7 @@
 package jobsvc
 
 import (
+	"aigc-platform/internal/pkg/apperr"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -18,28 +19,28 @@ import (
 // is a separate one-image job, so existing images and overlays remain intact.
 func directComicPrompt(spec Spec) (string, error) {
 	if spec.ComicMode != "direct" && spec.ComicMode != "editable" {
-		return "", fmt.Errorf("comic_mode must be direct or editable")
+		return "", apperr.New("invalid_comic", "comic_mode must be direct or editable")
 	}
 	if spec.ImageProvider != "openai" {
-		return "", fmt.Errorf("new comic modes require image_provider=openai")
+		return "", apperr.New("invalid_comic", "new comic modes require image_provider=openai")
 	}
 	if spec.ComicPanel < 0 || spec.ComicPanel > 4 || (spec.ComicPanel > 0 && spec.ComicMode != "editable") {
-		return "", fmt.Errorf("comic_panel must be 0..4; replacements require editable mode")
+		return "", apperr.New("invalid_comic", "comic_panel must be 0..4; replacements require editable mode")
 	}
 	if len(spec.Characters) > 0 || len(spec.PresetIDs) > 0 || len(spec.Panels) > 0 {
-		return "", fmt.Errorf("direct comics use the approved text and explicit reference images, not legacy panels/presets/characters")
+		return "", apperr.New("invalid_comic", "direct comics use the approved text and explicit reference images, not legacy panels/presets/characters")
 	}
 	if spec.N > 1 {
-		return "", fmt.Errorf("direct comics generate exactly one page or replacement per job")
+		return "", apperr.New("invalid_comic", "direct comics generate exactly one page or replacement per job")
 	}
 	if len(spec.ReferenceImageAssetIDs) > comic.MaxReferences {
-		return "", fmt.Errorf("at most %d character/style reference images", comic.MaxReferences)
+		return "", apperr.New("references_too_many", fmt.Sprintf("at most %d character/style reference images", comic.MaxReferences), "max", comic.MaxReferences)
 	}
 	if strings.TrimSpace(spec.Text) == "" || utf8.RuneCountInString(spec.Text) > comic.MaxComposedChars {
-		return "", fmt.Errorf("comic brief must contain 1..%d characters", comic.MaxComposedChars)
+		return "", apperr.New("text_length", fmt.Sprintf("comic brief must contain 1..%d characters", comic.MaxComposedChars), "field", "text", "max", comic.MaxComposedChars)
 	}
 	if utf8.RuneCountInString(spec.ComicContext) > comic.MaxContextChars {
-		return "", fmt.Errorf("reviewed source excerpts must not exceed %d characters", comic.MaxContextChars)
+		return "", apperr.New("text_length", fmt.Sprintf("reviewed source excerpts must not exceed %d characters", comic.MaxContextChars), "field", "comic_context", "max", comic.MaxContextChars)
 	}
 	text := spec.Text
 	if spec.ComicContext != "" {
@@ -56,7 +57,7 @@ func directComicPrompt(spec Spec) (string, error) {
 	}
 	// Never silently truncate an approved brief.
 	if utf8.RuneCountInString(text) > comic.MaxCompiledChars {
-		return "", fmt.Errorf("compiled comic prompt exceeds %d characters", comic.MaxCompiledChars)
+		return "", apperr.New("text_length", fmt.Sprintf("compiled comic prompt exceeds %d characters", comic.MaxCompiledChars), "field", "compiled", "max", comic.MaxCompiledChars)
 	}
 	return text, nil
 }

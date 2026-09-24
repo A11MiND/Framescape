@@ -1,6 +1,6 @@
 package prompt
 
-import "fmt"
+import "aigc-platform/internal/pkg/apperr"
 
 // VideoMaxPromptChars mirrors capability.VideoMaxPromptChars (PRD §3.2) —
 // duplicated as a plain constant here for the same reason MaxPromptChars
@@ -45,7 +45,7 @@ func CompileVideoRefs(r VideoRefs) (mode, ratio string, items []VideoRefItem, er
 	if hasFirstLast && hasRef {
 		// §3.2's "🔴 最重要的一条硬约束": first_frame/last_frame and any
 		// reference_* role can never coexist in one request.
-		return "", "", nil, fmt.Errorf("mutual_exclusion: first_frame/last_frame cannot combine with reference_image/reference_video/reference_audio")
+		return "", "", nil, apperr.New("video_refs_exclusive", "mutual_exclusion: first_frame/last_frame cannot combine with reference_image/reference_video/reference_audio")
 	}
 
 	mode = "t2va"
@@ -60,7 +60,7 @@ func CompileVideoRefs(r VideoRefs) (mode, ratio string, items []VideoRefItem, er
 	switch mode {
 	case "t2va":
 		if ratio == "" || ratio == "adaptive" {
-			return "", "", nil, fmt.Errorf("bad_params: ratio is required and must not be adaptive for t2va")
+			return "", "", nil, apperr.New("video_ratio_required", "bad_params: ratio is required and must not be adaptive for t2va")
 		}
 	case "i2va":
 		ratio = "adaptive" // §3.2: "传别的会被忽略" — normalize rather than silently send a value MiniMax ignores

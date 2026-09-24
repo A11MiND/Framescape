@@ -127,7 +127,7 @@ func TestDirectComicHTTPNoPlannerAndOwnedRefs(t *testing.T) {
 		t.Fatal(me.Body.String())
 	}
 	rec := doJSON(t, r, "POST", "/api/v1/jobs", createJobRequest{WorkflowName: "image.comic4", Spec: spec}, token)
-	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "comic_ai_not_enabled") {
+	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "openai_not_enabled") {
 		t.Fatalf("non-beta user: %d %s", rec.Code, rec.Body.String())
 	}
 	var held persistence.CreditAccount

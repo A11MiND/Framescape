@@ -18,6 +18,7 @@
 package creditsvc
 
 import (
+	"aigc-platform/internal/pkg/apperr"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -80,7 +81,7 @@ func CreditsFromYuan(costYuan float64) int {
 // ErrInsufficientBalance is returned by Hold when the user doesn't have
 // enough available balance — jobsvc.Create surfaces this as a 4xx, never
 // silently degrades.
-var ErrInsufficientBalance = errors.New("insufficient credit balance")
+var ErrInsufficientBalance = apperr.New("insufficient_credits", "insufficient credit balance")
 
 type Service struct {
 	db *sql.DB

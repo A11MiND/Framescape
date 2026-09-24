@@ -4,6 +4,7 @@
 package jobsvc
 
 import (
+	"aigc-platform/internal/pkg/apperr"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -32,10 +33,16 @@ import (
 )
 
 // ErrNotFound is returned when a job does not exist for this user.
-var ErrNotFound = errors.New("job not found")
+var ErrNotFound = apperr.New("not_found", "job not found")
 
 // ErrNotSupported is returned for operations a job's kind or engine cannot do.
-var ErrNotSupported = errors.New("operation not supported for this job")
+var ErrNotSupported = apperr.New("not_supported", "operation not supported for this job")
+
+var errShotsRequired = apperr.New("shots_required", "at least one shot is required")
+
+func errResolution(got string) error {
+	return apperr.New("resolution_invalid", fmt.Sprintf("resolution must be one of %v, got %q", capability.VideoResolutions, got), "allowed", capability.VideoResolutions)
+}
 
 // CharacterSlot binds a character to a generation slot.
 type CharacterSlot struct {
@@ -154,7 +161,7 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 	case "video.sequence":
 		plan, title, err = s.prepareVideoSequence(ctx, userID, spec)
 	default:
-		return nil, fmt.Errorf("unknown workflow_name %q", workflowName)
+		return nil, apperr.New("unknown_workflow", fmt.Sprintf("unknown workflow_name %q", workflowName))
 	}
 	if err != nil {
 		return nil, err
@@ -266,7 +273,7 @@ func (s *Service) prepareImageSingle(ctx context.Context, userID uint64, spec Sp
 
 func (s *Service) prepareVideoSingle(ctx context.Context, userID uint64, spec Spec) (*workflow.Plan, string, error) {
 	if spec.Resolution != "" && !slices.Contains(capability.VideoResolutions, spec.Resolution) {
-		return nil, "", fmt.Errorf("resolution must be 768P or 2K, got %q", spec.Resolution)
+		return nil, "", errResolution(spec.Resolution)
 	}
 	characters, err := s.resolveCharacters(ctx, userID, spec.Characters)
 	if err != nil {
@@ -388,7 +395,7 @@ func EstimateBreakdown(workflowName string, spec Spec) ([]EstimateItem, int, err
 	case "image.sequence":
 		n := len(spec.Shots)
 		if n == 0 {
-			return nil, 0, fmt.Errorf("image.sequence requires at least 1 shot")
+			return nil, 0, errShotsRequired
 		}
 		if openAI {
 			// One call per shot, each reserved on its own.
@@ -407,7 +414,7 @@ func EstimateBreakdown(workflowName string, spec Spec) ([]EstimateItem, int, err
 		items = []EstimateItem{{Kind: ItemKindSequenceShots, Count: n, Credits: creditsvc.EstimatePerNodeImageCredits(n)}}
 	case "video.single":
 		if spec.Resolution != "" && !slices.Contains(capability.VideoResolutions, spec.Resolution) {
-			return nil, 0, fmt.Errorf("resolution must be 768P or 2K, got %q", spec.Resolution)
+			return nil, 0, errResolution(spec.Resolution)
 		}
 		items = []EstimateItem{{Kind: ItemKindVideoGeneration, Count: 1,
 			Credits: creditsvc.EstimateVideoCredits(videoDuration(spec.DurationSeconds), videoResolution(spec.Resolution))}}
@@ -417,7 +424,7 @@ func EstimateBreakdown(workflowName string, spec Spec) ([]EstimateItem, int, err
 	case "video.sequence":
 		n := len(spec.Shots)
 		if n == 0 {
-			return nil, 0, fmt.Errorf("video.sequence requires at least 1 shot")
+			return nil, 0, errShotsRequired
 		}
 		kind, resolution := ItemKindSequencePreview, "768P"
 		if spec.SkipPreview {
@@ -429,7 +436,7 @@ func EstimateBreakdown(workflowName string, spec Spec) ([]EstimateItem, int, err
 			items = append(items, EstimateItem{Kind: ItemKindPromptEnhance, Count: anchors, Credits: anchors * creditsvc.EstimatePromptEnhanceCredits()})
 		}
 	default:
-		return nil, 0, fmt.Errorf("unknown workflow_name %q", workflowName)
+		return nil, 0, apperr.New("unknown_workflow", fmt.Sprintf("unknown workflow_name %q", workflowName))
 	}
 	total := 0
 	for _, it := range items {
@@ -480,7 +487,7 @@ func (s *Service) List(ctx context.Context, userID uint64, f ListFilter) ([]pers
 	case f.Bucket != "":
 		statuses, ok := bucketStatuses[f.Bucket]
 		if !ok {
-			return nil, 0, fmt.Errorf("unknown bucket %q", f.Bucket)
+			return nil, 0, apperr.New("bad_request", fmt.Sprintf("unknown bucket %q", f.Bucket))
 		}
 		q = q.Where("status IN ?", statuses)
 	}
@@ -541,7 +548,7 @@ func (s *Service) Summary(ctx context.Context, userID uint64, projectID *uint64)
 func (s *Service) Rename(ctx context.Context, userID uint64, bizID, title string) error {
 	title = strings.TrimSpace(title)
 	if title == "" || utf8.RuneCountInString(title) > 128 {
-		return fmt.Errorf("title must contain 1..128 characters")
+		return apperr.New("invalid_title", "title must contain 1..128 characters", "max", 128)
 	}
 	job, err := s.load(ctx, userID, bizID)
 	if err != nil {
@@ -635,7 +642,7 @@ func (s *Service) Delete(ctx context.Context, userID uint64, bizID string) error
 		return err
 	}
 	if !workflow.JobTerminal(job.Status) {
-		return fmt.Errorf("job %q is still %s; cancel it before deleting", bizID, job.Status)
+		return apperr.New("job_active", fmt.Sprintf("job %q is still %s; cancel it before deleting", bizID, job.Status), "status", job.Status)
 	}
 	return s.db.WithContext(ctx).Model(&persistence.Job{}).Where("id = ?", job.ID).Update("deleted_at", time.Now().UTC()).Error
 }

@@ -28,6 +28,8 @@ func main() {
 		cmdBackfillThumbnails(os.Args[2:])
 	case "audit":
 		cmdAudit(os.Args[2:])
+	case "error-codes":
+		cmdErrorCodes()
 	default:
 		usage()
 		os.Exit(1)
@@ -38,6 +40,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `usage:
   cli grant-credits -email=<email> -amount=<n> [-remark=<text>]
   cli backfill-thumbnails [-limit=<n>]   queue previews for assets without one
+  cli error-codes                        print the API and job failure code catalog as JSON
   cli audit                              check credit and job invariants; exits 1 on violations`)
 }
 

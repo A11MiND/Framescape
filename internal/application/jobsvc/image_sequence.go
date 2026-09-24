@@ -1,6 +1,7 @@
 package jobsvc
 
 import (
+	"aigc-platform/internal/pkg/apperr"
 	"context"
 	"fmt"
 
@@ -17,10 +18,10 @@ func validateShotSourceRefs(refs []int, shotCount int) error {
 			continue
 		}
 		if i >= shotCount {
-			return fmt.Errorf("shot_source_refs has more entries than shots")
+			return apperr.New("shot_refs_invalid", "shot_source_refs has more entries than shots")
 		}
 		if r < 1 || r > i {
-			return fmt.Errorf("shot %d's source reference must point at an earlier shot (1..%d), got %d", i+1, i, r)
+			return apperr.New("shot_refs_invalid", fmt.Sprintf("shot %d's source reference must point at an earlier shot (1..%d), got %d", i+1, i, r), "shot", i+1)
 		}
 	}
 	return nil
@@ -28,7 +29,7 @@ func validateShotSourceRefs(refs []int, shotCount int) error {
 
 func (s *Service) prepareImageSequence(ctx context.Context, userID uint64, spec Spec) (*workflow.Plan, string, error) {
 	if len(spec.Shots) == 0 {
-		return nil, "", fmt.Errorf("image.sequence requires at least 1 shot")
+		return nil, "", errShotsRequired
 	}
 	if err := validateShotSourceRefs(spec.ShotSourceRefs, len(spec.Shots)); err != nil {
 		return nil, "", err

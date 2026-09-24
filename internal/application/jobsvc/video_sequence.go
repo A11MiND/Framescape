@@ -1,10 +1,10 @@
 package jobsvc
 
 import (
+	"aigc-platform/internal/pkg/apperr"
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -206,10 +206,10 @@ func validateShotReferenceOverrides(overrides []int, shotCount int) error {
 			continue
 		}
 		if i >= shotCount {
-			return fmt.Errorf("shot_reference_overrides has more entries than shots")
+			return apperr.New("shot_refs_invalid", "shot_reference_overrides has more entries than shots")
 		}
 		if r < 1 || r > i {
-			return fmt.Errorf("shot %d's reference override must point at an earlier shot (1..%d), got %d", i+1, i, r)
+			return apperr.New("shot_refs_invalid", fmt.Sprintf("shot %d's reference override must point at an earlier shot (1..%d), got %d", i+1, i, r), "shot", i+1)
 		}
 	}
 	return nil
@@ -217,7 +217,7 @@ func validateShotReferenceOverrides(overrides []int, shotCount int) error {
 
 func (s *Service) prepareVideoSequence(ctx context.Context, userID uint64, spec Spec) (*workflow.Plan, string, error) {
 	if len(spec.Shots) == 0 {
-		return nil, "", fmt.Errorf("video.sequence requires at least 1 shot")
+		return nil, "", errShotsRequired
 	}
 	if err := validateShotReferenceOverrides(spec.ShotReferenceOverrides, len(spec.Shots)); err != nil {
 		return nil, "", err
@@ -275,7 +275,7 @@ type ResumeVideoSequenceRequest struct {
 }
 
 // ErrQuoteChanged is returned when a confirmed quote no longer matches.
-var ErrQuoteChanged = errors.New("the price changed since it was quoted")
+var ErrQuoteChanged = apperr.New("price_changed", "the price changed since it was quoted")
 
 // ResumeQuote itemizes what a gate decision will reserve.
 type ResumeQuote struct {
@@ -336,16 +336,16 @@ func (s *Service) gateContext(ctx context.Context, userID uint64, bizID string, 
 	total := len(g.meta.Shots)
 	for _, i := range req.RedoShots {
 		if i < 1 || i > total {
-			return nil, fmt.Errorf("redo shot %d out of range", i)
+			return nil, apperr.New("review_decision_invalid", fmt.Sprintf("redo shot %d out of range", i), "shot", i)
 		}
 		g.decisions[i] = workflows.ShotDecision{Redo: true, PromptOverride: req.RedoPromptOverrides[i]}
 	}
 	for _, i := range req.SelectedShots {
 		if i < 1 || i > total {
-			return nil, fmt.Errorf("upgrade shot %d out of range", i)
+			return nil, apperr.New("review_decision_invalid", fmt.Sprintf("upgrade shot %d out of range", i), "shot", i)
 		}
 		if g.decisions[i].Redo {
-			return nil, fmt.Errorf("shot %d cannot be both redone and upgraded", i)
+			return nil, apperr.New("review_decision_invalid", fmt.Sprintf("shot %d cannot be both redone and upgraded", i), "shot", i)
 		}
 		g.decisions[i] = workflows.ShotDecision{Upgrade: true}
 	}
