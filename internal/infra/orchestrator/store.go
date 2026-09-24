@@ -23,6 +23,7 @@ var ErrJobNotFound = errors.New("orchestrator: job not found")
 type Node struct {
 	ID              uint64
 	JobID           uint64
+	UserID          uint64 // set when claimed
 	Name            string
 	TaskRunID       string
 	Executor        string

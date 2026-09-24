@@ -20,6 +20,7 @@ import (
 	"aigc-platform/internal/infra/executor/minimax"
 	"aigc-platform/internal/infra/orchestrator"
 	"aigc-platform/internal/infra/persistence"
+	"aigc-platform/internal/infra/providergw"
 	"aigc-platform/internal/infra/realtime"
 	"aigc-platform/internal/infra/storage"
 	httpapi "aigc-platform/internal/interfaces/http"
@@ -55,7 +56,8 @@ func main() {
 	})
 	// The API makes the planning calls that happen before a plan exists
 	// (comic planner, story split, smart shot picks) and the guest trial.
-	minimaxClient := minimax.NewClient(config.MiniMaxBaseURL(), config.MiniMaxAPIKey())
+	recorder := providergw.NewRecorder(sqlDB)
+	minimaxClient := minimax.NewClient(config.MiniMaxBaseURL(), config.MiniMaxAPIKey()).WithTransport(recorder.Transport("minimax", nil))
 	jobs := jobsvc.New(db, orch, credits, minimaxClient)
 
 	// Object storage only backs direct uploads here; without it the rest of

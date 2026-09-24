@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -151,6 +152,24 @@ func MiniMaxVideoConcurrency() int { return getEnvInt("MINIMAX_VIDEO_CONCURRENCY
 
 // --- Orchestration ---
 
+// UserActiveNodeLimit caps one user's provider steps running at once;
+// further steps queue with reason user_limit (0 = unlimited).
+func UserActiveNodeLimit() int { return getEnvInt("LIMIT_USER_ACTIVE_NODES", 4) }
+
+// ExecutorConcurrencyLimits caps cluster-wide running steps per executor,
+// as "type=n,type=n" (for example "minimax.image=20,openai.image=8"). Keep
+// these at or below each provider account's concurrency quota.
+func ExecutorConcurrencyLimits() map[string]int {
+	out := map[string]int{}
+	for _, part := range strings.Split(getEnv("LIMIT_EXECUTOR_CONCURRENCY", ""), ",") {
+		k, v, ok := strings.Cut(strings.TrimSpace(part), "=")
+		if n, err := strconv.Atoi(strings.TrimSpace(v)); ok && err == nil && n > 0 {
+			out[strings.TrimSpace(k)] = n
+		}
+	}
+	return out
+}
+
 // GateTTL is how long a preview gate waits for a decision before the job is
 // cancelled and its reservation released; 0 keeps the 7-day default.
 func GateTTL() time.Duration {
@@ -168,6 +187,11 @@ func GateTTL() time.Duration {
 // pointing the standard GOOGLE_APPLICATION_CREDENTIALS env var at it (same
 // posture as every other provider credential in this codebase — never
 // read/parsed/logged by our own code). ---
+
+// GeminiImagePriceYuan is the CNY cost of one Gemini output image used for
+// settlement and spend reporting (list price $0.039 at 7.2 CNY/USD); keep it
+// in line with the Vertex AI price of GEMINI_IMAGE_MODEL.
+func GeminiImagePriceYuan() float64 { return positiveFloat("GEMINI_IMAGE_PRICE_YUAN", 0.28) }
 
 // GeminiVertexProjectID is the GCP project ID Vertex AI calls bill against.
 // Empty (the default) disables Gemini registration entirely in cmd/worker —

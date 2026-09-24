@@ -58,6 +58,13 @@ func NewClient(baseURL, apiKey string) *Client {
 	}
 }
 
+// WithTransport routes this client's requests through rt (for example the
+// provider-call recorder) and returns the client.
+func (c *Client) WithTransport(rt http.RoundTripper) *Client {
+	c.http.Transport = rt
+	return c
+}
+
 // BaseResp is embedded in every MiniMax response (PRD §3.1): errors never
 // use the HTTP status code, they live here with HTTP always 200.
 type BaseResp struct {

@@ -23,6 +23,7 @@ import (
 	"aigc-platform/internal/domain/prompt"
 	"aigc-platform/internal/domain/workflow"
 	"aigc-platform/internal/infra/executor/minimax"
+	"aigc-platform/internal/infra/executor/spi/executor"
 	"aigc-platform/internal/infra/orchestrator"
 	"aigc-platform/internal/infra/persistence"
 	"aigc-platform/internal/pkg/id"
@@ -115,6 +116,8 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 	if spec.ImageProvider == "openai" && (workflowName != "image.comic4" || spec.ComicMode == "") {
 		return nil, fmt.Errorf("openai requires the direct or editable comic workflow")
 	}
+	// Planning calls made before the plan exists are recorded against the user.
+	ctx = executor.WithAttribution(ctx, executor.Attribution{UserID: userID})
 	if idemKey != "" {
 		if existing, err := s.findByIdemKey(ctx, userID, idemKey); err != nil || existing != nil {
 			return existing, err

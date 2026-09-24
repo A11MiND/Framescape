@@ -49,6 +49,9 @@ type Config struct {
 	// an image without usage, so a paid call is never settled at zero. It
 	// matches jobsvc's per-job hold for the same n.
 	ReserveUSD, PerRefUSD float64
+	// Transport, when set, carries the generation requests (for example
+	// through the provider-call recorder).
+	Transport http.RoundTripper
 }
 
 func (c Config) ReserveFor(refs int) float64 { return c.ReserveUSD + c.PerRefUSD*float64(refs) }
@@ -100,7 +103,7 @@ func NewImagePlugin(cfg Config, sink assetstore.Sink, reader assetstore.Reader) 
 	noRedirect := func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
 	return &ImagePlugin{
 		config: cfg, sink: sink, reader: reader,
-		http:  &http.Client{Timeout: 5 * time.Minute, CheckRedirect: noRedirect},
+		http:  &http.Client{Timeout: 5 * time.Minute, CheckRedirect: noRedirect, Transport: cfg.Transport},
 		fetch: &http.Client{Timeout: 30 * time.Second},
 	}
 }

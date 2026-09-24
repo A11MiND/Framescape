@@ -136,6 +136,21 @@ type Config struct {
 	MaxPollErrors   int
 	SweepBatch      int
 	EventRetention  time.Duration
+	// Limits caps concurrent provider work; excess nodes wait in the queue
+	// with a visible reason instead of failing.
+	Limits Limits
+}
+
+// Limits are soft caps checked before a node starts, counted from the
+// database so a crashed worker can never leak capacity.
+type Limits struct {
+	// PerUserActive caps a user's provider nodes that are running or
+	// waiting on a remote task (0 = unlimited).
+	PerUserActive int
+	// Executor caps cluster-wide running nodes per executor type.
+	Executor map[string]int
+	// Defer is how long a capped node waits before re-checking.
+	Defer time.Duration
 }
 
 func (c Config) withDefaults() Config {
@@ -172,6 +187,9 @@ func (c Config) withDefaults() Config {
 	}
 	if c.EventRetention <= 0 {
 		c.EventRetention = 7 * 24 * time.Hour
+	}
+	if c.Limits.Defer <= 0 {
+		c.Limits.Defer = 5 * time.Second
 	}
 	return c
 }

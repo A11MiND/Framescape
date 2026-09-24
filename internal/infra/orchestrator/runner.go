@@ -97,6 +97,11 @@ func (o *Orchestrator) RunNode(ctx context.Context, nodeID uint64, seq int) erro
 	if n.NextRunAt != nil && n.NextRunAt.After(now.Add(time.Second)) {
 		return o.enqueue(ctx, Task{Kind: TaskRun, NodeID: n.ID, Seq: n.DispatchSeq, Queue: n.Queue, ProcessAt: *n.NextRunAt, Timeout: n.Timeout})
 	}
+	if reason, err := o.admit(ctx, n); err != nil {
+		return err
+	} else if reason != "" {
+		return o.deferNode(ctx, n, reason)
+	}
 	if ok, err := o.claim(ctx, n, workflow.NodeReady); err != nil || !ok {
 		return err
 	}
@@ -216,7 +221,9 @@ func (o *Orchestrator) execContext(n *Node) (context.Context, func()) {
 	if timeout <= 0 {
 		timeout = 10 * time.Minute
 	}
-	base, cancel := context.WithCancelCause(context.Background())
+	base, cancel := context.WithCancelCause(executor.WithAttribution(context.Background(), executor.Attribution{
+		UserID: n.UserID, JobID: n.JobID, NodeID: n.ID, Attempt: n.Attempt,
+	}))
 	ctx, cancelTimeout := context.WithTimeout(base, timeout)
 	untrack := o.track(n.ID, cancel)
 	done := make(chan struct{})
@@ -297,7 +304,7 @@ func (o *Orchestrator) claim(ctx context.Context, n *Node, from string) (bool, e
 				n.StartedAt = &now
 			}
 		}
-		n.Status, n.LeaseOwner = workflow.NodeRunning, o.cfg.WorkerID
+		n.Status, n.LeaseOwner, n.UserID = workflow.NodeRunning, o.cfg.WorkerID, job.UserID
 		buf := &eventBuffer{job: job.JobRef}
 		if job.Status == workflow.JobQueued {
 			if _, err := tx.ExecContext(ctx, `UPDATE jobs SET status = ?, started_at = COALESCE(started_at, ?) WHERE id = ?`, workflow.JobRunning, now, job.ID); err != nil {
@@ -527,6 +534,11 @@ func (o *Orchestrator) finish(ctx context.Context, n *Node, oc outcome) error {
 				}
 			}
 		}
+		if oc.cost > 0 {
+			if err := attributeCost(ctx, tx, job, cur, oc.cost, now); err != nil {
+				return err
+			}
+		}
 		outputsJSON, err := json.Marshal(oc.outputs)
 		if err != nil {
 			return fmt.Errorf("encode outputs: %w", err)
@@ -635,4 +647,94 @@ func (o *Orchestrator) enqueue(ctx context.Context, t Task) error {
 		return nil
 	}
 	return o.dispatch.Enqueue(ctx, t)
+}
+
+// attributeCost puts a node attempt's cost on its last recorded provider
+// call, or records a call when the provider's transport is not recorded.
+func attributeCost(ctx context.Context, tx *sql.Tx, job *jobRow, n *Node, cost float64, now time.Time) error {
+	res, err := tx.ExecContext(ctx, `UPDATE provider_calls SET cost_yuan = cost_yuan + ? WHERE node_id = ? AND attempt = ? ORDER BY id DESC LIMIT 1`, cost, n.ID, n.Attempt)
+	if err != nil {
+		return fmt.Errorf("attribute cost: %w", err)
+	}
+	if affected, _ := res.RowsAffected(); affected > 0 {
+		return nil
+	}
+	provider, _, _ := strings.Cut(n.Executor, ".")
+	_, err = tx.ExecContext(ctx, `INSERT INTO provider_calls (provider, operation, user_id, job_id, node_id, attempt, status, cost_yuan, started_at, finished_at)
+		VALUES (?, ?, ?, ?, ?, ?, 'succeeded', ?, COALESCE(?, ?), ?)`,
+		provider, n.Executor, job.UserID, job.ID, n.ID, n.Attempt, cost, n.StartedAt, now, now)
+	if err != nil {
+		return fmt.Errorf("record cost: %w", err)
+	}
+	return nil
+}
+
+// admit returns a non-empty queue reason when the node must wait for
+// capacity. Local steps and gates are never limited.
+func (o *Orchestrator) admit(ctx context.Context, n *Node) (string, error) {
+	lim := o.cfg.Limits
+	if strings.HasPrefix(n.Executor, "local.") || n.Executor == workflow.GateExecutor {
+		return "", nil
+	}
+	if max := lim.Executor[n.Executor]; max > 0 {
+		var running int
+		if err := o.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM job_nodes WHERE status = ? AND executor_type = ?`, workflow.NodeRunning, n.Executor).Scan(&running); err != nil {
+			return "", err
+		}
+		if running >= max {
+			return "provider_capacity", nil
+		}
+	}
+	if lim.PerUserActive > 0 {
+		var active int
+		if err := o.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM job_nodes n JOIN jobs j ON j.id = n.job_id
+			WHERE j.user_id = (SELECT user_id FROM jobs WHERE id = ?) AND j.status IN (?, ?, ?, ?)
+			AND n.status IN (?, ?) AND n.executor_type NOT LIKE 'local.%'`,
+			n.JobID, workflow.JobQueued, workflow.JobRunning, workflow.JobAwaitingReview, workflow.JobCancelling,
+			workflow.NodeRunning, workflow.NodeWaiting).Scan(&active); err != nil {
+			return "", err
+		}
+		if active >= lim.PerUserActive {
+			return "user_limit", nil
+		}
+	}
+	return "", nil
+}
+
+// deferNode re-schedules a ready node that has to wait for capacity. It
+// keeps its attempt count; the queue reason is shown to the user.
+func (o *Orchestrator) deferNode(ctx context.Context, n *Node, reason string) error {
+	now := o.now()
+	next := now.Add(o.cfg.Limits.Defer)
+	var events []Event
+	err := withTx(ctx, o.db, func(tx *sql.Tx) error {
+		job, err := lockJob(ctx, tx, n.JobID)
+		if err != nil {
+			return err
+		}
+		res, err := tx.ExecContext(ctx, `UPDATE job_nodes SET next_run_at = ?, queue_reason = ?, dispatch_seq = dispatch_seq + 1, dispatched_at = ?
+			WHERE id = ? AND status = ? AND dispatch_seq = ?`, next, reason, now, n.ID, workflow.NodeReady, n.DispatchSeq)
+		if err != nil {
+			return err
+		}
+		if affected, _ := res.RowsAffected(); affected != 1 {
+			return errSkip
+		}
+		if n.QueueReason != reason {
+			buf := &eventBuffer{job: job.JobRef}
+			if err := buf.add(ctx, tx, now, EventNodeStatus, map[string]any{"node": n.Name, "status": workflow.NodeReady, "queue_reason": reason}); err != nil {
+				return err
+			}
+			events = buf.events
+		}
+		return nil
+	})
+	if errors.Is(err, errSkip) || errors.Is(err, ErrJobNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	o.publish(ctx, events)
+	return o.enqueue(ctx, Task{Kind: TaskRun, NodeID: n.ID, Seq: n.DispatchSeq + 1, Queue: n.Queue, ProcessAt: next, Timeout: n.Timeout})
 }

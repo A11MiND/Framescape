@@ -144,6 +144,9 @@ type harness struct {
 	clock *testClock
 	reg   *executor.Registry
 	fx    *fixtures
+	// jobs are the jobs this test created; the sweeper sees the whole shared
+	// database, so work for anyone else's jobs is ignored.
+	jobs sync.Map
 }
 
 func newHarness(t *testing.T) *harness {
@@ -189,6 +192,7 @@ func (h *harness) submit(plan *workflow.Plan) JobRef {
 	userID := testUserBase + testUserSeq.Add(1)
 	job := JobRef{BizID: id.New(), UserID: userID}
 	h.t.Cleanup(func() {
+		_, _ = h.db.Exec(`DELETE FROM provider_calls WHERE job_id = ?`, job.ID)
 		_, _ = h.db.Exec(`DELETE FROM job_nodes WHERE job_id = ?`, job.ID)
 		_, _ = h.db.Exec(`DELETE FROM job_events WHERE user_id = ?`, userID)
 		_, _ = h.db.Exec(`DELETE FROM jobs WHERE user_id = ?`, userID)
@@ -207,8 +211,18 @@ func (h *harness) submit(plan *workflow.Plan) JobRef {
 	if err != nil {
 		h.t.Fatalf("submit: %v", err)
 	}
+	h.jobs.Store(job.ID, true)
 	h.orch.Flush(h.ctx, p)
 	return job
+}
+
+func (h *harness) owns(nodeID uint64) bool {
+	var jobID uint64
+	if err := h.db.QueryRow(`SELECT job_id FROM job_nodes WHERE id = ?`, nodeID).Scan(&jobID); err != nil {
+		return false
+	}
+	_, ok := h.jobs.Load(jobID)
+	return ok
 }
 
 // drain runs queued work, jumping the clock forward to delayed tasks, until
@@ -222,6 +236,9 @@ func (h *harness) drain(max int) {
 				return
 			}
 			h.clock.set(next)
+			continue
+		}
+		if !h.owns(t.NodeID) {
 			continue
 		}
 		var err error

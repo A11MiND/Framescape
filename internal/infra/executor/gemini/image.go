@@ -49,16 +49,24 @@ type ImageConfig struct {
 const maxReferenceImages = 3
 
 type ImagePlugin struct {
-	client  *Client
-	sink    assetstore.Sink
-	reader  assetstore.Reader
-	limiter *Limiter
+	pricePerImage float64
+	client        *Client
+	sink          assetstore.Sink
+	reader        assetstore.Reader
+	limiter       *Limiter
 }
 
 // limiter may be nil (ratelimit.go's own doc: unbounded concurrency, the
 // only behavior that existed before Limiter did).
 func NewImagePlugin(client *Client, sink assetstore.Sink, reader assetstore.Reader, limiter *Limiter) *ImagePlugin {
 	return &ImagePlugin{client: client, sink: sink, reader: reader, limiter: limiter}
+}
+
+// WithPricePerImage sets the CNY cost of one generated image, reported as
+// cost-yuan so Gemini generations are settled like every other provider.
+func (p *ImagePlugin) WithPricePerImage(yuan float64) *ImagePlugin {
+	p.pricePerImage = yuan
+	return p
 }
 
 func (p *ImagePlugin) Type() string { return "gemini.image" }
@@ -205,12 +213,14 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 		SuccessCount int      `json:"success-count"`
 		FailedCount  int      `json:"failed-count"`
 		RequestedN   int      `json:"requested-n"`
+		CostYuan     float64  `json:"cost-yuan"`
 	}{
 		AssetID:      firstAssetID,
 		AssetIDs:     assetIDs,
 		SuccessCount: len(assetIDs),
 		FailedCount:  n - len(assetIDs),
 		RequestedN:   n,
+		CostYuan:     float64(len(assetIDs)) * p.pricePerImage,
 	})
 }
 

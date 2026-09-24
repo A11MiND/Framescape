@@ -407,6 +407,9 @@ func TestConcurrentWorkersWithDuplicateDelivery(t *testing.T) {
 					continue
 				}
 				idle = 0
+				if !h.owns(task.NodeID) {
+					continue
+				}
 				for i := 0; i < 2; i++ { // every message is delivered twice
 					var err error
 					if task.Kind == TaskRun {
@@ -442,5 +445,69 @@ func TestConcurrentWorkersWithDuplicateDelivery(t *testing.T) {
 		if h.bill.releases[job.ID] != 1 {
 			t.Fatalf("job %d released %d times", job.ID, h.bill.releases[job.ID])
 		}
+	}
+}
+
+func TestPerUserLimitQueuesWithoutFailing(t *testing.T) {
+	h := newHarness(t)
+	h.orch.cfg.Limits = Limits{PerUserActive: 1, Defer: 5 * time.Second}
+	job := h.submit(&workflow.Plan{Nodes: []workflow.NodeSpec{
+		{Name: "a", Executor: "t.ok"},
+		{Name: "b", Executor: "t.ok"},
+	}})
+	a, b := h.node(job, "a"), h.node(job, "b")
+	if ok, err := h.orch.claim(h.ctx, a, workflow.NodeReady); err != nil || !ok {
+		t.Fatalf("claim a: %v %v", ok, err)
+	}
+	if err := h.orch.RunNode(h.ctx, b.ID, b.DispatchSeq); err != nil {
+		t.Fatal(err)
+	}
+	if b = h.node(job, "b"); b.Status != workflow.NodeReady || b.QueueReason != "user_limit" || b.Attempt != 0 {
+		t.Fatalf("b = %s/%s attempt %d, want ready/user_limit/0", b.Status, b.QueueReason, b.Attempt)
+	}
+	if err := h.orch.finish(h.ctx, a, outcome{status: workflow.NodeSucceeded, outputs: map[string]any{"asset-id": "x"}}); err != nil {
+		t.Fatal(err)
+	}
+	h.drain(20)
+	if st, _ := h.jobStatus(job); st != workflow.JobSucceeded {
+		t.Fatalf("status = %s, want succeeded once capacity freed", st)
+	}
+}
+
+func TestExecutorLimitQueues(t *testing.T) {
+	h := newHarness(t)
+	h.orch.cfg.Limits = Limits{Executor: map[string]int{"t.ok": 1}, Defer: time.Second}
+	first := h.submit(&workflow.Plan{Nodes: []workflow.NodeSpec{{Name: "a", Executor: "t.ok"}}})
+	second := h.submit(&workflow.Plan{Nodes: []workflow.NodeSpec{{Name: "a", Executor: "t.ok"}}})
+	a := h.node(first, "a")
+	if ok, err := h.orch.claim(h.ctx, a, workflow.NodeReady); err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	b := h.node(second, "a")
+	if err := h.orch.RunNode(h.ctx, b.ID, b.DispatchSeq); err != nil {
+		t.Fatal(err)
+	}
+	if b = h.node(second, "a"); b.QueueReason != "provider_capacity" {
+		t.Fatalf("queue reason = %q", b.QueueReason)
+	}
+	_ = h.orch.finish(h.ctx, a, outcome{status: workflow.NodeSucceeded})
+	h.drain(20)
+	if st, _ := h.jobStatus(second); st != workflow.JobSucceeded {
+		t.Fatalf("second job = %s", st)
+	}
+}
+
+func TestNodeCostIsRecordedAsProviderCall(t *testing.T) {
+	h := newHarness(t)
+	job := h.submit(&workflow.Plan{Nodes: []workflow.NodeSpec{{Name: "gen", Executor: "t.ok", Inputs: map[string]workflow.Input{"cost": workflow.Lit(0.75)}}}})
+	t.Cleanup(func() { _, _ = h.db.Exec(`DELETE FROM provider_calls WHERE job_id = ?`, job.ID) })
+	h.drain(10)
+	var provider string
+	var cost float64
+	if err := h.db.QueryRow(`SELECT provider, cost_yuan FROM provider_calls WHERE job_id = ?`, job.ID).Scan(&provider, &cost); err != nil {
+		t.Fatal(err)
+	}
+	if provider != "t" || cost != 0.75 {
+		t.Fatalf("provider=%s cost=%v", provider, cost)
 	}
 }

@@ -32,6 +32,7 @@ import (
 	"aigc-platform/internal/infra/executor/spi/executor"
 	"aigc-platform/internal/infra/orchestrator"
 	"aigc-platform/internal/infra/persistence"
+	"aigc-platform/internal/infra/providergw"
 	"aigc-platform/internal/infra/storage"
 	"aigc-platform/internal/pkg/config"
 	"aigc-platform/internal/pkg/logger"
@@ -69,7 +70,8 @@ func main() {
 	asynqClient := asynq.NewClient(redisOpt)
 	defer asynqClient.Close()
 
-	minimaxClient := minimax.NewClient(config.MiniMaxBaseURL(), config.MiniMaxAPIKey())
+	recorder := providergw.NewRecorder(sqlDB)
+	minimaxClient := minimax.NewClient(config.MiniMaxBaseURL(), config.MiniMaxAPIKey()).WithTransport(recorder.Transport("minimax", nil))
 	registry := executor.NewRegistry()
 	must(registry.Register(mock.NewImagePlugin(sink)), log)
 	must(registry.Register(mock.NewVideoPlugin(sink)), log)
@@ -83,7 +85,7 @@ func main() {
 	must(registry.Register(local.NewComposePlugin(sink, sink)), log)
 	must(registry.Register(local.NewExtractFramesPlugin(sink, sink)), log)
 	must(registry.Register(local.NewConcatPlugin(sink, sink)), log)
-	must(registry.Register(openai.NewImagePlugin(openai.Config{APIKey: config.OpenAIAPIKey(), Model: config.OpenAIImageModel(), BaseURL: config.OpenAIBaseURL(), USDToCNY: config.OpenAIUSDToCNY(), ReserveUSD: config.OpenAIImageReserveUSD(), PerRefUSD: config.OpenAIImageReservePerRefUSD()}, sink, sink)), log)
+	must(registry.Register(openai.NewImagePlugin(openai.Config{APIKey: config.OpenAIAPIKey(), Model: config.OpenAIImageModel(), BaseURL: config.OpenAIBaseURL(), USDToCNY: config.OpenAIUSDToCNY(), ReserveUSD: config.OpenAIImageReserveUSD(), PerRefUSD: config.OpenAIImageReservePerRefUSD(), Transport: recorder.Transport("openai", nil)}, sink, sink)), log)
 	// Gemini is optional: a missing or broken Vertex AI setup disables that
 	// provider instead of taking the worker down.
 	if projectID := config.GeminiVertexProjectID(); projectID != "" {
@@ -94,7 +96,7 @@ func main() {
 			log.Error("gemini client init failed; the gemini provider is unavailable", zap.Error(err))
 		} else {
 			limiter := gemini.NewLimiter(redisClient, "default", config.GeminiVertexConcurrency(), time.Duration(config.GeminiVertexMinIntervalMs())*time.Millisecond)
-			must(registry.Register(gemini.NewImagePlugin(geminiClient, sink, sink, limiter)), log)
+			must(registry.Register(gemini.NewImagePlugin(geminiClient, sink, sink, limiter).WithPricePerImage(config.GeminiImagePriceYuan())), log)
 		}
 	}
 
