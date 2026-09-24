@@ -149,7 +149,6 @@ func (c *fakeFileCache) Put(ctx context.Context, assetBizID, fileID, purpose str
 	return nil
 }
 
-
 // jsonServer stands in for MiniMax itself: handler decides the response per
 // request, so tests can express "fails once, then succeeds", "returns
 // terminal status on the very first poll", etc. directly. Never hits the

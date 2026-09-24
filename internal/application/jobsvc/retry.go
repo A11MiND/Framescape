@@ -82,4 +82,3 @@ func (s *Service) RetryNode(ctx context.Context, userID uint64, bizID, nodeName 
 		plan: plan, holdKind: "retry", retryOf: job, retryNode: nodeName,
 	})
 }
-

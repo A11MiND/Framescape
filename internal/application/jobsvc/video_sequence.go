@@ -418,4 +418,3 @@ func (s *Service) Resume(ctx context.Context, userID uint64, bizID string, req R
 	}
 	return s.orch.Resume(ctx, g.job.ID, "gate", decision, patch, hold)
 }
-
