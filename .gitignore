@@ -19,3 +19,6 @@
 /docs/
 /web/test-results/
 /web/playwright-report/
+
+# Product review packages (large raster mockups) — kept locally.
+/output/
