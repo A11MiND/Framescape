@@ -3,23 +3,15 @@ package jobsvc
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf8"
 
-	"aigc-platform/internal/application/creditsvc"
 	"aigc-platform/internal/application/workflows"
 	"aigc-platform/internal/domain/comic"
 	"aigc-platform/internal/domain/workflow"
 	"aigc-platform/internal/infra/executor/openai"
-	"aigc-platform/internal/infra/persistence"
-	"aigc-platform/internal/pkg/config"
 )
-
-// ErrComicAINotEnabled is returned for accounts outside the gray release;
-// the HTTP layer maps it to 403 comic_ai_not_enabled.
-var ErrComicAINotEnabled = errors.New("AI comic generation is in limited beta and not enabled for this account")
 
 // New comics are whole-page calls. No planner, H3, style conversion, prompt
 // compiler/truncation, or generated-reference chain is involved. A replacement
@@ -69,12 +61,6 @@ func directComicPrompt(spec Spec) (string, error) {
 	return text, nil
 }
 
-// OpenAIComicEnabled gates job creation and GET /capabilities: a key plus a
-// model the executor can price (an unpriced model would settle at zero).
-func OpenAIComicEnabled() bool {
-	return config.OpenAIAPIKey() != "" && openai.PriceKnown(config.OpenAIImageModel())
-}
-
 // directComicRefs is every image sent to OpenAI: the user's references plus,
 // for a single-panel redraw, the current page.
 func directComicRefs(spec Spec) []string {
@@ -85,24 +71,9 @@ func directComicRefs(spec Spec) []string {
 	return refs
 }
 
-// directComicCredits is the per-job reservation; it must match what
-// openai.ImagePlugin bills when usage is missing (openai.Config.ReserveFor).
+// directComicCredits is the per-job reservation: one high-quality page.
 func directComicCredits(spec Spec) int {
-	usd := config.OpenAIImageReserveUSD() + config.OpenAIImageReservePerRefUSD()*float64(len(directComicRefs(spec)))
-	return creditsvc.CreditsFromYuan(usd * config.OpenAIUSDToCNY())
-}
-
-// ComicAIAllowed is the OpenAI gray-release gate: admins, plus accounts
-// granted the openai_image entitlement. Enforced at job creation.
-func (s *Service) ComicAIAllowed(ctx context.Context, userID uint64) (bool, error) {
-	var u persistence.User
-	if err := s.db.WithContext(ctx).Select("is_admin").First(&u, userID).Error; err != nil {
-		return false, err
-	}
-	if u.IsAdmin {
-		return true, nil
-	}
-	return persistence.HasEntitlement(ctx, s.db, userID, persistence.EntitlementOpenAIImage)
+	return openAICredits(1, openai.DefaultQuality, len(directComicRefs(spec)))
 }
 
 func (s *Service) prepareDirectComic(ctx context.Context, userID uint64, spec Spec) (*workflow.Plan, string, error) {
@@ -110,29 +81,12 @@ func (s *Service) prepareDirectComic(ctx context.Context, userID uint64, spec Sp
 	if err != nil {
 		return nil, "", err
 	}
-	if !OpenAIComicEnabled() {
-		return nil, "", fmt.Errorf("OpenAI image generation is not configured; ask the administrator to set OPENAI_API_KEY and a priced OPENAI_IMAGE_MODEL on the API and worker")
-	}
-	if allowed, err := s.ComicAIAllowed(ctx, userID); err != nil {
+	if err := s.requireOpenAI(ctx, userID); err != nil {
 		return nil, "", err
-	} else if !allowed {
-		return nil, "", ErrComicAINotEnabled
 	}
 	refs := directComicRefs(spec)
-	for _, ref := range refs {
-		var asset persistence.Asset
-		if err := s.db.WithContext(ctx).Where("biz_id = ? AND user_id = ? AND deleted_at IS NULL AND type = ?", ref, userID, "image").First(&asset).Error; err != nil {
-			return nil, "", fmt.Errorf("reference image unavailable")
-		}
-		if !comic.ImageMime(asset.Mime) {
-			return nil, "", fmt.Errorf("reference images must be PNG, JPEG or WebP")
-		}
-		if asset.SizeBytes > openai.MaxReferenceBytes {
-			return nil, "", fmt.Errorf("reference images must be at most 20 MB")
-		}
-		if asset.PublicURL == "" {
-			return nil, "", fmt.Errorf("reference image upload is incomplete")
-		}
+	if err := s.checkOpenAIRefs(ctx, userID, refs); err != nil {
+		return nil, "", err
 	}
 	return workflows.DirectComicPlan(userID, text, refs), spec.Text, nil
 }

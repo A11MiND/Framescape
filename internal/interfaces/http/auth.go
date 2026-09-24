@@ -203,7 +203,7 @@ func (s *Server) handleMe(c *gin.Context) {
 		"balance":  acct.Balance,
 		"held":     acct.Held,
 		"is_admin": user.IsAdmin,
-		// Mirrors what job creation enforces (jobsvc.ComicAIAllowed).
+		// Mirrors what job creation enforces (jobsvc.OpenAIAllowed).
 		"comic_ai":     openAI,
 		"entitlements": entitlements,
 	})

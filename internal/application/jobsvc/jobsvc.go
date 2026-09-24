@@ -71,10 +71,14 @@ type Spec struct {
 	// the r2va anchor for video.sequence.
 	SourceImageAssetID string `json:"source_image_asset_id,omitempty"`
 
-	// ImageProvider: "" or minimax, gemini, or openai (OpenAI only with
-	// ComicMode for now).
+	// ImageProvider: "" or minimax, gemini, or openai (image.single,
+	// image.sequence and the direct/editable comic).
 	ImageProvider string `json:"image_provider,omitempty"`
-	AspectRatio   string `json:"aspect_ratio,omitempty"` // image.single
+	// ImageSize and ImageQuality are OpenAI's output options for image.single
+	// and image.sequence; empty picks the size from AspectRatio and high.
+	ImageSize    string `json:"image_size,omitempty"`
+	ImageQuality string `json:"image_quality,omitempty"`
+	AspectRatio  string `json:"aspect_ratio,omitempty"` // image.single
 
 	DurationSeconds        int      `json:"duration_seconds,omitempty"`
 	Resolution             string   `json:"resolution,omitempty"` // 768P | 2K
@@ -115,8 +119,8 @@ func New(db *gorm.DB, orch *orchestrator.Orchestrator, credits *creditsvc.Servic
 // Create validates the request, builds its plan and submits it. A repeated
 // idempotency key returns the original job without reserving again.
 func (s *Service) Create(ctx context.Context, userID uint64, workflowName string, spec Spec, idemKey string, projectID *uint64) (*persistence.Job, error) {
-	if spec.ImageProvider == "openai" && (workflowName != "image.comic4" || spec.ComicMode == "") {
-		return nil, fmt.Errorf("openai requires the direct or editable comic workflow")
+	if err := checkProvider(workflowName, spec); err != nil {
+		return nil, err
 	}
 	// Planning calls made before the plan exists are recorded against the user.
 	ctx = executor.WithAttribution(ctx, executor.Attribution{UserID: userID})
@@ -245,10 +249,18 @@ func (s *Service) prepareImageSingle(ctx context.Context, userID uint64, spec Sp
 			return nil, "", err
 		}
 	}
-	plan := workflows.ImageSinglePlan(workflows.ImageSingle{
+	single := workflows.ImageSingle{
 		UserID: userID, Provider: normalizeImageProvider(spec.ImageProvider), Prompt: compiled.Prompt,
 		Seed: formatSeed(compiled.Seed), N: imageCount(spec.N), AspectRatio: spec.AspectRatio, References: refs,
-	})
+	}
+	if single.Provider == workflows.ProviderOpenAI {
+		o, err := s.openAIPrepare(ctx, userID, "image.single", spec, refs)
+		if err != nil {
+			return nil, "", err
+		}
+		single.N, single.Size, single.Quality = o.N, o.Size, o.Quality
+	}
+	plan := workflows.ImageSinglePlan(single)
 	return plan, spec.Text, nil
 }
 
@@ -312,12 +324,17 @@ func EstimateCredits(workflowName string, spec Spec) (int, error) {
 }
 
 // EstimateItem is one line of a quote. Kind is a machine-readable constant
-// the frontend localizes.
+// the frontend localizes. Basis "reservation" marks an upper bound settled
+// from the provider's reported usage; otherwise the price is fixed.
 type EstimateItem struct {
 	Kind    string `json:"kind"`
 	Count   int    `json:"count"`
 	Credits int    `json:"credits"`
+	Basis   string `json:"basis,omitempty"`
 }
+
+// BasisReservation marks usage-settled quote lines.
+const BasisReservation = "reservation"
 
 const (
 	ItemKindImageSingle     = "image_single"
@@ -335,12 +352,18 @@ const (
 
 // EstimateBreakdown itemizes EstimateCredits.
 func EstimateBreakdown(workflowName string, spec Spec) ([]EstimateItem, int, error) {
-	if spec.ImageProvider == "openai" && (workflowName != "image.comic4" || spec.ComicMode == "") {
-		return nil, 0, fmt.Errorf("openai requires the direct or editable comic workflow")
+	if err := checkProvider(workflowName, spec); err != nil {
+		return nil, 0, err
 	}
+	openAI := spec.ImageProvider == workflows.ProviderOpenAI
 	var items []EstimateItem
 	switch workflowName {
 	case "image.single":
+		if openAI {
+			o, _ := openAIImageOptions(workflowName, spec)
+			items = []EstimateItem{{Kind: ItemKindImageSingle, Count: o.N, Credits: openAICredits(o.N, o.Quality, imageSingleRefBound(spec)), Basis: BasisReservation}}
+			break
+		}
 		n := imageCount(spec.N)
 		items = []EstimateItem{{Kind: ItemKindImageSingle, Count: n, Credits: creditsvc.EstimateImageCredits(n)}}
 	case "image.comic4":
@@ -348,7 +371,7 @@ func EstimateBreakdown(workflowName string, spec Spec) ([]EstimateItem, int, err
 			if _, err := directComicPrompt(spec); err != nil {
 				return nil, 0, err
 			}
-			items = []EstimateItem{{Kind: ItemKindComic4Panels, Count: 1, Credits: directComicCredits(spec)}}
+			items = []EstimateItem{{Kind: ItemKindComic4Panels, Count: 1, Credits: directComicCredits(spec), Basis: BasisReservation}}
 			break
 		}
 		n, err := comic4PanelCount(spec)
@@ -366,6 +389,20 @@ func EstimateBreakdown(workflowName string, spec Spec) ([]EstimateItem, int, err
 		n := len(spec.Shots)
 		if n == 0 {
 			return nil, 0, fmt.Errorf("image.sequence requires at least 1 shot")
+		}
+		if openAI {
+			// One call per shot, each reserved on its own.
+			o, _ := openAIImageOptions(workflowName, spec)
+			credits := 0
+			for i := range n {
+				refs := 0
+				if sequenceShotHasRef(spec, i) {
+					refs = 1
+				}
+				credits += openAICredits(1, o.Quality, refs)
+			}
+			items = []EstimateItem{{Kind: ItemKindSequenceShots, Count: n, Credits: credits, Basis: BasisReservation}}
+			break
 		}
 		items = []EstimateItem{{Kind: ItemKindSequenceShots, Count: n, Credits: creditsvc.EstimatePerNodeImageCredits(n)}}
 	case "video.single":

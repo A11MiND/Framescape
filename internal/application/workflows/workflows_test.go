@@ -47,7 +47,7 @@ func TestImageSingleMiniMaxUsesFirstReferenceOnly(t *testing.T) {
 }
 
 func TestImageSequenceReferencesEarlierShots(t *testing.T) {
-	p, err := ImageSequencePlan(1, ProviderMiniMax, []SequenceShot{
+	p, err := ImageSequencePlan(1, ImageModel{Provider: ProviderMiniMax}, []SequenceShot{
 		{Index: 1, Prompt: "a", Reference: "lib"},
 		{Index: 2, Prompt: "b"},
 		{Index: 3, Prompt: "c", RefShot: 1},
@@ -62,7 +62,7 @@ func TestImageSequenceReferencesEarlierShots(t *testing.T) {
 	if deps := nodes["shot-3"].Dependencies(); !reflect.DeepEqual(deps, []string{"shot-1"}) {
 		t.Fatalf("shot-3 deps = %v", deps)
 	}
-	if _, err := ImageSequencePlan(1, ProviderMiniMax, []SequenceShot{{Index: 1, RefShot: 1}}); err == nil {
+	if _, err := ImageSequencePlan(1, ImageModel{Provider: ProviderMiniMax}, []SequenceShot{{Index: 1, RefShot: 1}}); err == nil {
 		t.Fatal("self reference accepted")
 	}
 }

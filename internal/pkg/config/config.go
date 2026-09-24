@@ -34,6 +34,28 @@ func OpenAIImageReserveUSD() float64 { return positiveFloat("OPENAI_IMAGE_RESERV
 func OpenAIImageReservePerRefUSD() float64 {
 	return positiveFloat("OPENAI_IMAGE_RESERVE_PER_REF_USD", 0.03)
 }
+
+// OpenAIImageSizes and OpenAIImageQualities are the options general image
+// generation offers (comma separated); OpenAIImageMaxN caps images per call.
+// Comic pages always use 1536x1024 at high quality.
+func OpenAIImageSizes() []string {
+	return list(getEnv("OPENAI_IMAGE_SIZES", "1024x1024,1536x1024,1024x1536"))
+}
+func OpenAIImageQualities() []string {
+	return list(getEnv("OPENAI_IMAGE_QUALITIES", "low,medium,high"))
+}
+func OpenAIImageMaxN() int { return getEnvInt("OPENAI_IMAGE_MAX_N", 4) }
+
+func list(v string) []string {
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
 func positiveFloat(key string, fallback float64) float64 {
 	v, err := strconv.ParseFloat(getEnv(key, ""), 64)
 	if err != nil || v <= 0 || math.IsNaN(v) || math.IsInf(v, 0) {
@@ -102,13 +124,7 @@ func JWTAccessTTLMinutes() int { return getEnvInt("JWT_ACCESS_TTL_MINUTES", 0) }
 // another origin (comma separated). Empty allows any origin outside
 // production and none in production, where the frontend is same-origin.
 func CORSAllowedOrigins() []string {
-	var out []string
-	for _, o := range strings.Split(getEnv("CORS_ALLOWED_ORIGINS", ""), ",") {
-		if o = strings.TrimSpace(o); o != "" {
-			out = append(out, o)
-		}
-	}
-	return out
+	return list(getEnv("CORS_ALLOWED_ORIGINS", ""))
 }
 
 // APIAddr is the address cmd/api's Gin server listens on.

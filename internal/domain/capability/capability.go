@@ -22,6 +22,9 @@ const (
 	ImageMaxPromptChars = 1500 // mirrors prompt.MaxPromptChars; duplicated as a plain constant here so this package stays dependency-free
 )
 
+// Characters.
+const CharacterMaxRefImages = 3 // reference images per character
+
 // Video generation (MiniMax-H3, PRD §3.2).
 const (
 	VideoDurationMin    = 4

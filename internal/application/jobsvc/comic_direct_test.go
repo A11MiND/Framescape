@@ -74,33 +74,20 @@ func TestDirectEstimateSingleReservation(t *testing.T) {
 		t.Fatalf("estimate mismatch: %v %d %v", items, total, err)
 	}
 }
-func TestOpenAIComicEnabledRequiresPricedModel(t *testing.T) {
+func TestOpenAIImageEnabledRequiresPricedModel(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "test-only")
 	t.Setenv("OPENAI_IMAGE_MODEL", "gpt-image-2.5-flare")
-	if !OpenAIComicEnabled() {
+	if !OpenAIImageEnabled() {
 		t.Fatal("priced model with key should be enabled")
 	}
 	t.Setenv("OPENAI_IMAGE_MODEL", "some-unpriced-model")
-	if OpenAIComicEnabled() {
+	if OpenAIImageEnabled() {
 		t.Fatal("an unpriced model would settle every call at zero")
 	}
 	t.Setenv("OPENAI_IMAGE_MODEL", "gpt-image-2.5-flare")
 	t.Setenv("OPENAI_API_KEY", "")
-	if OpenAIComicEnabled() {
+	if OpenAIImageEnabled() {
 		t.Fatal("enabled without a key")
-	}
-}
-func TestOpenAIProviderOnlyForComicModes(t *testing.T) {
-	for _, tc := range []struct {
-		workflow string
-		spec     Spec
-	}{
-		{"image.single", Spec{Text: "x", ImageProvider: "openai"}},
-		{"image.comic4", Spec{Text: "x", ImageProvider: "openai"}},
-	} {
-		if _, err := EstimateCredits(tc.workflow, tc.spec); err == nil {
-			t.Fatalf("%s accepted openai outside comic modes", tc.workflow)
-		}
 	}
 }
 func TestDirectEstimateScalesWithReferences(t *testing.T) {

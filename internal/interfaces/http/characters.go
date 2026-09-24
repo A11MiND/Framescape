@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"aigc-platform/internal/domain/capability"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -124,7 +125,7 @@ func (s *Server) handleUpdateCharacter(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
 		return
 	}
-	if req.RefAssetIDs != nil && (len(*req.RefAssetIDs) < 1 || len(*req.RefAssetIDs) > 3) {
+	if req.RefAssetIDs != nil && (len(*req.RefAssetIDs) < 1 || len(*req.RefAssetIDs) > capability.CharacterMaxRefImages) {
 		c.JSON(http.StatusBadRequest, errBody("bad_request", "ref_asset_ids must have 1-3 entries"))
 		return
 	}

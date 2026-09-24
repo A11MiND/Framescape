@@ -8,6 +8,7 @@ import (
 	"aigc-platform/internal/application/jobsvc"
 	"aigc-platform/internal/domain/capability"
 	"aigc-platform/internal/domain/comic"
+	"aigc-platform/internal/infra/executor/openai"
 	"aigc-platform/internal/pkg/config"
 )
 
@@ -16,7 +17,7 @@ import (
 // deployment, so clients never hard-code or guess them. Public: the login
 // page and guest studio need it before sign-in.
 func (s *Server) handleGetCapabilities(c *gin.Context) {
-	openAI := jobsvc.OpenAIComicEnabled()
+	openAI := jobsvc.OpenAIImageEnabled()
 	c.Header("Cache-Control", "public, max-age=60")
 	c.JSON(http.StatusOK, gin.H{
 		"comic": gin.H{
@@ -42,8 +43,13 @@ func (s *Server) handleGetCapabilities(c *gin.Context) {
 		// gated per user (GET /me entitlements).
 		"providers": gin.H{
 			"minimax": gin.H{"enabled": config.MiniMaxAPIKey() != "", "video_model": "MiniMax-H3", "image_model": "image-01"},
-			"openai":  gin.H{"enabled": openAI, "image_model": config.OpenAIImageModel(), "entitlement": "openai_image"},
-			"gemini":  gin.H{"enabled": config.GeminiVertexProjectID() != "", "image_model": config.GeminiImageModel()},
+			"openai": gin.H{
+				"enabled": openAI, "image_model": config.OpenAIImageModel(), "entitlement": "openai_image",
+				"sizes": config.OpenAIImageSizes(), "qualities": config.OpenAIImageQualities(),
+				"max_n": min(config.OpenAIImageMaxN(), capability.ImageMaxN), "default_quality": openai.DefaultQuality,
+				"workflows": []string{"image.single", "image.sequence", "image.comic4"},
+			},
+			"gemini": gin.H{"enabled": config.GeminiVertexProjectID() != "", "image_model": config.GeminiImageModel()},
 		},
 		"auth": gin.H{
 			"email_password":     true,

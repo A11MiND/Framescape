@@ -248,7 +248,7 @@ func TestErrorsDoNotRetryOrLeak(t *testing.T) {
 		{"unauthorized", 401, "secret", false, false, "HTTP 401"},
 		{"moderation", 400, `{"error":{"message":"secret prompt","code":"moderation_blocked"}}`, false, false, "sensitive_content:"},
 		{"invalid json", 200, "secret", false, false, "invalid JSON"},
-		{"empty images", 200, `{"data":[],"usage":{"input_tokens":100,"output_tokens":100}}`, false, true, "exactly one"},
+		{"empty images", 200, `{"data":[],"usage":{"input_tokens":100,"output_tokens":100}}`, false, true, "returned 0 images"},
 		{"bad base64", 200, `{"data":[{"b64_json":"!"}],"usage":{"input_tokens":100,"output_tokens":100}}`, false, true, "invalid image"},
 		{"storage failed", 200, imageResponse(t, realUsage), true, true, "storage failed"},
 	} {
@@ -311,5 +311,57 @@ func TestPriceKnown(t *testing.T) {
 		if PriceKnown(model) != want {
 			t.Errorf("PriceKnown(%q) != %v", model, want)
 		}
+	}
+}
+
+func requestWith(prompt string, extra map[string]any) *executor.ExecuteRequest {
+	r := request(prompt)
+	for k, v := range extra {
+		b, _ := json.Marshal(v)
+		r.Inputs.Parameters = append(r.Inputs.Parameters, model.Parameter{Name: k, Value: b})
+	}
+	return r
+}
+
+func TestGeneralOptionsAndMultipleImages(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&body)
+		img := base64.StdEncoding.EncodeToString(pngBytes(t))
+		out, _ := json.Marshal(map[string]any{"data": []any{map[string]any{"b64_json": img}, map[string]any{"b64_json": img}}})
+		w.Write(out)
+	}))
+	defer srv.Close()
+	p := NewImagePlugin(Config{APIKey: "secret", Model: testModel, BaseURL: srv.URL, USDToCNY: 7, ReserveUSD: 0.5,
+		Sizes: []string{"1024x1024"}, Qualities: []string{"medium"}, MaxN: 4}, &testStore{}, &testStore{})
+	out, err := p.Execute(t.Context(), requestWith("cat", map[string]any{"n": 2, "size": "1024x1024", "quality": "medium"}))
+	if err != nil || out.Code != 0 {
+		t.Fatalf("execute: %v %+v", err, out)
+	}
+	if body["n"] != float64(2) || body["size"] != "1024x1024" || body["quality"] != "medium" {
+		t.Fatalf("request = %v", body)
+	}
+	if ids, _ := value(t, out, "asset-ids").([]any); len(ids) != 2 || value(t, out, "success-count") != float64(2) || value(t, out, "requested-n") != float64(2) {
+		t.Fatalf("outputs = %+v", out.Parameters)
+	}
+	// No usage reported: billed at the reservation for 2 medium images.
+	if !near(value(t, out, "cost-usd"), 2*0.5*0.5) {
+		t.Fatalf("fallback cost = %v", value(t, out, "cost-usd"))
+	}
+}
+
+func TestRejectsUnofferedOptionsWithoutCalling(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls++ }))
+	defer srv.Close()
+	p := NewImagePlugin(Config{APIKey: "secret", Model: testModel, BaseURL: srv.URL, USDToCNY: 7, ReserveUSD: 0.5, Sizes: []string{"1024x1024"}, Qualities: []string{"low"}, MaxN: 2}, &testStore{}, &testStore{})
+	for _, extra := range []map[string]any{{"n": 3}, {"size": "4096x4096"}, {"quality": "max"}} {
+		out, err := p.Execute(t.Context(), requestWith("cat", extra))
+		if err != nil || out.Code == 0 || !strings.HasPrefix(out.Message, "bad_params") {
+			t.Fatalf("%v accepted: %+v %v", extra, out, err)
+		}
+	}
+	if calls != 0 {
+		t.Fatal("called OpenAI with unoffered options")
 	}
 }

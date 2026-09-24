@@ -39,6 +39,7 @@ func ImageSinglePlan(p ImageSingle) *workflow.Plan {
 			"prompt": lit(p.Prompt), "user-id": lit(userID), "reference-image-asset-ids": lit(p.References),
 			"n": lit(p.N), "size": lit(p.Size), "quality": lit(p.Quality),
 		})
+		gen.Check = workflow.CheckAllRequested
 	case ProviderGemini:
 		gen = node("gen", "gemini.image", imagePolicy, map[string]workflow.Input{
 			"prompt": lit(p.Prompt), "seed": lit(p.Seed), "user-id": lit(userID), "n": lit(strconv.Itoa(p.N)),
@@ -65,9 +66,17 @@ type SequenceShot struct {
 	RefShot   int    // earlier shot whose output is this shot's reference, 0 = none
 }
 
+// ImageModel selects the provider of every shot; Size and Quality are
+// OpenAI only.
+type ImageModel struct {
+	Provider string
+	Size     string
+	Quality  string
+}
+
 // ImageSequencePlan runs independent shots in parallel; a shot referencing
 // an earlier one waits for it and uses its output as the reference.
-func ImageSequencePlan(userID uint64, provider string, shots []SequenceShot) (*workflow.Plan, error) {
+func ImageSequencePlan(userID uint64, m ImageModel, shots []SequenceShot) (*workflow.Plan, error) {
 	uid := strconv.FormatUint(userID, 10)
 	nodes := make([]workflow.NodeSpec, 0, len(shots))
 	for _, s := range shots {
@@ -85,9 +94,10 @@ func ImageSequencePlan(userID uint64, provider string, shots []SequenceShot) (*w
 		}
 		name := fmt.Sprintf("shot-%d", s.Index)
 		var n workflow.NodeSpec
-		if provider == ProviderOpenAI {
+		if m.Provider == ProviderOpenAI {
 			n = node(name, "openai.image", openAIPolicy, map[string]workflow.Input{
 				"prompt": lit(s.Prompt), "user-id": lit(uid), "reference-image-asset-ids": refs, "n": lit(1),
+				"size": lit(m.Size), "quality": lit(m.Quality),
 			})
 		} else {
 			n = node(name, "minimax.image", imagePolicy, map[string]workflow.Input{

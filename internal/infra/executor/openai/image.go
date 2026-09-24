@@ -34,8 +34,8 @@ import (
 // 1536x1024 page, and each replaced panel's 768x512 slot.
 const (
 	pageSize = "1536x1024"
-	// maxReferences is OpenAI's edits-endpoint cap (16 images per call).
-	maxReferences = 16
+	// MaxReferences is OpenAI's edits-endpoint cap (16 images per call).
+	MaxReferences = 16
 	// MaxReferenceBytes caps one downloaded reference; jobsvc rejects larger
 	// assets before holding credits.
 	MaxReferenceBytes = 20 << 20
@@ -52,9 +52,49 @@ type Config struct {
 	// Transport, when set, carries the generation requests (for example
 	// through the provider-call recorder).
 	Transport http.RoundTripper
+	// Sizes and Qualities are the values requests may use; MaxN caps images
+	// per call. Empty lists accept the comic defaults only.
+	Sizes     []string
+	Qualities []string
+	MaxN      int
 }
 
-func (c Config) ReserveFor(refs int) float64 { return c.ReserveUSD + c.PerRefUSD*float64(refs) }
+// Defaults of the comic page request.
+const (
+	DefaultSize    = pageSize
+	DefaultQuality = "high"
+)
+
+// QualityFactor scales the per-image reservation by quality. Reservations
+// are upper bounds (overage is taken from the balance), so the factors stay
+// well above the providers' price ratios; the call is settled from usage.
+func QualityFactor(quality string) float64 {
+	switch quality {
+	case "max":
+		return 4
+	case "xhigh":
+		return 2
+	case "low":
+		return 0.25
+	case "medium":
+		return 0.5
+	default:
+		return 1
+	}
+}
+
+// ReserveForCall is what a call is billed when OpenAI reports no usage, and
+// what jobsvc reserves for it: n images at the quality's share of
+// ReserveUSD plus the reference images sent along.
+func (c Config) ReserveForCall(n int, quality string, refs int) float64 {
+	if n < 1 {
+		n = 1
+	}
+	return float64(n)*c.ReserveUSD*QualityFactor(quality) + c.PerRefUSD*float64(refs)
+}
+
+// ReserveFor is the comic page's reservation (one high-quality image).
+func (c Config) ReserveFor(refs int) float64 { return c.ReserveForCall(1, DefaultQuality, refs) }
 
 // price is USD per 1M tokens, from OpenAI's pricing page (2026-09).
 type price struct{ textIn, imageIn, imageOut float64 }
@@ -85,6 +125,11 @@ type ImageConfig struct {
 	Prompt     string   `json:"prompt"`
 	UserID     string   `json:"user-id"`
 	References []string `json:"reference-image-asset-ids"`
+	// N, Size and Quality default to the comic page's one high-quality
+	// 1536x1024 image.
+	N       int    `json:"n"`
+	Size    string `json:"size"`
+	Quality string `json:"quality"`
 }
 
 type ImagePlugin struct {
@@ -110,7 +155,7 @@ func NewImagePlugin(cfg Config, sink assetstore.Sink, reader assetstore.Reader) 
 
 func (p *ImagePlugin) Type() string { return "openai.image" }
 func (p *ImagePlugin) Schema() model.ExecutorSchema {
-	return executor.SchemaOf[ImageConfig, executor.DynamicOutputs](p.Type(), "1.0", "Direct comic page via OpenAI Image API; no automatic retry")
+	return executor.SchemaOf[ImageConfig, executor.DynamicOutputs](p.Type(), "1.0", "OpenAI Image API generation (comic pages and general images); no automatic retry")
 }
 
 type generationResponse struct {
@@ -128,12 +173,14 @@ type generationResponse struct {
 }
 
 type result struct {
-	AssetID    string   `json:"asset-id"`
-	AssetIDs   []string `json:"asset-ids"`
-	CostUSD    float64  `json:"cost-usd"`
-	CostYuan   float64  `json:"cost-yuan"`
-	UsageKnown bool     `json:"usage-known"`
-	Model      string   `json:"model"`
+	AssetID      string   `json:"asset-id"`
+	AssetIDs     []string `json:"asset-ids"`
+	SuccessCount int      `json:"success-count"`
+	RequestedN   int      `json:"requested-n"`
+	CostUSD      float64  `json:"cost-usd"`
+	CostYuan     float64  `json:"cost-yuan"`
+	UsageKnown   bool     `json:"usage-known"`
+	Model        string   `json:"model"`
 }
 
 type reference struct {
@@ -162,8 +209,21 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 	if !ok {
 		return failure("OpenAI image model " + p.config.Model + " has no configured price; refusing an unbillable call")
 	}
-	if strings.TrimSpace(cfg.Prompt) == "" || utf8.RuneCountInString(cfg.Prompt) > 32000 || len(cfg.References) > maxReferences {
+	if strings.TrimSpace(cfg.Prompt) == "" || utf8.RuneCountInString(cfg.Prompt) > 32000 || len(cfg.References) > MaxReferences {
 		return failure("invalid comic prompt/reference count")
+	}
+	n, size, quality := cfg.N, cfg.Size, cfg.Quality
+	if n <= 0 {
+		n = 1
+	}
+	if size == "" {
+		size = DefaultSize
+	}
+	if quality == "" {
+		quality = DefaultQuality
+	}
+	if !p.allowed(n, size, quality) {
+		return &model.ExecOutputs{Code: model.ExecCodeFailed, Message: "bad_params: unsupported image count, size or quality"}, nil
 	}
 	refs := make([]reference, 0, len(cfg.References))
 	for _, id := range cfg.References {
@@ -173,7 +233,7 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 		}
 		refs = append(refs, ref)
 	}
-	httpReq, err := p.buildRequest(ctx, cfg.Prompt, uid, refs)
+	httpReq, err := p.buildRequest(ctx, cfg.Prompt, uid, refs, n, size, quality)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +256,7 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 		return failure("OpenAI returned invalid JSON")
 	}
 
-	out := result{AssetIDs: []string{}, Model: p.config.Model, CostUSD: p.config.ReserveFor(len(refs))}
+	out := result{AssetIDs: []string{}, RequestedN: n, Model: p.config.Model, CostUSD: p.config.ReserveForCall(n, quality, len(refs))}
 	var inText, inImage, outTokens int
 	if u := decoded.Usage; u != nil && u.InputTokens+u.OutputTokens > 0 {
 		out.UsageKnown = true
@@ -219,40 +279,67 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 		outputs.Message = message
 		return outputs, nil
 	}
-	if len(decoded.Data) != 1 {
-		return finishError("OpenAI did not return exactly one image")
+	if len(decoded.Data) == 0 || len(decoded.Data) > n {
+		return finishError(fmt.Sprintf("OpenAI returned %d images for %d requested", len(decoded.Data), n))
 	}
-	imageBytes, err := base64.StdEncoding.DecodeString(decoded.Data[0].Base64)
-	if err != nil {
-		return finishError("OpenAI returned invalid image data")
+	for _, d := range decoded.Data {
+		imageBytes, err := base64.StdEncoding.DecodeString(d.Base64)
+		if err != nil {
+			return finishError("OpenAI returned invalid image data")
+		}
+		shape, format, err := image.DecodeConfig(bytes.NewReader(imageBytes))
+		if err != nil || (format != "png" && format != "jpeg") || shape.Width <= 0 || shape.Height <= 0 || shape.Width > 8192 || shape.Height > 8192 {
+			return finishError("OpenAI returned an unsupported image")
+		}
+		ext, mime := "png", "image/png"
+		if format == "jpeg" {
+			ext, mime = "jpg", "image/jpeg"
+		}
+		assetID, err := p.sink.MaterializeBytes(ctx, assetstore.NewAssetBytes{UserID: uid, Type: "image", Source: "generated", FromTaskRunID: req.TaskRunID, Body: bytes.NewReader(imageBytes), SizeBytes: int64(len(imageBytes)), Ext: ext, Mime: mime, Width: shape.Width, Height: shape.Height, Meta: map[string]any{
+			"model": p.config.Model, "prompt": cfg.Prompt, "reference_asset_ids": cfg.References, "cost_usd": out.CostUSD, "usage_known": out.UsageKnown, "usd_to_cny": rate,
+			"input_text_tokens": inText, "input_image_tokens": inImage, "output_tokens": outTokens, "size": size, "quality": quality,
+		}})
+		if err != nil {
+			return finishError("Image generated but storage failed; OpenAI usage recorded. Do not retry without checking storage/OpenAI usage.")
+		}
+		out.AssetIDs = append(out.AssetIDs, assetID)
 	}
-	shape, format, err := image.DecodeConfig(bytes.NewReader(imageBytes))
-	if err != nil || (format != "png" && format != "jpeg") || shape.Width <= 0 || shape.Height <= 0 || shape.Width > 8192 || shape.Height > 8192 {
-		return finishError("OpenAI returned an unsupported image")
-	}
-	ext, mime := "png", "image/png"
-	if format == "jpeg" {
-		ext, mime = "jpg", "image/jpeg"
-	}
-	assetID, err := p.sink.MaterializeBytes(ctx, assetstore.NewAssetBytes{UserID: uid, Type: "image", Source: "generated", FromTaskRunID: req.TaskRunID, Body: bytes.NewReader(imageBytes), SizeBytes: int64(len(imageBytes)), Ext: ext, Mime: mime, Width: shape.Width, Height: shape.Height, Meta: map[string]any{
-		"model": p.config.Model, "prompt": cfg.Prompt, "reference_asset_ids": cfg.References, "cost_usd": out.CostUSD, "usage_known": out.UsageKnown, "usd_to_cny": rate,
-		"input_text_tokens": inText, "input_image_tokens": inImage, "output_tokens": outTokens,
-	}})
-	if err != nil {
-		return finishError("Image generated but storage failed; OpenAI usage recorded. Do not retry without checking storage/OpenAI usage.")
-	}
-	out.AssetID = assetID
-	out.AssetIDs = []string{assetID}
+	out.AssetID = out.AssetIDs[0]
+	out.SuccessCount = len(out.AssetIDs)
 	return executor.OutputFrom(out)
+}
+
+// allowed checks a request against the configured options. The comic
+// defaults are always allowed.
+func (p *ImagePlugin) allowed(n int, size, quality string) bool {
+	maxN := p.config.MaxN
+	if maxN <= 0 {
+		maxN = 1
+	}
+	if n > maxN && n != 1 {
+		return false
+	}
+	okSize := size == DefaultSize || contains(p.config.Sizes, size)
+	okQuality := quality == DefaultQuality || contains(p.config.Qualities, quality)
+	return okSize && okQuality
+}
+
+func contains(list []string, v string) bool {
+	for _, x := range list {
+		if x == v {
+			return true
+		}
+	}
+	return false
 }
 
 // buildRequest uses /images/generations (JSON) without references and
 // /images/edits (multipart, reference bytes inline) with them. Uploading
 // bytes means OpenAI never needs to reach our object storage.
-func (p *ImagePlugin) buildRequest(ctx context.Context, prompt string, uid uint64, refs []reference) (*http.Request, error) {
+func (p *ImagePlugin) buildRequest(ctx context.Context, prompt string, uid uint64, refs []reference, n int, size, quality string) (*http.Request, error) {
 	fields := [][2]string{
-		{"model", p.config.Model}, {"prompt", prompt}, {"n", "1"}, {"size", pageSize},
-		{"quality", "high"}, {"output_format", "png"}, {"background", "opaque"},
+		{"model", p.config.Model}, {"prompt", prompt}, {"n", strconv.Itoa(n)}, {"size", size},
+		{"quality", quality}, {"output_format", "png"}, {"background", "opaque"},
 		// Hashed end-user ID lets OpenAI attribute abuse to one user, not the whole org.
 		{"user", fmt.Sprintf("u-%x", sha256.Sum256([]byte("aigc-user:"+strconv.FormatUint(uid, 10))))[:34]},
 	}
@@ -263,7 +350,7 @@ func (p *ImagePlugin) buildRequest(ctx context.Context, prompt string, uid uint6
 		for _, f := range fields {
 			payload[f[0]] = f[1]
 		}
-		payload["n"] = 1
+		payload["n"] = n
 		if err := json.NewEncoder(&body).Encode(payload); err != nil {
 			return nil, err
 		}

@@ -200,3 +200,53 @@ func TestAdminSetComicAI(t *testing.T) {
 		t.Fatal("admins are always in the beta")
 	}
 }
+
+func TestGeneralOpenAIImageHTTP(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "test-only-no-provider-call")
+	t.Setenv("OPENAI_IMAGE_MODEL", "gpt-image-2.5-flare")
+	s, _ := newFullTestServer(t)
+	token, uid := registerAndFund(t, s, 1000)
+	r := s.Router()
+	spec := jobsvc.Spec{Text: "a lighthouse at dawn", ImageProvider: "openai", N: 2, ImageQuality: "medium", AspectRatio: "16:9"}
+	rec := doJSON(t, r, "POST", "/api/v1/jobs", createJobRequest{WorkflowName: "image.single", Spec: spec}, token)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("non-beta user: %d %s", rec.Code, rec.Body.String())
+	}
+	enableComicAI(t, s, uid)
+	bad := spec
+	bad.ImageSize = "4096x4096"
+	if rec := doJSON(t, r, "POST", "/api/v1/jobs", createJobRequest{WorkflowName: "image.single", Spec: bad}, token); rec.Code != 422 {
+		t.Fatalf("unoffered size: %d", rec.Code)
+	}
+	for _, wf := range []struct {
+		name string
+		spec jobsvc.Spec
+	}{
+		{"image.single", spec},
+		{"image.sequence", jobsvc.Spec{Shots: []string{"one", "two"}, ImageProvider: "openai", ImageSequenceMode: "continuity"}},
+	} {
+		rec := doJSON(t, r, "POST", "/api/v1/jobs", createJobRequest{WorkflowName: wf.name, Spec: wf.spec}, token)
+		if rec.Code != 200 {
+			t.Fatal(wf.name, rec.Code, rec.Body.String())
+		}
+		var body struct {
+			BizID string `json:"biz_id"`
+		}
+		json.Unmarshal(rec.Body.Bytes(), &body)
+		var job persistence.Job
+		s.db.Where("biz_id = ?", body.BizID).First(&job)
+		est, err := jobsvc.EstimateCredits(wf.name, wf.spec)
+		if err != nil || job.CreditHeld != est {
+			t.Fatalf("%s hold mismatch: %d %d %v", wf.name, job.CreditHeld, est, err)
+		}
+		var inputs []string
+		s.db.Table("job_nodes").Where("job_id = ?", job.ID).Order("node_name").Pluck("inputs_json", &inputs)
+		if len(inputs) == 0 || !strings.Contains(inputs[0], `"quality"`) {
+			t.Fatalf("%s node inputs = %v", wf.name, inputs)
+		}
+	}
+	caps := doJSON(t, r, "GET", "/api/v1/capabilities", nil, "")
+	if !strings.Contains(caps.Body.String(), `"sizes":["1024x1024","1536x1024","1024x1536"]`) {
+		t.Fatal(caps.Body.String())
+	}
+}

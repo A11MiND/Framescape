@@ -23,8 +23,8 @@ const (
 // normalizeImageProvider falls back to MiniMax for empty or unknown values
 // so a stale client never blocks submission.
 func normalizeImageProvider(s string) string {
-	if s == imageProviderGemini {
-		return imageProviderGemini
+	if s == imageProviderGemini || s == workflows.ProviderOpenAI {
+		return s
 	}
 	return imageProviderMiniMax
 }

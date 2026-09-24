@@ -86,7 +86,8 @@ func main() {
 	must(registry.Register(local.NewComposePlugin(sink, sink)), log)
 	must(registry.Register(local.NewExtractFramesPlugin(sink, sink)), log)
 	must(registry.Register(local.NewConcatPlugin(sink, sink)), log)
-	must(registry.Register(openai.NewImagePlugin(openai.Config{APIKey: config.OpenAIAPIKey(), Model: config.OpenAIImageModel(), BaseURL: config.OpenAIBaseURL(), USDToCNY: config.OpenAIUSDToCNY(), ReserveUSD: config.OpenAIImageReserveUSD(), PerRefUSD: config.OpenAIImageReservePerRefUSD(), Transport: recorder.Transport("openai", nil)}, sink, sink)), log)
+	must(registry.Register(openai.NewImagePlugin(openai.Config{APIKey: config.OpenAIAPIKey(), Model: config.OpenAIImageModel(), BaseURL: config.OpenAIBaseURL(), USDToCNY: config.OpenAIUSDToCNY(), ReserveUSD: config.OpenAIImageReserveUSD(), PerRefUSD: config.OpenAIImageReservePerRefUSD(),
+		Sizes: config.OpenAIImageSizes(), Qualities: config.OpenAIImageQualities(), MaxN: config.OpenAIImageMaxN(), Transport: recorder.Transport("openai", nil)}, sink, sink)), log)
 	// Gemini is optional: a missing or broken Vertex AI setup disables that
 	// provider instead of taking the worker down.
 	if projectID := config.GeminiVertexProjectID(); projectID != "" {

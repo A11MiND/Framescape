@@ -54,6 +54,18 @@ func (s *Service) prepareImageSequence(ctx context.Context, userID uint64, spec 
 		}
 		shots[i] = workflows.SequenceShot{Index: i + 1, Prompt: compiled.Prompt, Seed: formatSeed(seed), Reference: spec.SourceImageAssetID, RefShot: ref}
 	}
-	plan, err := workflows.ImageSequencePlan(userID, normalizeImageProvider(spec.ImageProvider), shots)
+	m := workflows.ImageModel{Provider: normalizeImageProvider(spec.ImageProvider)}
+	if m.Provider == workflows.ProviderOpenAI {
+		var static []string
+		if spec.SourceImageAssetID != "" {
+			static = []string{spec.SourceImageAssetID}
+		}
+		o, err := s.openAIPrepare(ctx, userID, "image.sequence", spec, static)
+		if err != nil {
+			return nil, "", err
+		}
+		m.Size, m.Quality = o.Size, o.Quality
+	}
+	plan, err := workflows.ImageSequencePlan(userID, m, shots)
 	return plan, spec.Shots[0], err
 }
