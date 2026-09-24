@@ -41,6 +41,10 @@ type remarkPayload struct {
 	Workflow string  `json:"workflow,omitempty"`
 	CostYuan float64 `json:"cost_yuan,omitempty"`
 	Text     string  `json:"text,omitempty"` // recharge_custom only: the operator's own CLI-supplied text, inherently unlocalizable
+	// Node and Shortfall describe per-job commits: which step was charged and
+	// how many credits the platform absorbed because the balance ran out.
+	Node      string `json:"node,omitempty"`
+	Shortfall int    `json:"shortfall,omitempty"`
 }
 
 func encodeRemark(p remarkPayload) string {
