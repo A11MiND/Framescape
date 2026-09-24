@@ -7,7 +7,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
+	"time"
 
 	"aigc-platform/internal/infra/persistence"
 	"aigc-platform/internal/pkg/id"
@@ -368,5 +370,88 @@ func TestHandleAssetUploadFlowNotConfigured(t *testing.T) {
 		completeAssetRequest{StorageKey: "image/some-biz-id.png"}, token)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("complete: status = %d, want %d, body = %s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
+	}
+}
+
+// TestCommunityFeedTypeAndCursor pages the feed with a publish-time cursor.
+// Seeded rows are published in 2099 so they lead the shared test database's
+// feed; two share a publish time to exercise the id tiebreak.
+func TestCommunityFeedTypeAndCursor(t *testing.T) {
+	s, _ := newFullTestServer(t)
+	r := s.Router()
+	_, uid := registerAndFund(t, s, 0)
+	base := time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)
+	types := []string{"image", "video", "image", "image", "video", "image"}
+	offsets := []int{5, 4, 3, 3, 2, 1} // seconds after base; two rows tie
+	var want []string                  // expected feed order
+	seeded := map[string]string{}
+	for i, typ := range types {
+		a := seedAsset(t, s, uid, typ, "")
+		at := base.Add(time.Duration(offsets[i]) * time.Second)
+		if err := s.db.Model(&persistence.Asset{}).Where("id = ?", a.ID).
+			Updates(map[string]any{"is_public": true, "published_at": at}).Error; err != nil {
+			t.Fatalf("publish seed: %v", err)
+		}
+		seeded[a.BizID] = typ
+		want = append(want, a.BizID)
+	}
+	// Ties sort by id descending: the later-created of the two tied rows first.
+	want[2], want[3] = want[3], want[2]
+
+	type page struct {
+		Assets []struct {
+			BizID string `json:"biz_id"`
+			Type  string `json:"type"`
+		} `json:"assets"`
+		NextCursor string `json:"next_cursor"`
+	}
+	walk := func(typ string, n int) []string {
+		t.Helper()
+		var got []string
+		cursor := ""
+		for len(got) < n {
+			url := "/api/v1/community/feed?limit=2&type=" + typ
+			if cursor != "" {
+				url += "&cursor=" + cursor
+			}
+			rec := doJSON(t, r, http.MethodGet, url, nil, "")
+			if rec.Code != http.StatusOK {
+				t.Fatalf("feed %s: status = %d, body = %s", url, rec.Code, rec.Body.String())
+			}
+			var p page
+			_ = json.Unmarshal(rec.Body.Bytes(), &p)
+			for _, a := range p.Assets {
+				if typ != "" && a.Type != typ {
+					t.Fatalf("type=%s returned a %s", typ, a.Type)
+				}
+				if _, ours := seeded[a.BizID]; ours {
+					got = append(got, a.BizID)
+				}
+			}
+			if p.NextCursor == "" {
+				break
+			}
+			cursor = p.NextCursor
+		}
+		return got
+	}
+
+	if got := walk("", len(want)); !slices.Equal(got, want) {
+		t.Fatalf("all pages = %v, want %v", got, want)
+	}
+	var wantVideos []string
+	for _, b := range want {
+		if seeded[b] == "video" {
+			wantVideos = append(wantVideos, b)
+		}
+	}
+	if got := walk("video", len(wantVideos)); !slices.Equal(got, wantVideos) {
+		t.Fatalf("video pages = %v, want %v", got, wantVideos)
+	}
+
+	for _, url := range []string{"/api/v1/community/feed?type=comic", "/api/v1/community/feed?cursor=abc", "/api/v1/community/feed?cursor=12.x"} {
+		if rec := doJSON(t, r, http.MethodGet, url, nil, ""); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want 400", url, rec.Code)
+		}
 	}
 }

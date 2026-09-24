@@ -534,8 +534,14 @@ export const api = {
     request<void>('PATCH', `/assets/${bizId}`, { is_public: isPublic }),
   likeAsset: (bizId: string) => request<{ liked: boolean; like_count: number }>('POST', `/assets/${bizId}/like`),
   unlikeAsset: (bizId: string) => request<{ liked: boolean; like_count: number }>('DELETE', `/assets/${bizId}/like`),
-  listCommunityFeed: (limit?: number) =>
-    request<{ assets: CommunityAsset[] }>('GET', limit ? `/community/feed?limit=${limit}` : '/community/feed'),
+  listCommunityFeed: (opts: { limit?: number; type?: 'image' | 'video'; cursor?: string } = {}) => {
+    const q = new URLSearchParams()
+    if (opts.limit) q.set('limit', String(opts.limit))
+    if (opts.type) q.set('type', opts.type)
+    if (opts.cursor) q.set('cursor', opts.cursor)
+    const qs = q.toString()
+    return request<{ assets: CommunityAsset[]; next_cursor?: string }>('GET', qs ? `/community/feed?${qs}` : '/community/feed')
+  },
   getCommunityStreak: () => request<CommunityStreak>('GET', '/community/streak'),
 
   listProjects: () => request<{ projects: Project[] }>('GET', '/projects'),

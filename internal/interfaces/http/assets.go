@@ -151,7 +151,8 @@ func (s *Server) handleListAssets(c *gin.Context) {
 }
 
 // handleCommunityFeed is the community feed's read side (migration 00010):
-// every user's own published assets, newest-published-first, across every
+// every user's own published assets, newest-published-first (optionally one
+// type, paged by next_cursor), across every
 // account — deliberately the one asset list in this codebase NOT scoped to
 // "WHERE user_id = caller". Only ever returns rows the owner explicitly
 // flagged is_public via handleUpdateAsset, and only a minimal projection
@@ -163,10 +164,25 @@ func (s *Server) handleCommunityFeed(c *gin.Context) {
 	if err != nil || limit <= 0 || limit > 200 {
 		limit = 60
 	}
+	q := s.db.WithContext(c.Request.Context()).Where("is_public = ? AND deleted_at IS NULL", true)
+	switch t := c.Query("type"); t {
+	case "":
+	case "image", "video":
+		q = q.Where("type = ?", t)
+	default:
+		c.JSON(http.StatusBadRequest, errBody("bad_request", "type must be image or video"))
+		return
+	}
+	if cur := c.Query("cursor"); cur != "" {
+		at, id, ok := parseFeedCursor(cur)
+		if !ok {
+			c.JSON(http.StatusBadRequest, errBody("bad_request", "invalid cursor"))
+			return
+		}
+		q = q.Where("published_at < ? OR (published_at = ? AND id < ?)", at, at, id)
+	}
 	var rows []persistence.Asset
-	if err := s.db.WithContext(c.Request.Context()).
-		Where("is_public = ? AND deleted_at IS NULL", true).
-		Order("published_at DESC").Limit(limit).Find(&rows).Error; err != nil {
+	if err := q.Order("published_at DESC, id DESC").Limit(limit).Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, errBody("internal", "list community feed"))
 		return
 	}
@@ -225,7 +241,27 @@ func (s *Server) handleCommunityFeed(c *gin.Context) {
 			"liked":      likedByMe[a.ID],
 		})
 	}
-	c.JSON(http.StatusOK, gin.H{"assets": out})
+	resp := gin.H{"assets": out}
+	if len(rows) == limit && rows[len(rows)-1].PublishedAt != nil {
+		last := rows[len(rows)-1]
+		resp["next_cursor"] = fmt.Sprintf("%d.%d", last.PublishedAt.UnixMilli(), last.ID)
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// parseFeedCursor reads "<published_at unix ms>.<id>". The feed is ordered
+// by publish time, which differs from id order, so the cursor needs both.
+func parseFeedCursor(cur string) (time.Time, uint64, bool) {
+	ms, idPart, found := strings.Cut(cur, ".")
+	if !found {
+		return time.Time{}, 0, false
+	}
+	millis, err1 := strconv.ParseInt(ms, 10, 64)
+	id, err2 := strconv.ParseUint(idPart, 10, 64)
+	if err1 != nil || err2 != nil || millis <= 0 || id == 0 {
+		return time.Time{}, 0, false
+	}
+	return time.UnixMilli(millis).UTC(), id, true
 }
 
 // handleCommunityStreak is GET /api/v1/community/streak: the caller's own

@@ -48,7 +48,7 @@ export default function Community() {
   const qc = useQueryClient()
   const isGuest = !useAuthStore((s) => s.accessToken)
   const [tab, setTab] = useState<Tab>('feed')
-  const feed = useQuery({ queryKey: ['community', 'feed'], queryFn: () => api.listCommunityFeed(90), enabled: tab === 'feed' })
+  const feed = useQuery({ queryKey: ['community', 'feed'], queryFn: () => api.listCommunityFeed({ limit: 90 }), enabled: tab === 'feed' })
   const mine = useQuery({
     queryKey: ['community', 'mine'],
     queryFn: () => api.listAssets({ isPublic: true, limit: 90 }),
