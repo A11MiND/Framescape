@@ -1,7 +1,6 @@
 {
   "title": "四格漫画工作台",
   "subtitle": "先确定故事与人物，再生成画面。对白与 Logo 随时可改。",
-  "classic": "经典漫画（MiniMax／Gemini）",
   "toolbar": {
     "save": "保存编辑稿",
     "backup": "备份编辑稿",

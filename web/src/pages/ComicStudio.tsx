@@ -192,7 +192,7 @@ export default function ComicStudio() {
   }
   return <AppShell><div className="comic-workspace">
     <header className="comic-header">
-      <div><Link to="/create/comic-classic" className="text-sm text-zinc-400">{t('classic')}</Link><h1 className="mt-2 text-2xl font-semibold">{t('title')}</h1><p className="mt-1 text-sm text-zinc-400">{t('subtitle')}</p></div>
+      <div><h1 className="text-2xl font-semibold">{t('title')}</h1><p className="mt-1 text-sm text-zinc-400">{t('subtitle')}</p></div>
       <div className="comic-toolbar">
         <button disabled={busy} onClick={() => void run(async () => { await persist(live.current); setMessage(t('done.saved')) })}>{t('toolbar.save')}</button>
         <button disabled={busy} onClick={() => download(new Blob([JSON.stringify(live.current, null, 2)], { type: 'application/json' }), 'comic-editable.json')}>{t('toolbar.backup')}</button>

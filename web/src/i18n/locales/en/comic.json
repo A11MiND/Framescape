@@ -1,7 +1,6 @@
 {
   "title": "Four-panel comic studio",
   "subtitle": "Settle the story and characters first, then generate the art. Dialogue and logos stay editable.",
-  "classic": "Classic comic (MiniMax / Gemini)",
   "toolbar": {
     "save": "Save draft",
     "backup": "Back up draft",
