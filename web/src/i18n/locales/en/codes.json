@@ -30,6 +30,7 @@
     "last_admin": "The last administrator cannot be removed.",
     "mime_mismatch": "The file content does not match its type. Choose another file.",
     "node_not_failed": "Only failed steps can be retried.",
+    "input_change_required": "This failure repeats with the same request. Change it and generate again.",
     "not_awaiting_review": "This task is not waiting for a decision.",
     "not_found": "It does not exist or was deleted.",
     "not_supported": "This action is not available here.",

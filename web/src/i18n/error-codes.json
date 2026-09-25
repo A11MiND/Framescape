@@ -60,6 +60,10 @@
       "status": 422,
       "doc": "size not offered (params.allowed)"
     },
+    "input_change_required": {
+      "status": 422,
+      "doc": "the step failed in a way that repeats for the same request; change it before generating again"
+    },
     "insufficient_credits": {
       "status": 402,
       "doc": "the balance does not cover the reservation"

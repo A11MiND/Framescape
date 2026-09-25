@@ -34,7 +34,6 @@ import { ACTIVE, TERMINAL, nodeLabel, paramRows, resultAssets } from './model'
 import { ResultViewer } from './ResultViewer'
 import { ReviewPanel } from './ReviewPanel'
 
-const RETRYABLE: Record<string, string> = { 'video.single': 'gen' }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -163,7 +162,7 @@ function ExecutionDetails({ job }: { job: JobDetail }) {
               {n.attempt > 1 && <span className="text-caption text-fg-muted">{t('exec.attempt', { n: n.attempt })}</span>}
               {n.started_at && <ElapsedTime start={n.started_at} end={n.finished_at ?? (ACTIVE.includes(n.status) ? null : n.started_at)} className="text-caption text-fg-muted" />}
               <StatusPill status={n.status === 'waiting' || n.status === 'ready' || n.status === 'pending' ? (n.status === 'pending' ? 'queued' : 'running') : n.status === 'suspended' ? 'awaiting_review' : n.status === 'skipped' ? 'cancelled' : n.status} />
-              {n.status === 'failed' && RETRYABLE[job.workflow_name] === n.name && (
+              {n.retryable && (
                 <Button size="sm" loading={retry.isPending} onClick={() => retry.mutate(n.name)}>
                   {t('action.retryStep')}
                 </Button>
@@ -260,7 +259,7 @@ export default function JobDetailPage() {
     else navigate('/', { state: { prefillSuggestion: s } })
   }
   const failedNodes = job.nodes.filter((n) => n.status === 'failed')
-  const retryable = job.nodes.find((n) => n.status === 'failed' && RETRYABLE[job.workflow_name] === n.name)
+  const retryable = job.nodes.find((n) => n.retryable)
   const took = job.finished_at && job.started_at ? formatDuration(new Date(job.finished_at).getTime() - new Date(job.started_at).getTime(), t) : null
 
   return (

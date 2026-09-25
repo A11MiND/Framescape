@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 
 	"aigc-platform/internal/application/workflows"
 	"aigc-platform/internal/domain/capability"
 	"aigc-platform/internal/domain/prompt"
+	"aigc-platform/internal/infra/orchestrator"
 	"aigc-platform/internal/infra/persistence"
 )
 
@@ -17,6 +19,15 @@ import (
 // inputs must be reconstructible from the job's spec alone.
 var retryableNodes = map[string]string{
 	"video.single": "gen",
+}
+
+var failedPhases = []string{"Failed", "Error", "Timeout"}
+
+// NodeRetryable reports whether a node can be retried with its original
+// input: the workflow supports re-running it, it failed, and the failure is
+// not one that repeats for the same request.
+func NodeRetryable(workflowName, nodeName, phase, errorCode string) bool {
+	return retryableNodes[workflowName] == nodeName && slices.Contains(failedPhases, phase) && !orchestrator.NeedsInputChange(errorCode)
 }
 
 // RetryNode re-runs one failed node as a new job linked to the original
@@ -29,10 +40,10 @@ func (s *Service) RetryNode(ctx context.Context, userID uint64, bizID, nodeName 
 	if retryableNodes[job.WorkflowName] != nodeName || loopIndex != -1 {
 		return nil, apperr.New("not_supported", fmt.Sprintf("node %q is not retryable for workflow %q", nodeName, job.WorkflowName))
 	}
-	failed := false
+	failed, failureCode := false, ""
 	for _, n := range run.Nodes {
-		if n.Name == nodeName && slices.Contains([]string{"Failed", "Error", "Timeout"}, n.Phase) {
-			failed = true
+		if n.Name == nodeName && slices.Contains(failedPhases, n.Phase) {
+			failed, failureCode = true, n.ErrorCode
 		}
 	}
 	if !failed {
@@ -53,6 +64,9 @@ func (s *Service) RetryNode(ctx context.Context, userID uint64, bizID, nodeName 
 	presets, err := s.resolvePresets(ctx, spec.PresetIDs)
 	if err != nil {
 		return nil, err
+	}
+	if orchestrator.NeedsInputChange(failureCode) && (strings.TrimSpace(promptOverride) == "" || strings.TrimSpace(promptOverride) == strings.TrimSpace(spec.Text)) {
+		return nil, apperr.New("input_change_required", fmt.Sprintf("node %q failed with %q; retrying the same request would fail again", nodeName, failureCode), "code", failureCode)
 	}
 	text := spec.Text
 	if promptOverride != "" {

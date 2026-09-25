@@ -30,6 +30,7 @@
     "last_admin": "不能取消最后一位管理员。",
     "mime_mismatch": "文件内容与类型不符，请换一个文件。",
     "node_not_failed": "只有失败的步骤可以重试。",
+    "input_change_required": "这类失败用同样的内容重试仍会失败，请修改后重新生成。",
     "not_awaiting_review": "该任务当前不需要确认。",
     "not_found": "内容不存在或已删除。",
     "not_supported": "此内容不支持该操作。",

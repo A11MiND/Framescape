@@ -314,7 +314,8 @@ type retryNodeRequest struct {
 // patch the original run in place. Returns the new satellite job the same
 // shape handleCreateJob does, so the frontend can navigate straight to it.
 func (s *Server) handleRetryNode(c *gin.Context) {
-	var req retryNodeRequest
+	// Steps of v2 jobs are not looped, so an omitted loop_index means -1.
+	req := retryNodeRequest{LoopIndex: -1}
 	if err := c.ShouldBindJSON(&req); err != nil && err.Error() != "EOF" {
 		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
 		return
@@ -355,6 +356,7 @@ func (s *Server) handleGetJob(c *gin.Context) {
 				"outputs": n.Outputs, "error": n.ErrorMsg, "error_code": n.ErrorCode, "loop_index": n.LoopIndex,
 				"attempt": n.Attempt, "queue_reason": n.QueueReason, "credit_cost": n.CreditCost,
 				"started_at": n.StartedAt, "finished_at": n.FinishedAt, "display": n.Display,
+				"retryable": jobsvc.NodeRetryable(job.WorkflowName, n.Name, n.Phase, n.ErrorCode),
 			})
 		}
 	}

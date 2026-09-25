@@ -84,6 +84,7 @@ var ErrorCatalog = map[string]ErrorSpec{
 	"not_awaiting_review":     {http.StatusConflict, "the job is not waiting for a preview decision"},
 	"review_decision_invalid": {http.StatusUnprocessableEntity, "review decision names an unknown shot or conflicts (params.shot)"},
 	"node_not_failed":         {http.StatusConflict, "only failed steps can be retried"},
+	"input_change_required":   {http.StatusUnprocessableEntity, "the step failed in a way that repeats for the same request; change it before generating again"},
 	"resume_failed":           {http.StatusUnprocessableEntity, "the review decision could not be applied"},
 	"cancel_failed":           {http.StatusUnprocessableEntity, "the job could not be cancelled"},
 	"delete_failed":           {http.StatusUnprocessableEntity, "the job could not be deleted"},

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { useDemoApi } from './demo'
+import { createDemoApi } from '../../src/demo/api'
 
 test('a finished task shows results, credits and settings, and confirms publishing', async ({ page }) => {
   await useDemoApi(page)
@@ -28,9 +29,27 @@ test('a failed task explains the reason by code and offers to generate again', a
   await expect(page.getByRole('heading', { name: '生成失败' })).toBeVisible()
   await expect(page.getByText('描述涉及敏感内容，请修改后重试。').first()).toBeVisible()
   await expect(page.getByRole('button', { name: '修改并重新生成' })).toBeVisible()
+  // Content the provider refused would be refused again: no retry with the same input.
+  await page.getByText('执行详情').click()
+  await expect(page.getByRole('button', { name: '重试此步（新建任务）' })).toHaveCount(0)
+})
+
+test('a step that failed for a transient reason can be retried as a new task', async ({ page }) => {
+  await useDemoApi(page)
+  const detail = createDemoApi((f) => `/src/demo/assets/${f}`)('GET', '/jobs/J007', '', undefined).body as { error_code: string; nodes: { error_code: string; retryable?: boolean }[] }
+  detail.error_code = 'provider_busy'
+  detail.nodes = detail.nodes.map((n) => ({ ...n, error_code: 'provider_busy', retryable: true }))
+  await page.route('**/api/v1/jobs/J007', (route) => route.fulfill({ json: detail }))
+  let retried = 0
+  await page.route('**/api/v1/jobs/J007/nodes/gen/retry', (route) => {
+    retried++
+    return route.fulfill({ json: { biz_id: 'J013' } })
+  })
+  await page.goto('/jobs/J007')
+  await expect(page.getByText('生成服务繁忙，多次重试后仍未完成。').first()).toBeVisible()
   await page.getByRole('button', { name: '重试此步（新建任务）' }).first().click()
-  await expect(page).toHaveURL(/\/jobs\/N\d+$/)
-  await expect(page.getByRole('link', { name: '重试自另一任务' })).toBeVisible()
+  await expect(page).toHaveURL(/\/jobs\/J013$/)
+  expect(retried).toBe(1)
 })
 
 test('a partially finished task keeps the panels that worked and names the one that failed', async ({ page }) => {

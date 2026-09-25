@@ -45,6 +45,14 @@ var FailureCodes = map[string]string{
 	CodeUnexpectedResult:    "the step returned an unknown result",
 }
 
+// inputChangeCodes are failures that repeat for the same request, so they
+// are fixed by changing the request rather than by retrying it.
+var inputChangeCodes = map[string]bool{CodeModeration: true, CodeBadParams: true}
+
+// NeedsInputChange reports whether a failure with this code can only be
+// resolved by changing the request.
+func NeedsInputChange(code string) bool { return inputChangeCodes[code] }
+
 // failurePrefixes maps the executors' message prefixes to codes.
 var failurePrefixes = []struct{ prefix, code string }{
 	{"sensitive_content:", CodeModeration},

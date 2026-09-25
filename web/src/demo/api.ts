@@ -101,6 +101,8 @@ function nodesFor(x: Job): unknown[] {
   const node = (name: string, status: string, extra: Record<string, unknown> = {}) => ({
     name, status, executor: '', outputs: null, error: '', error_code: '', attempt: 1, queue_reason: '', credit_cost: 0,
     started_at: x.created_at, finished_at: status === 'succeeded' ? x.created_at : null, display: null, ...extra,
+    // Mirrors the server: only a single video's gen step, and not for failures that repeat for the same request.
+    retryable: status === 'failed' && x.workflow_name === 'video.single' && name === 'gen' && !['moderation', 'bad_params'].includes(String(extra.error_code ?? '')),
   })
   if (x.createdMs) {
     return [node('gen', x.status === 'succeeded' ? 'succeeded' : 'running', { display: { result: true }, outputs: x.status === 'succeeded' ? { 'asset-ids': x.assets, 'asset-id': x.assets?.[0] } : null })]
@@ -266,6 +268,11 @@ export function createDemoApi(img: Img) {
     if (retry && method === 'POST') {
       const src = find(retry[1])
       if (!src) return { status: 404, body: { code: 'not_found', message: 'job not found' } }
+      const override = String((body as { prompt_override?: string })?.prompt_override ?? '').trim()
+      const original = String((src.spec ?? SPECS[src.biz_id])?.text ?? '').trim()
+      if (['moderation', 'bad_params'].includes(src.error_code) && (!override || override === original)) {
+        return { status: 422, body: { code: 'input_change_required', message: 'change the request', params: { code: src.error_code } } }
+      }
       const id = nextId++
       jobs.unshift({
         ...src, biz_id: `N${id}`, id: 1000 + id, status: 'running', node_done: 0, node_failed: 0, settled: 0, error_code: '',

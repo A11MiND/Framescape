@@ -61,6 +61,8 @@ export interface JobNode {
   error_code: string
   attempt: number
   queue_reason: string
+  /** The step failed and can be run again with the same input. */
+  retryable?: boolean
   credit_cost: number
   started_at: string | null
   finished_at: string | null
