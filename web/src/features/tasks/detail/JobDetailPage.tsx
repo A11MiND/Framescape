@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ChevronDown, Copy, PencilLine, RotateCcw } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Copy, PencilLine, RotateCcw, WifiOff } from 'lucide-react'
 import {
   Button,
   Card,
@@ -24,7 +24,7 @@ import { projectsApi } from '../../../lib/api/projects'
 import { keys } from '../../../lib/api/keys'
 import { ApiError } from '../../../lib/api/client'
 import { errorText, failureText } from '../../../lib/errorText'
-import { formatDateTime, formatDuration, formatNumber } from '../../../lib/format'
+import { formatClock, formatDateTime, formatDuration, formatNumber } from '../../../lib/format'
 import { useStream } from '../../../lib/stream/context'
 import { useToast } from '../../../components/Toast'
 import type { JobResponse } from '../../../lib/api'
@@ -130,18 +130,24 @@ function InfoCard({ job }: { job: JobDetail }) {
   )
 }
 
-function ExecutionDetails({ job }: { job: JobDetail }) {
+/** Retrying a failed step starts a new task linked to this one. */
+function useRetryStep(bizId: string) {
   const { t } = useTranslation('job')
   const navigate = useNavigate()
   const toast = useToast()
-  const retry = useMutation({
-    mutationFn: (node: string) => jobsApi.retryNode(job.biz_id, node),
+  return useMutation({
+    mutationFn: (node: string) => jobsApi.retryNode(bizId, node),
     onSuccess: (res) => {
       toast(t('done.retried'))
       navigate(`/jobs/${res.biz_id}`)
     },
     onError: (err) => toast(errorText(t, err)),
   })
+}
+
+function ExecutionDetails({ job }: { job: JobDetail }) {
+  const { t } = useTranslation('job')
+  const retry = useRetryStep(job.biz_id)
   return (
     <details className="group rounded-card border border-border bg-surface">
       <summary className="flex h-12 cursor-pointer list-none items-center justify-between px-4 text-body font-semibold text-fg">
@@ -172,7 +178,7 @@ function ExecutionDetails({ job }: { job: JobDetail }) {
 }
 
 function ProgressPanel({ job }: { job: JobDetail }) {
-  const { t } = useTranslation('job')
+  const { t, i18n } = useTranslation('job')
   const stream = useStream()
   const total = job.nodes.length
   const done = job.nodes.filter((n) => n.status === 'succeeded' || n.status === 'skipped').length
@@ -185,8 +191,19 @@ function ProgressPanel({ job }: { job: JobDetail }) {
         <ElapsedTime start={job.started_at ?? job.created_at} />
         {total > 0 && <span>{t('progress.steps', { done, total })}</span>}
         {reason && ['capacity', 'user_limit', 'backoff'].includes(reason) && <span>{t(`progress.reason.${reason}`)}</span>}
-        <LastSync at={stream.lastSyncAt} />
+        {stream.status !== 'offline' && <LastSync at={stream.lastSyncAt} />}
       </div>
+      {stream.status === 'offline' && (
+        <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card bg-warning-soft px-3 py-2 text-caption text-warning-fg">
+          <WifiOff aria-hidden className="size-4 shrink-0 text-warning" />
+          <span className="flex-1 tabular-nums">
+            {stream.lastSyncAt ? t('progress.offline', { time: formatClock(stream.lastSyncAt, i18n.language) }) : t('progress.offlineNoSync')}
+          </span>
+          <Button size="sm" onClick={stream.reconnect}>
+            {t('progress.reconnect')}
+          </Button>
+        </div>
+      )}
       <p className="text-caption text-fg-muted">{t('progress.note')}</p>
     </Card>
   )
@@ -212,6 +229,7 @@ export default function JobDetailPage() {
     qc.invalidateQueries({ queryKey: keys.jobs.detail(bizId) })
     qc.invalidateQueries({ queryKey: keys.jobs.all })
   }
+  const retry = useRetryStep(bizId)
   const onError = (err: unknown) => toast(errorText(t, err))
   const cancel = useMutation({ mutationFn: () => jobsApi.cancel(bizId), onSuccess: () => (setPending(null), toast(t('done.cancelling')), refresh()), onError })
   const remove = useMutation({ mutationFn: () => jobsApi.remove(bizId), onSuccess: () => (toast(t('done.deleted')), refresh(), navigate('/jobs')), onError })
@@ -241,6 +259,7 @@ export default function JobDetailPage() {
     else if (s.kind === 'more-batch') createAgain()
     else navigate('/', { state: { prefillSuggestion: s } })
   }
+  const retryable = job.nodes.find((n) => n.status === 'failed' && RETRYABLE[job.workflow_name] === n.name)
   const took = job.finished_at && job.started_at ? formatDuration(new Date(job.finished_at).getTime() - new Date(job.started_at).getTime(), t) : null
 
   return (
@@ -302,10 +321,15 @@ export default function JobDetailPage() {
                 <h2 className="text-section font-semibold text-danger-fg">{job.status === 'failed' ? t('failed.title') : t('failed.partial')}</h2>
                 <p className="text-body text-fg">{failureText(t, job.error_code || job.nodes.find((n) => n.status === 'failed')?.error_code)}</p>
                 <p className="text-caption text-fg-muted">{t('failed.hint')}</p>
-                <div>
+                <div className="flex flex-wrap gap-2">
                   <Button variant="primary" onClick={createAgain}>
                     {t('action.editAndRetry')}
                   </Button>
+                  {retryable && (
+                    <Button loading={retry.isPending} onClick={() => retry.mutate(retryable.name)}>
+                      {t('action.retryStep')}
+                    </Button>
+                  )}
                 </div>
               </Card>
             )}

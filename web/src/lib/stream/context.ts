@@ -8,6 +8,8 @@ export interface StreamState {
   /** When the last frame (event or heartbeat) arrived. */
   lastSyncAt: Date | null
   subscribe: (listener: (e: StreamEvent) => void) => () => void
+  /** Retries the connection now instead of waiting for the backoff. */
+  reconnect: () => void
 }
 
 export const StreamContext = createContext<StreamState | null>(null)

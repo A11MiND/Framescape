@@ -29,7 +29,10 @@
       "capacity": "Waiting for provider capacity",
       "user_limit": "You have several tasks running; this starts automatically",
       "backoff": "Retrying shortly"
-    }
+    },
+    "offline": "Connection lost · last updated {{time}}",
+    "offlineNoSync": "Connection lost, reconnecting",
+    "reconnect": "Reconnect"
   },
   "failed": {
     "title": "Generation failed",

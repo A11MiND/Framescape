@@ -29,7 +29,10 @@
       "capacity": "等待服务商配额",
       "user_limit": "你已有多个任务在运行，稍后自动开始",
       "backoff": "稍后自动重试"
-    }
+    },
+    "offline": "连接中断 · 上次更新 {{time}}",
+    "offlineNoSync": "连接中断，正在重新连接",
+    "reconnect": "重试连接"
   },
   "failed": {
     "title": "生成失败",

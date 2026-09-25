@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { useDemoApi } from './demo'
+import { createDemoApi } from '../../src/demo/api'
 
 test('image mode: server quote, reviewed rewrite and results in the workspace', async ({ page }) => {
   await useDemoApi(page)
@@ -86,6 +87,17 @@ test('GPT image without beta access explains why and keeps the entry visible', a
   await expect(page.getByRole('link', { name: /GPT 生图\s*内测未开通/ })).toBeVisible()
   await page.getByRole('link', { name: /GPT 生图/ }).click()
   await expect(page.getByRole('heading', { name: 'GPT 生图内测未开通' })).toBeVisible()
+})
+
+test('GPT image on a deployment without OpenAI says it cannot generate', async ({ page }) => {
+  await useDemoApi(page)
+  const caps = createDemoApi((f) => f)('GET', '/capabilities', '', undefined).body as { providers: { openai: { enabled: boolean } } }
+  caps.providers.openai.enabled = false
+  await page.route('**/api/v1/capabilities', (route) => route.fulfill({ json: caps }))
+  await page.goto('/create/gpt')
+  await expect(page.getByRole('link', { name: /GPT 生图\s*暂不可生成/ })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'GPT 生图暂不可生成' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '检查费用' })).toHaveCount(0)
 })
 
 test('a failed quote never shows a price and blocks generating', async ({ page }) => {

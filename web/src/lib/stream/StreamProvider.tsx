@@ -129,6 +129,7 @@ export function StreamProvider({ children }: { children: ReactNode }) {
       listeners.current.delete(listener)
     }
   }, [])
-  const value = useMemo<StreamState>(() => ({ status, lastSyncAt, subscribe }), [status, lastSyncAt, subscribe])
+  const reconnect = useCallback(() => reconnectNow.current(), [])
+  const value = useMemo<StreamState>(() => ({ status, lastSyncAt, subscribe, reconnect }), [status, lastSyncAt, subscribe, reconnect])
   return <StreamContext.Provider value={value}>{children}</StreamContext.Provider>
 }

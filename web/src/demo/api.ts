@@ -30,6 +30,7 @@ interface Job {
   /** Demo tasks created in the session finish a few seconds after creation. */
   createdMs?: number
   assets?: string[]
+  retryOf?: string
   spec?: Record<string, unknown>
 }
 
@@ -113,6 +114,10 @@ function nodesFor(x: Job): unknown[] {
     return [...shots, node('gate', 'suspended')]
   }
   if (x.biz_id === 'J007') return [node('gen', 'failed', { error_code: 'moderation', display: { result: true } })]
+  if (x.biz_id === 'J005') {
+    const panels = ['lemon', 'bay', 'sunset'].map((a, i) => node(`panel-${i + 1}`, 'succeeded', { outputs: { 'asset-id': a }, display: { result: true, shot: i + 1, panel: i + 1 } }))
+    return [...panels, node('panel-4', 'failed', { error_code: 'provider_busy', attempt: 3, display: { result: true, shot: 4, panel: 4 } }), node('compose', 'skipped')]
+  }
   if (x.status === 'running' || x.status === 'queued') return [node('gen', x.status === 'queued' ? 'ready' : 'running', { display: { result: true }, queue_reason: x.status === 'queued' ? 'capacity' : '' })]
   if (x.status === 'succeeded') return [node('gen', 'succeeded', { outputs: { 'asset-id': x.cover }, display: { result: true } })]
   return []
@@ -178,7 +183,7 @@ export function createDemoApi(img: Img) {
     created_at: x.created_at,
     started_at: x.created_at,
     finished_at: ['succeeded', 'partial', 'failed', 'cancelled'].includes(x.status) ? new Date(Date.parse(x.created_at) + 148_000).toISOString() : null,
-    retry_of_job_id: '',
+    retry_of_job_id: x.retryOf ?? '',
     project_id: x.project_id,
     cover_asset_id: x.cover,
     cover_url: img(`${x.cover}.jpg`),
@@ -257,6 +262,17 @@ export function createDemoApi(img: Img) {
       return { status: 200, body: { text: `${String((body as { text?: string })?.text ?? '').replace(/[。.]$/, '')}，清晨柔和的光线，电影感构图。` } }
     }
     if (path === '/trial/image' && method === 'POST') return { status: 200, body: { image_url: img('tram-hero.jpg') } }
+    const retry = path.match(/^\/jobs\/([^/]+)\/nodes\/([^/]+)\/retry$/)
+    if (retry && method === 'POST') {
+      const src = find(retry[1])
+      if (!src) return { status: 404, body: { code: 'not_found', message: 'job not found' } }
+      const id = nextId++
+      jobs.unshift({
+        ...src, biz_id: `N${id}`, id: 1000 + id, status: 'running', node_done: 0, node_failed: 0, settled: 0, error_code: '',
+        created_at: new Date().toISOString(), createdMs: Date.now(), assets: ['clip-1'], retryOf: src.biz_id, spec: src.spec ?? SPECS[src.biz_id],
+      })
+      return { status: 200, body: { biz_id: `N${id}` } }
+    }
     const m = path.match(/^\/jobs\/([^/]+)(\/cancel)?$/)
     if (m) {
       const x = find(m[1])

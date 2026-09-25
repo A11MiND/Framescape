@@ -28,6 +28,37 @@ test('a failed task explains the reason by code and offers to generate again', a
   await expect(page.getByRole('heading', { name: '生成失败' })).toBeVisible()
   await expect(page.getByText('描述涉及敏感内容，请修改后重试。').first()).toBeVisible()
   await expect(page.getByRole('button', { name: '修改并重新生成' })).toBeVisible()
+  await page.getByRole('button', { name: '重试此步（新建任务）' }).first().click()
+  await expect(page).toHaveURL(/\/jobs\/N\d+$/)
+  await expect(page.getByRole('link', { name: '重试自另一任务' })).toBeVisible()
+})
+
+test('a partially finished task keeps the panels that worked and names the one that failed', async ({ page }) => {
+  await useDemoApi(page)
+  await page.goto('/jobs/J005')
+  await expect(page.getByRole('heading', { name: '部分步骤失败' })).toBeVisible()
+  await expect(page.getByText('生成服务繁忙，多次重试后仍未完成。').first()).toBeVisible()
+  await expect(page.getByRole('button', { name: /查看第 \d 个结果/ })).toHaveCount(3)
+  await expect(page.getByRole('button', { name: '重试此步（新建任务）' })).toHaveCount(0)
+  const credits = page.getByRole('heading', { name: '积分' }).locator('..')
+  await expect(credits).toContainText('累计结算31')
+  await expect(credits).toContainText('已释放9')
+})
+
+test('a running task shows the lost connection and reconnects on request', async ({ page }) => {
+  await useDemoApi(page)
+  let streamCalls = 0
+  await page.route('**/api/v1/stream', (route) => {
+    streamCalls++
+    return route.abort()
+  })
+  await page.goto('/jobs/J009')
+  await expect(page.getByRole('heading', { name: '正在生成' })).toBeVisible()
+  const notice = page.getByRole('status').filter({ hasText: '连接中断' })
+  await expect(notice).toBeVisible()
+  const before = streamCalls
+  await notice.getByRole('button', { name: '重试连接' }).click()
+  await expect.poll(() => streamCalls).toBeGreaterThan(before)
 })
 
 test('the preview review prices every choice on the server', async ({ page }) => {
