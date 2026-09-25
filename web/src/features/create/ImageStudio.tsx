@@ -186,6 +186,7 @@ export default function ImageStudio() {
               credits={job.estimate?.data?.credits_total}
               calculating={Boolean(request) && job.stale}
               failed={Boolean(job.estimate?.isError)}
+              reason={job.estimateError}
               notice={job.notice}
               actionLabel={t('action.generate')}
               onAction={job.submit}

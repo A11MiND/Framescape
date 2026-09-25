@@ -52,6 +52,8 @@ func TestVideoRefsRejectedBeforeReserving(t *testing.T) {
 		{"references over 15 seconds", jobsvc.Spec{Text: "x", ReferenceVideoAssetIDs: []string{short.BizID, long.BizID}}, "reference_video_budget"},
 		{"another user's video", jobsvc.Spec{Text: "x", ReferenceVideoAssetIDs: []string{foreign.BizID}}, "reference_unavailable"},
 		{"an image as a video", jobsvc.Spec{Text: "x", ReferenceVideoAssetIDs: []string{image.BizID}}, "reference_unavailable"},
+		{"ten reference images", jobsvc.Spec{Text: "x", ReferenceImageAssetIDs: repeat(image.BizID, 10)}, "references_too_many"},
+		{"four reference audio files", jobsvc.Spec{Text: "x", ReferenceAudioAssetIDs: repeat("audio", 4)}, "reference_audios_too_many"},
 	}
 	for _, c := range cases {
 		if status, code := submitVideo(t, s, token, c.spec); status != http.StatusUnprocessableEntity || code != c.code {
@@ -64,4 +66,12 @@ func TestVideoRefsRejectedBeforeReserving(t *testing.T) {
 	if status, code := submitVideo(t, s, token, jobsvc.Spec{Text: "x", ReferenceVideoAssetIDs: []string{long.BizID}}); status != http.StatusOK {
 		t.Fatalf("one 10 second reference: %d %s", status, code)
 	}
+}
+
+func repeat(id string, n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = id
+	}
+	return out
 }

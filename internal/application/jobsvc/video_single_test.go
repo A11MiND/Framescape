@@ -1,6 +1,9 @@
 package jobsvc
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestVideoSingleRefsCheckedBeforeReserving(t *testing.T) {
 	cases := []struct {
@@ -18,6 +21,10 @@ func TestVideoSingleRefsCheckedBeforeReserving(t *testing.T) {
 		{"last frame with audio", Spec{Text: "x", LastFrameAssetID: "a", ReferenceAudioAssetIDs: []string{"b"}}, "video_refs_exclusive"},
 		{"three reference videos", Spec{Text: "x", ReferenceVideoAssetIDs: []string{"a", "b", "c"}}, ""},
 		{"four reference videos", Spec{Text: "x", ReferenceVideoAssetIDs: []string{"a", "b", "c", "d"}}, "reference_video_budget"},
+		{"nine reference images", Spec{Text: "x", ReferenceImageAssetIDs: ids(9)}, ""},
+		{"ten reference images", Spec{Text: "x", ReferenceImageAssetIDs: ids(10)}, "references_too_many"},
+		{"three reference audio files", Spec{Text: "x", ReferenceAudioAssetIDs: ids(3)}, ""},
+		{"four reference audio files", Spec{Text: "x", ReferenceAudioAssetIDs: ids(4)}, "reference_audios_too_many"},
 	}
 	for _, c := range cases {
 		_, err := EstimateCredits("video.single", c.spec)
@@ -59,4 +66,12 @@ func TestVideoSequenceCheckedBeforeReserving(t *testing.T) {
 			t.Errorf("%s: got %v, want %s", c.name, err, c.code)
 		}
 	}
+}
+
+func ids(n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = fmt.Sprintf("asset-%d", i)
+	}
+	return out
 }

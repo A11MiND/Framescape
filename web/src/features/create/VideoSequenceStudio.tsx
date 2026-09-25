@@ -465,6 +465,7 @@ export default function VideoSequenceStudio() {
             credits={job.estimate?.data?.credits_total}
             calculating={Boolean(request) && job.stale}
             failed={Boolean(job.estimate?.isError)}
+              reason={job.estimateError}
             detail={t('vseq.detail', { n: count, total })}
             notice={job.notice}
             actionLabel={draft.flow === 'direct' ? t('vseq.action.direct', { n: count }) : t('vseq.action.preview', { n: count })}

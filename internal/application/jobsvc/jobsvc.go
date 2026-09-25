@@ -49,6 +49,12 @@ func errResolution(got string) error {
 // one of the offered ratios. refImages are the reference images the call
 // will actually send (explicit ones, or the bound characters').
 func checkVideoRefs(spec Spec, refImages []string) error {
+	if len(spec.ReferenceImageAssetIDs) > capability.VideoMaxReferenceImages {
+		return apperr.New("references_too_many", fmt.Sprintf("at most %d reference images", capability.VideoMaxReferenceImages), "max", capability.VideoMaxReferenceImages)
+	}
+	if len(spec.ReferenceAudioAssetIDs) > capability.VideoMaxReferenceAudios {
+		return apperr.New("reference_audios_too_many", fmt.Sprintf("at most %d reference audio files", capability.VideoMaxReferenceAudios), "max", capability.VideoMaxReferenceAudios)
+	}
 	mode, _, _, err := prompt.CompileVideoRefs(prompt.VideoRefs{
 		Ratio: spec.Ratio, FirstFrameAssetID: spec.FirstFrameAssetID, LastFrameAssetID: spec.LastFrameAssetID,
 		ReferenceImageAssetIDs: refImages, ReferenceVideoAssetIDs: spec.ReferenceVideoAssetIDs, ReferenceAudioAssetIDs: spec.ReferenceAudioAssetIDs,

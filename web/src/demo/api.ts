@@ -345,7 +345,7 @@ export function createDemoApi(img: Img) {
         status: 200,
         body: {
           image: { max_n: 9, max_prompt_chars: 1500, sequence_max_shots: 12 },
-          video: { duration_min: 4, duration_max: 15, max_prompt_chars: 7000, resolutions: ['768P', '2K'], ratios: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'], max_reference_videos: 3, reference_video_max_seconds: 15, sequence_max_shots: 12 },
+          video: { duration_min: 4, duration_max: 15, max_prompt_chars: 7000, resolutions: ['768P', '2K'], ratios: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'], max_reference_videos: 3, reference_video_max_seconds: 15, sequence_max_shots: 12, max_reference_images: 9, max_reference_audios: 3 },
           comic: { openai_enabled: true, model: 'gpt-image-2.5-flare', max_composed_chars: 20000, max_references: 15 },
           providers: {
             minimax: { enabled: true },

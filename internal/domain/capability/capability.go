@@ -39,6 +39,9 @@ const (
 	// VideoSequenceMaxShots bounds video.sequence: every shot is a paid
 	// generation, and a preview adds another per redone or upgraded shot.
 	VideoSequenceMaxShots = 12
+	// Product limits on a single video's attached reference images and audio.
+	VideoMaxReferenceImages = 9
+	VideoMaxReferenceAudios = 3
 )
 
 // VideoResolutions is the exhaustive, ordered set video.single accepts —

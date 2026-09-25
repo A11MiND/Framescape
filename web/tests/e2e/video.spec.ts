@@ -96,3 +96,43 @@ test('the video page is fully translated in English', async ({ page }) => {
     expect(untranslated).toEqual([])
   }
 })
+
+test('reference images and audio stop at the limits capabilities publish', async ({ page }) => {
+  await useDemoApi(page)
+  const audio = (i: number) => ({ biz_id: `audio-${i}`, type: 'audio', public_url: `/a${i}.mp3`, mime: 'audio/mpeg', width: 0, height: 0, resolution_tag: '', created_at: '2026-09-24T06:20:00Z', project_id: '', is_public: false })
+  await page.route('**/api/v1/assets?*type=audio*', (route) => route.fulfill({ json: { assets: [1, 2, 3, 4].map(audio) } }))
+  await page.route(/\/api\/v1\/assets\/audio-\d$/, (route) => route.fulfill({ json: { ...audio(Number(route.request().url().slice(-1))), thumb_url: '' } }))
+  await page.goto('/create/video')
+  await page.getByRole('combobox', { name: '运动描述' }).fill('参考素材的节奏')
+  await page.getByRole('radio', { name: '多素材参考' }).click()
+
+  // images: the 9th can be chosen, the 10th cannot
+  await page.getByRole('button', { name: '从素材库选择' }).click()
+  const images = page.getByRole('dialog', { name: '选择参考图' })
+  const imageItems = images.getByRole('listitem').getByRole('button')
+  for (let i = 0; i < 9; i++) await imageItems.nth(i).click()
+  await expect(images.getByText('已选 9 / 9')).toBeVisible()
+  await expect(imageItems.nth(9)).toBeDisabled()
+  await images.getByRole('button', { name: '使用所选' }).click()
+  await expect(page.getByRole('tab', { name: /图片\s*9/ })).toBeVisible()
+  await expect(page.getByRole('tabpanel').getByRole('button', { name: '从素材库选择' })).toHaveCount(0)
+
+  // audio: the 3rd can be chosen, the 4th cannot
+  await page.getByRole('tab', { name: '音频' }).click()
+  await page.getByRole('button', { name: '从素材库选择' }).click()
+  const audios = page.getByRole('dialog', { name: '选择参考音频' })
+  const audioItems = audios.getByRole('listitem').getByRole('button')
+  for (let i = 0; i < 3; i++) await audioItems.nth(i).click()
+  await expect(audioItems.nth(3)).toBeDisabled()
+  await audios.getByRole('button', { name: '使用所选' }).click()
+  await expect(page.getByRole('tab', { name: /音频\s*3/ })).toBeVisible()
+})
+
+test('a request over the server limit shows the localized limit', async ({ page }) => {
+  await useDemoApi(page)
+  await page.route('**/api/v1/jobs/estimate', (route) => route.fulfill({ status: 422, json: { code: 'reference_audios_too_many', message: 'x', params: { max: 3 } } }))
+  await page.goto('/create/video')
+  await page.getByRole('combobox', { name: '运动描述' }).fill('x')
+  await expect(page.getByRole('alert').filter({ hasText: '参考音频最多 3 段。' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '生成视频' })).toBeDisabled()
+})

@@ -73,6 +73,7 @@ var ErrorCatalog = map[string]ErrorSpec{
 	"text_length":                   {http.StatusUnprocessableEntity, "text too long or empty (params.field, params.max)"},
 	"references_too_many":           {http.StatusUnprocessableEntity, "too many reference images (params.max)"},
 	"reference_unavailable":         {http.StatusUnprocessableEntity, "a reference file is missing, deleted or not yours"},
+	"reference_audios_too_many":     {http.StatusUnprocessableEntity, "too many reference audio files (params.max)"},
 	"reference_video_budget":        {http.StatusUnprocessableEntity, "reference videos over the provider's count or combined length (params.max_clips, params.max_seconds)"},
 	"reference_format":              {http.StatusUnprocessableEntity, "reference images must be PNG, JPEG or WebP"},
 	"reference_too_large":           {http.StatusUnprocessableEntity, "a reference image is too large (params.max_mb)"},

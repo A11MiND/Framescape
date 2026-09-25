@@ -66,6 +66,8 @@ export function useSubmit(request: CreateRequest | null, onCreated: (bizId: stri
       submit.mutate()
     },
     submitting: submit.isPending,
+    /** Why the current request cannot be quoted, localized. */
+    estimateError: request && estimate.error ? errorText(t, estimate.error) : undefined,
     notice,
     canSubmit: Boolean(request && estimate.data && settled && !estimate.isFetching && !submit.isPending),
   }

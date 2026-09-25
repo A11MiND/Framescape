@@ -42,10 +42,6 @@ const INITIAL: VideoDraft = {
   first: [], last: [], images: [], videos: [], audios: [], characters: [], project: '', lastJob: '',
 }
 
-// No provider limit is published for reference images and audio; these keep the picker bounded.
-const MAX_REFERENCE_IMAGES = 9
-const MAX_REFERENCE_AUDIOS = 3
-
 /** A ratio drawn as its shape. */
 function RatioOption({ ratio }: { ratio: string }) {
   const [w, h] = ratio.split(':').map(Number)
@@ -127,6 +123,8 @@ export default function VideoStudio() {
   const durations = video ? Array.from({ length: video.duration_max - video.duration_min + 1 }, (_, i) => video.duration_min + i) : [draft.duration]
   const maxChars = video?.max_prompt_chars ?? 7000
   const maxVideos = video?.max_reference_videos ?? 3
+  const maxImages = video?.max_reference_images ?? 9
+  const maxAudios = video?.max_reference_audios ?? 3
   const project = draft.project || currentProject || ''
   const tooLong = [...draft.text].length > maxChars
   const missing = missingInput(draft.mode, draft, draft.text)
@@ -206,14 +204,14 @@ export default function VideoStudio() {
               <Tabs value={draft.refTab} onValueChange={(v) => update({ refTab: v as RefTab })}>
                 <TabList label={t('video.refs.label')} items={refTabs} />
                 <TabPanel value="images" className="pt-3">
-                  <ReferencePicker label={t('video.refs.images')} value={draft.images} onChange={(ids) => update({ images: ids })} limits={{ max: MAX_REFERENCE_IMAGES }} />
+                  <ReferencePicker label={t('video.refs.images')} value={draft.images} onChange={(ids) => update({ images: ids })} limits={{ max: maxImages }} />
                 </TabPanel>
                 <TabPanel value="videos" className="flex flex-col gap-2 pt-3">
                   <ReferencePicker kind="video" label={t('video.refs.videos')} value={draft.videos} onChange={(ids) => update({ videos: ids })} limits={{ max: maxVideos }} />
                   <p className="text-caption text-fg-muted">{t('video.refs.videoBudget', { max: maxVideos, seconds: video?.reference_video_max_seconds ?? 15 })}</p>
                 </TabPanel>
                 <TabPanel value="audios" className="pt-3">
-                  <ReferencePicker kind="audio" label={t('video.refs.audios')} value={draft.audios} onChange={(ids) => update({ audios: ids })} limits={{ max: MAX_REFERENCE_AUDIOS }} />
+                  <ReferencePicker kind="audio" label={t('video.refs.audios')} value={draft.audios} onChange={(ids) => update({ audios: ids })} limits={{ max: maxAudios }} />
                 </TabPanel>
               </Tabs>
             </div>
@@ -298,6 +296,7 @@ export default function VideoStudio() {
             credits={job.estimate?.data?.credits_total}
             calculating={Boolean(request) && job.stale}
             failed={Boolean(job.estimate?.isError)}
+              reason={job.estimateError}
             notice={job.notice}
             actionLabel={t('video.generate')}
             onAction={job.submit}

@@ -318,6 +318,7 @@ export default function SequenceStudio() {
               credits={credits}
               calculating={Boolean(request) && job.stale}
               failed={Boolean(job.estimate?.isError)}
+              reason={job.estimateError}
               usageBased={gpt}
               detail={count}
               notice={job.notice}

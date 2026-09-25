@@ -265,6 +265,7 @@ export default function GptStudio() {
               credits={credits}
               calculating={Boolean(request) && job.stale}
               failed={Boolean(job.estimate?.isError)}
+              reason={job.estimateError}
               usageBased
               notice={job.notice}
               actionLabel={t('action.reviewCost')}

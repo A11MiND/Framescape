@@ -15,6 +15,8 @@ interface Props {
   usageBased?: boolean
   /** A line about what is being priced, such as how many images. */
   detail?: string
+  /** Why the quote was refused, localized; shown when it failed. */
+  reason?: string
   notice: SubmitNotice
   actionLabel: string
   onAction: () => void
@@ -23,11 +25,16 @@ interface Props {
 }
 
 /** The composer's footer: the server quote with its explanation and the one primary action. */
-export function CostBar({ ready = true, credits, calculating, failed, usageBased, detail, notice, actionLabel, onAction, loading, disabled }: Props) {
+export function CostBar({ ready = true, credits, calculating, failed, usageBased, detail, reason, notice, actionLabel, onAction, loading, disabled }: Props) {
   const { t, i18n } = useTranslation('create')
   const value = !ready ? t('cost.pending') : failed ? t('cost.unknown') : calculating || credits === undefined ? t('cost.calculating') : t('cost.value', { n: formatNumber(credits, i18n.language) })
   return (
     <div className="sticky bottom-0 z-10 -mx-4 mt-auto flex flex-col gap-2 border-t border-border bg-surface-2 px-4 py-3 lg:-mx-5 lg:px-5">
+      {ready && failed && reason && (
+        <p role="alert" className="text-caption text-danger-fg">
+          {reason}
+        </p>
+      )}
       {notice && (
         <p role="alert" className="flex flex-wrap items-center gap-2 text-caption text-warning-fg">
           {notice === 'priceChanged' ? t('error.priceChanged') : t('error.insufficient')}

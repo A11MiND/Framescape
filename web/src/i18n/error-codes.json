@@ -164,6 +164,10 @@
       "status": 422,
       "doc": "video ratio not offered (params.allowed)"
     },
+    "reference_audios_too_many": {
+      "status": 422,
+      "doc": "too many reference audio files (params.max)"
+    },
     "reference_format": {
       "status": 422,
       "doc": "reference images must be PNG, JPEG or WebP"
