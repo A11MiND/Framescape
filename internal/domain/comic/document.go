@@ -28,6 +28,8 @@ type Layer struct {
 	Fill     string  `json:"fill"`
 	Tail     string  `json:"tail"` // none | left | right
 	Locked   bool    `json:"locked"`
+	// Hidden layers stay in the document but are neither shown nor exported.
+	Hidden bool `json:"hidden,omitempty"`
 }
 type Pending struct {
 	JobID string `json:"job_id"`
@@ -43,8 +45,11 @@ type Document struct {
 	References    []Reference `json:"references"`
 	PageAssetID   string      `json:"page_asset_id"`
 	PanelAssetIDs []string    `json:"panel_asset_ids"`
-	Layers        []Layer     `json:"layers"` // array order is z-order; IDs are stable
-	Pending       *Pending    `json:"pending,omitempty"`
+	// PageSource says where the page came from: generated or imported by the
+	// user; empty in documents saved before it existed.
+	PageSource string   `json:"page_source,omitempty"`
+	Layers     []Layer  `json:"layers"` // array order is z-order; IDs are stable
+	Pending    *Pending `json:"pending,omitempty"`
 }
 
 // MaxReferences is the user-attached character/style reference cap. OpenAI's
@@ -84,6 +89,9 @@ func (d Document) Validate() error {
 	}
 	if d.Mode != "direct" && d.Mode != "editable" {
 		return fmt.Errorf("invalid comic mode")
+	}
+	if d.PageSource != "" && d.PageSource != "generated" && d.PageSource != "imported" {
+		return fmt.Errorf("invalid page source")
 	}
 	if utf8.RuneCountInString(d.Brief) > MaxBriefChars || utf8.RuneCountInString(d.Background) > MaxBackgroundChars || utf8.RuneCountInString(d.Context) > MaxContextChars {
 		return fmt.Errorf("comic source or brief exceeds the character limit")

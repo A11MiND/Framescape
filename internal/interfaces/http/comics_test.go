@@ -250,3 +250,66 @@ func TestGeneralOpenAIImageHTTP(t *testing.T) {
 		t.Fatal(caps.Body.String())
 	}
 }
+
+func TestComicDraftsPageAndDelete(t *testing.T) {
+	s, _ := newFullTestServer(t)
+	token, uid := registerAndFund(t, s, 0)
+	other, _ := registerAndFund(t, s, 0)
+	r := s.Router()
+	t.Cleanup(func() { s.db.Where("user_id = ?", uid).Delete(&persistence.ComicDocument{}) })
+
+	var ids []string
+	for i := 0; i < 3; i++ {
+		doc := testComic()
+		doc.Title = fmt.Sprintf("draft %d", i)
+		doc.PageSource = "imported"
+		doc.Layers = []comic.Layer{{ID: "l1", Kind: "text", X: .1, Y: .1, W: .3, H: .2, FontSize: 32, Text: "hi", Color: "#172033", Fill: "#ffffff", Tail: "none", Hidden: true}}
+		rec := doJSON(t, r, "POST", "/api/v1/comics", comicSaveRequest{Document: doc}, token)
+		var saved struct {
+			BizID string `json:"biz_id"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &saved)
+		if rec.Code != 200 || saved.BizID == "" {
+			t.Fatal(rec.Code, rec.Body.String())
+		}
+		ids = append(ids, saved.BizID)
+		s.db.Model(&persistence.ComicDocument{}).Where("biz_id = ?", saved.BizID).Update("updated_at", fmt.Sprintf("2026-09-0%d 10:00:00", i+1))
+	}
+
+	rec := doJSON(t, r, "GET", "/api/v1/comics/"+ids[0], nil, token)
+	var got struct {
+		Document comic.Document `json:"document"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if got.Document.PageSource != "imported" || !got.Document.Layers[0].Hidden {
+		t.Fatalf("page source and hidden layers must survive a save: %+v", got.Document)
+	}
+
+	var page struct {
+		Comics []struct {
+			BizID string `json:"biz_id"`
+		} `json:"comics"`
+		Next string `json:"next_cursor"`
+	}
+	rec = doJSON(t, r, "GET", "/api/v1/comics?limit=2", nil, token)
+	_ = json.Unmarshal(rec.Body.Bytes(), &page)
+	if len(page.Comics) != 2 || page.Comics[0].BizID != ids[2] || page.Comics[1].BizID != ids[1] || page.Next == "" {
+		t.Fatalf("first page = %s", rec.Body.String())
+	}
+	rec = doJSON(t, r, "GET", "/api/v1/comics?limit=2&cursor="+page.Next, nil, token)
+	page.Next = ""
+	_ = json.Unmarshal(rec.Body.Bytes(), &page)
+	if len(page.Comics) != 1 || page.Comics[0].BizID != ids[0] || page.Next != "" {
+		t.Fatalf("second page = %s", rec.Body.String())
+	}
+
+	if rec = doJSON(t, r, "DELETE", "/api/v1/comics/"+ids[0], nil, other); rec.Code != http.StatusNotFound {
+		t.Fatalf("another user deleted a draft: %d", rec.Code)
+	}
+	if rec = doJSON(t, r, "DELETE", "/api/v1/comics/"+ids[0], nil, token); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec = doJSON(t, r, "GET", "/api/v1/comics/"+ids[0], nil, token); rec.Code != http.StatusNotFound {
+		t.Fatalf("deleted draft still readable: %d", rec.Code)
+	}
+}

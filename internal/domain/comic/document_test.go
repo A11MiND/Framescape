@@ -26,6 +26,8 @@ func TestDocumentValidation(t *testing.T) {
 		{"logo without asset", func(d *Document) { d.Layers[0].Kind = "logo" }, false},
 		{"too many panels", func(d *Document) { d.PanelAssetIDs = append(d.PanelAssetIDs, "") }, false},
 		{"invalid pending panel", func(d *Document) { d.Pending = &Pending{JobID: "a", Panel: 5} }, false},
+		{"imported page, hidden layer", func(d *Document) { d.PageSource = "imported"; d.Layers[0].Hidden = true }, true},
+		{"unknown page source", func(d *Document) { d.PageSource = "gpt" }, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := validDocument()
