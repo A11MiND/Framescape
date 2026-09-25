@@ -34,6 +34,8 @@ interface PrefillJob {
  * the mode used last. The comic editor reads its own prefill shape.
  */
 export function prefillTarget(state: unknown): { mode: CreateMode; state: unknown } | null {
+  // Suggestions (image to video, more like this) are handled by the studio.
+  if ((state as { prefillSuggestion?: unknown } | null)?.prefillSuggestion) return { mode: 'image', state }
   const job = (state as { prefillJob?: PrefillJob } | null)?.prefillJob
   if (!job) return null
   const { workflowName, spec } = job

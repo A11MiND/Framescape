@@ -1,0 +1,170 @@
+{
+  "back": "返回任务列表",
+  "notFound": "任务不存在或已删除。",
+  "id": "任务编号",
+  "createdAt": "创建于 {{time}}",
+  "copyId": "复制任务编号",
+  "duration": "用时 {{duration}}",
+  "rename": "重命名",
+  "action": {
+    "createAgain": "以此再生成",
+    "cancel": "取消任务",
+    "delete": "删除记录",
+    "download": "下载",
+    "openAsset": "在素材库打开",
+    "toVideo": "图生视频",
+    "saveCharacter": "保存为角色",
+    "publish": "发布到社区",
+    "unpublish": "取消发布",
+    "retryStep": "重试此步（新建任务）",
+    "editAndRetry": "修改并重新生成"
+  },
+  "progress": {
+    "title": "正在生成",
+    "queued": "排队中",
+    "steps": "已完成 {{done}} / {{total}} 步",
+    "cancelling": "正在取消，等待服务端确认",
+    "note": "生成时间取决于服务商，不显示估算进度。",
+    "reason": {
+      "capacity": "等待服务商配额",
+      "user_limit": "你已有多个任务在运行，稍后自动开始",
+      "backoff": "稍后自动重试"
+    }
+  },
+  "failed": {
+    "title": "生成失败",
+    "partial": "部分步骤失败",
+    "hint": "修改描述或参数后重新生成，会创建一个新任务。"
+  },
+  "cancelled": {
+    "title": "任务已取消",
+    "hint": "已产生的费用已结算，剩余预留已退回。"
+  },
+  "results": {
+    "title": "生成结果",
+    "count": "{{n}} 个结果",
+    "missing": "文件已失效",
+    "prev": "上一张",
+    "next": "下一张",
+    "pick": "查看第 {{n}} 个结果",
+    "published": "已发布到社区",
+    "unpublished": "已取消发布"
+  },
+  "next": {
+    "title": "下一步"
+  },
+  "credits": {
+    "title": "积分",
+    "reserved": "累计预留",
+    "settled": "累计结算",
+    "released": "已释放",
+    "frozen": "当前冻结",
+    "overage": "超出预留补扣",
+    "note": "按实际用量结算；预留是提交时确认的金额，不是费用上限，超出部分从余额扣除。"
+  },
+  "info": {
+    "project": "项目",
+    "noProject": "未归属项目",
+    "prompt": "原始描述",
+    "shots": "镜头描述",
+    "shotN": "镜头 {{n}}",
+    "params": "模型与参数",
+    "type": "类型",
+    "provider": "服务商",
+    "count": "数量",
+    "ratio": "比例",
+    "resolution": "分辨率",
+    "durationSec": "时长",
+    "seconds": "{{n}} 秒",
+    "size": "尺寸",
+    "quality": "质量",
+    "mode": "模式"
+  },
+  "exec": {
+    "title": "执行详情",
+    "note": "只显示服务端返回的步骤。",
+    "attempt": "第 {{n}} 次尝试"
+  },
+  "node": {
+    "gen": "生成",
+    "compose": "合成",
+    "concat": "合成视频",
+    "gate": "预览审核",
+    "extract": "截取尾帧",
+    "enhance": "提示词增强",
+    "stylize": "参考风格化",
+    "split": "故事拆分",
+    "step": "处理步骤",
+    "shot": "镜头 {{n}}",
+    "shotDraft": "镜头 {{n}} · 预览",
+    "shotRedo": "镜头 {{n}} · 重做",
+    "shotUpgrade": "镜头 {{n}} · 升级 2K",
+    "shotEnhance": "镜头 {{n}} · 提示词增强",
+    "panel": "第 {{n}} 格",
+    "panelEnhance": "第 {{n}} 格 · 提示词增强"
+  },
+  "confirmCancel": {
+    "title": "取消这个任务？",
+    "effect1": "未开始的步骤不再执行",
+    "effect2": "已产生的费用照常结算，剩余预留退回"
+  },
+  "confirmDelete": {
+    "title": "删除这条任务记录？",
+    "effect1": "记录从任务列表中移除",
+    "effect2": "已生成的作品仍保留在素材库"
+  },
+  "done": {
+    "cancelling": "已请求取消，等待服务端确认",
+    "deleted": "已删除记录",
+    "retried": "已创建重试任务",
+    "copied": "已复制"
+  },
+  "review": {
+    "title": "待你确认",
+    "intro": "请预览每个片段，选择保留、重做或升级到 2K。",
+    "deadline": "请在 {{time}} 前确认。",
+    "deadlineSoon": "还剩约 {{hours}} 小时，请在 {{time}} 前确认。",
+    "expiry": "到期后自动取消：已产生的费用照常结算，剩余预留退回。",
+    "clip": "片段 {{n}}",
+    "choice": {
+      "label": "片段 {{n}} 的处理",
+      "keep": "保留",
+      "redo": "重做",
+      "upgrade": "升级 2K"
+    },
+    "prompt": "原始描述",
+    "redoPrompt": "重做时使用的描述（可修改）",
+    "quote": {
+      "title": "报价",
+      "item": {
+        "video_redo": "重做 {{n}} 个片段（768P）",
+        "video_upgrade": "升级 {{n}} 个片段到 2K",
+        "video_compose": "合成视频",
+        "prompt_enhance": "提示词增强",
+        "other": "其他费用"
+      },
+      "composeFree": "本地合成，不收费",
+      "total": "预计新增",
+      "reserved": "本任务当前冻结",
+      "balance": "可用积分",
+      "unknown": "暂时无法报价",
+      "note": "确认时以服务端报价为准；价格变化会先提示你重新确认。",
+      "compare": "费用对比",
+      "current": "当前选择",
+      "allUpgrade": "全部升级 2K",
+      "credits": "{{n}} 积分",
+      "updating": "正在更新报价…"
+    },
+    "confirm": "确认并合成",
+    "priceChanged": "费用已变化，请确认新的报价。",
+    "insufficient": "积分不足以支付新增费用。",
+    "topUp": "前往积分页",
+    "submitted": "已提交，正在处理你的选择"
+  },
+  "publish": {
+    "title": "发布到社区？",
+    "effect1": "所有人都能在社区看到这个作品",
+    "effect2": "它的生成描述会一同公开；参考图等私有素材不会公开",
+    "confirm": "发布"
+  }
+}

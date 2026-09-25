@@ -13,7 +13,7 @@ const Assets = lazy(() => import('../pages/Assets'))
 const AssetDetail = lazy(() => import('../pages/AssetDetail'))
 const Community = lazy(() => import('../pages/Community'))
 const TaskCenter = lazy(() => import('../features/tasks/TaskCenter'))
-const JobDetail = lazy(() => import('../pages/JobDetail'))
+const JobDetailPage = lazy(() => import('../features/tasks/detail/JobDetailPage'))
 const Credits = lazy(() => import('../pages/Credits'))
 const Projects = lazy(() => import('../pages/Projects'))
 const Settings = lazy(() => import('../pages/Settings'))
@@ -46,7 +46,7 @@ export default function App() {
         <Route path="/create/:mode?" element={<CreateRoute />} />
         <Route path="/community" element={<Community />} />
         <Route path="/jobs" element={<Authed><TaskCenter /></Authed>} />
-        <Route path="/jobs/:bizId" element={<Authed><JobDetail /></Authed>} />
+        <Route path="/jobs/:bizId" element={<Authed><JobDetailPage /></Authed>} />
         <Route path="/assets" element={<Authed><Assets /></Authed>} />
         <Route path="/assets/:assetId" element={<Authed><AssetDetail /></Authed>} />
         <Route path="/projects" element={<Authed><Projects /></Authed>} />

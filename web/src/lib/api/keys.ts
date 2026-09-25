@@ -14,6 +14,10 @@ export const keys = {
     list: (filter: Record<string, unknown>) => ['jobs', 'list', filter] as const,
     detail: (id: string) => ['jobs', 'detail', id] as const,
   },
+  assets: {
+    all: ['assets'] as const,
+    detail: (id: string) => ['assets', 'detail', id] as const,
+  },
   credits: {
     all: ['credits'] as const,
   },

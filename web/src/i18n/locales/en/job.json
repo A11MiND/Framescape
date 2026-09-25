@@ -1,0 +1,170 @@
+{
+  "back": "Back to tasks",
+  "notFound": "This task does not exist or was deleted.",
+  "id": "Task ID",
+  "createdAt": "Created {{time}}",
+  "copyId": "Copy task ID",
+  "duration": "Took {{duration}}",
+  "rename": "Rename",
+  "action": {
+    "createAgain": "Create again",
+    "cancel": "Cancel task",
+    "delete": "Delete record",
+    "download": "Download",
+    "openAsset": "Open in library",
+    "toVideo": "Image to video",
+    "saveCharacter": "Save as character",
+    "publish": "Publish to community",
+    "unpublish": "Unpublish",
+    "retryStep": "Retry this step (new task)",
+    "editAndRetry": "Edit and generate again"
+  },
+  "progress": {
+    "title": "Generating",
+    "queued": "Queued",
+    "steps": "{{done}} of {{total}} steps done",
+    "cancelling": "Cancelling; waiting for the server",
+    "note": "Generation time depends on the provider; no estimated progress is shown.",
+    "reason": {
+      "capacity": "Waiting for provider capacity",
+      "user_limit": "You have several tasks running; this starts automatically",
+      "backoff": "Retrying shortly"
+    }
+  },
+  "failed": {
+    "title": "Generation failed",
+    "partial": "Some steps failed",
+    "hint": "Adjust the description or settings and generate again; this creates a new task."
+  },
+  "cancelled": {
+    "title": "Task cancelled",
+    "hint": "Costs incurred were settled and the rest of the reservation was returned."
+  },
+  "results": {
+    "title": "Results",
+    "count": "{{n}} results",
+    "missing": "File unavailable",
+    "prev": "Previous",
+    "next": "Next",
+    "pick": "Show result {{n}}",
+    "published": "Published to the community",
+    "unpublished": "Unpublished"
+  },
+  "next": {
+    "title": "Next steps"
+  },
+  "credits": {
+    "title": "Credits",
+    "reserved": "Reserved",
+    "settled": "Settled",
+    "released": "Released",
+    "frozen": "Still held",
+    "overage": "Charged beyond reservation",
+    "note": "Charged by actual usage. The reservation is the amount confirmed at submission, not a cap; anything beyond it comes from your balance."
+  },
+  "info": {
+    "project": "Project",
+    "noProject": "No project",
+    "prompt": "Original prompt",
+    "shots": "Shot descriptions",
+    "shotN": "Shot {{n}}",
+    "params": "Model and settings",
+    "type": "Type",
+    "provider": "Provider",
+    "count": "Count",
+    "ratio": "Aspect ratio",
+    "resolution": "Resolution",
+    "durationSec": "Duration",
+    "seconds": "{{n}}s",
+    "size": "Size",
+    "quality": "Quality",
+    "mode": "Mode"
+  },
+  "exec": {
+    "title": "Execution details",
+    "note": "Only steps reported by the server are shown.",
+    "attempt": "Attempt {{n}}"
+  },
+  "node": {
+    "gen": "Generate",
+    "compose": "Compose",
+    "concat": "Join clips",
+    "gate": "Preview review",
+    "extract": "Extract last frame",
+    "enhance": "Prompt enhancement",
+    "stylize": "Style references",
+    "split": "Story split",
+    "step": "Step",
+    "shot": "Shot {{n}}",
+    "shotDraft": "Shot {{n}} · preview",
+    "shotRedo": "Shot {{n}} · redo",
+    "shotUpgrade": "Shot {{n}} · 2K upgrade",
+    "shotEnhance": "Shot {{n}} · prompt enhancement",
+    "panel": "Panel {{n}}",
+    "panelEnhance": "Panel {{n}} · prompt enhancement"
+  },
+  "confirmCancel": {
+    "title": "Cancel this task?",
+    "effect1": "Steps that have not started will not run",
+    "effect2": "Costs already incurred are settled; the rest of the reservation is returned"
+  },
+  "confirmDelete": {
+    "title": "Delete this task record?",
+    "effect1": "The record is removed from the task list",
+    "effect2": "Generated works stay in the library"
+  },
+  "done": {
+    "cancelling": "Cancellation requested; waiting for the server",
+    "deleted": "Record deleted",
+    "retried": "Retry task created",
+    "copied": "Copied"
+  },
+  "review": {
+    "title": "Your decision is needed",
+    "intro": "Preview each clip, then keep it, redo it or upgrade it to 2K.",
+    "deadline": "Please decide by {{time}}.",
+    "deadlineSoon": "About {{hours}} hours left; please decide by {{time}}.",
+    "expiry": "If it expires, the task is cancelled: costs incurred are settled and the rest of the reservation is returned.",
+    "clip": "Clip {{n}}",
+    "choice": {
+      "label": "What to do with clip {{n}}",
+      "keep": "Keep",
+      "redo": "Redo",
+      "upgrade": "Upgrade to 2K"
+    },
+    "prompt": "Original prompt",
+    "redoPrompt": "Prompt for the redo (editable)",
+    "quote": {
+      "title": "Quote",
+      "item": {
+        "video_redo": "Redo {{n}} clips (768P)",
+        "video_upgrade": "Upgrade {{n}} clips to 2K",
+        "video_compose": "Join clips",
+        "prompt_enhance": "Prompt enhancement",
+        "other": "Other"
+      },
+      "composeFree": "Joined locally, free",
+      "total": "Additional cost",
+      "reserved": "Still held for this task",
+      "balance": "Available credits",
+      "unknown": "The quote is not available",
+      "note": "The server quote at confirmation applies; if the price changes you are asked to confirm again.",
+      "compare": "Cost comparison",
+      "current": "Your selection",
+      "allUpgrade": "Upgrade every clip to 2K",
+      "credits": "{{n}} credits",
+      "updating": "Updating the quote…"
+    },
+    "confirm": "Confirm and join",
+    "priceChanged": "The price changed. Review the new quote.",
+    "insufficient": "Your credits do not cover the additional cost.",
+    "topUp": "Go to credits",
+    "submitted": "Submitted; processing your choices"
+  },
+  "publish": {
+    "title": "Publish to the community?",
+    "effect1": "Everyone can see this work in the community",
+    "effect2": "Its generation prompt is shown with it; private references stay private",
+    "confirm": "Publish"
+  }
+}

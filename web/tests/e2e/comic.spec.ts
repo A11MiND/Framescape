@@ -23,7 +23,13 @@ async function setup(page: Page, { comicAI = true } = {}) {
     if (path.startsWith('/comics/')) return send(saved)
     if (path === '/jobs/estimate') return send({ credits_total: 53, items: [{ kind: 'comic4_panels', count: 1, credits: 53 }] })
     if (path === '/jobs' && req.method() === 'POST') { state.jobRequests.push(req.postDataJSON()); return send({ biz_id: 'generation-one', status: 'running', workflow_run_id: 'run-one' }) }
-    if (path.startsWith('/jobs/')) return send({ biz_id: 'generation-one', title: '四格漫画', spec: { text: document.brief, comic_mode: 'editable', image_provider: 'openai' }, status: state.finished ? 'succeeded' : 'running', workflow_name: 'image.comic4', nodes: state.finished ? [{ name: 'compose', outputs: { 'asset-id': 'new-image', 'usage-known': true }, phase: 'Succeeded' }] : [] })
+    if (path.startsWith('/jobs/')) return send({
+      biz_id: 'generation-one', title: '四格漫画', spec: { text: document.brief, comic_mode: 'editable', image_provider: 'openai' },
+      status: state.finished ? 'succeeded' : 'running', workflow_name: 'image.comic4', retry_of_job_id: '', project_id: '', error_code: '', cover_asset_id: '',
+      created_at: '2026-09-24T06:00:00Z', started_at: '2026-09-24T06:00:00Z', finished_at: state.finished ? '2026-09-24T06:01:00Z' : null, review_deadline: null,
+      credits: { reserved: 53, settled: state.finished ? 40 : 0, overage: 0, released: state.finished ? 13 : 0, frozen: state.finished ? 0 : 53 },
+      nodes: state.finished ? [{ name: 'compose', status: 'succeeded', outputs: { 'asset-id': 'new-image', 'usage-known': true }, display: { result: true }, attempt: 1, error: '', error_code: '', queue_reason: '', started_at: null, finished_at: null }] : [],
+    })
     if (path === '/assets' && req.method() === 'GET') return send({ assets: [
       { biz_id: 'lib-png', type: 'image', mime: 'image/png', public_url: 'http://127.0.0.1:4173/preset-covers/style-manga.jpg' },
       { biz_id: 'lib-webp', type: 'image', mime: 'image/webp', public_url: 'http://127.0.0.1:4173/preset-covers/style-manga.jpg' },

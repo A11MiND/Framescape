@@ -52,6 +52,58 @@ export interface JobListFilter {
   limit?: number
 }
 
+export interface JobNode {
+  name: string
+  status: string
+  executor: string
+  outputs: Record<string, unknown> | null
+  error: string
+  error_code: string
+  attempt: number
+  queue_reason: string
+  credit_cost: number
+  started_at: string | null
+  finished_at: string | null
+  /** Builder metadata: result, shot, panel, group. */
+  display: Record<string, unknown> | null
+}
+
+export interface JobDetail {
+  biz_id: string
+  workflow_name: string
+  title: string
+  status: string
+  retry_of_job_id: string
+  project_id: string
+  credits: JobCredits
+  review_deadline: string | null
+  error_code: string
+  cover_asset_id: string
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+  nodes: JobNode[]
+  spec: Record<string, unknown>
+}
+
+export interface QuoteItem {
+  kind: string
+  count: number
+  credits: number
+}
+
+export interface ReviewDecision {
+  selected_shots: number[]
+  redo_shots: number[]
+  redo_prompt_overrides: Record<number, string>
+}
+
+export interface ReviewQuote {
+  items: QuoteItem[]
+  total: number
+  all_upgrade: number
+}
+
 export const jobsApi = {
   summary: (projectId?: string) => request<JobCounts>('GET', `/jobs/summary${query({ project_id: projectId })}`),
   list: (f: JobListFilter) =>
@@ -59,4 +111,10 @@ export const jobsApi = {
   rename: (bizId: string, title: string) => request<void>('PATCH', `/jobs/${bizId}`, { title }),
   cancel: (bizId: string) => request<void>('POST', `/jobs/${bizId}/cancel`),
   remove: (bizId: string) => request<void>('DELETE', `/jobs/${bizId}`),
+  get: (bizId: string) => request<JobDetail>('GET', `/jobs/${bizId}`),
+  quoteReview: (bizId: string, d: ReviewDecision, signal?: AbortSignal) =>
+    request<ReviewQuote>('POST', `/jobs/${bizId}/resume/quote`, d, { signal }),
+  resume: (bizId: string, d: ReviewDecision & { quote_total: number }) => request<void>('POST', `/jobs/${bizId}/resume`, d),
+  retryNode: (bizId: string, node: string) =>
+    request<{ biz_id: string }>('POST', `/jobs/${bizId}/nodes/${node}/retry`, {}, { idempotencyKey: crypto.randomUUID() }),
 }

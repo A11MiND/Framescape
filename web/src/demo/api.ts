@@ -9,7 +9,8 @@ export interface DemoResponse {
   hang?: boolean
 }
 
-type Img = (name: string) => string
+/** Resolves a sample file name (with extension) to a URL. */
+type Img = (file: string) => string
 
 interface Job {
   biz_id: string
@@ -49,7 +50,8 @@ function sampleJobs(): Job[] {
     ...extra,
   })
   return [
-    j(12, 'video.sequence', '海岸电车之旅 · 宣传视频', 'awaiting_review', 2, 4, 120, 64, '24T06:20', 'tram-1'),
+    j(13, 'image.single', '阳光下的海岸电车', 'succeeded', 1, 1, 40, 36, '24T06:20', 'tram-1'),
+    j(12, 'video.sequence', '海岸电车之旅 · 宣传视频', 'awaiting_review', 6, 7, 120, 64, '24T06:10', 'tram-1'),
     j(11, 'video.sequence', '雪山晨雾 · 风格测试', 'awaiting_review', 3, 4, 90, 48, '24T05:02', 'alpine'),
     j(10, 'image.single', '午后阳光下的猫咪', 'succeeded', 4, 4, 20, 18, '23T11:32', 'cat'),
     j(9, 'image.single', '雪山湖泊全景', 'running', 1, 4, 80, 20, '23T08:11', 'alpine'),
@@ -71,11 +73,40 @@ const BUCKET: Record<string, string[]> = {
 }
 const STATUSES = ['queued', 'running', 'awaiting_review', 'succeeded', 'partial', 'failed', 'cancelling', 'cancelled']
 
+const IMAGES = ['tram-1', 'tram-2', 'tram-3', 'tram-4', 'tram-hero', 'cat', 'sunset', 'lemon', 'bay', 'night', 'alpine', 'portrait']
+const CLIPS = ['clip-1', 'clip-2', 'clip-3']
+
+const SPECS: Record<string, Record<string, unknown>> = {
+  J013: { text: '在阳光明媚的海滨城市，一辆红色的有轨电车行驶在靠海的街道上，远处是蓝色的大海和山城。', n: 4, aspect_ratio: '4:3' },
+  J012: { shots: ['电车沿着海岸缓缓驶入画面，阳光洒在车身上。', '海边咖啡馆的露台，俯瞰平静的海湾。', '日落时分的海岸小镇，金色的阳光洒在海面上。'], duration_seconds: 5, ratio: '16:9' },
+  J007: { text: '霓虹闪烁的城市夜景，镜头缓缓推进。', duration_seconds: 5, ratio: '16:9' },
+  J009: { text: '雪山倒映在平静的湖面上，清晨的薄雾。', n: 4 },
+}
+
+function nodesFor(x: Job): unknown[] {
+  const node = (name: string, status: string, extra: Record<string, unknown> = {}) => ({
+    name, status, executor: '', outputs: null, error: '', error_code: '', attempt: 1, queue_reason: '', credit_cost: 0,
+    started_at: x.created_at, finished_at: status === 'succeeded' ? x.created_at : null, display: null, ...extra,
+  })
+  if (x.biz_id === 'J013') return [node('gen', 'succeeded', { outputs: { 'asset-ids': ['tram-1', 'tram-2', 'tram-3', 'tram-4'], 'asset-id': 'tram-1' }, display: { result: true } })]
+  if (x.biz_id === 'J012') {
+    const shots = [1, 2, 3].flatMap((i) => [
+      node(`shot-${i}`, 'succeeded', { outputs: { 'asset-id': `clip-${i}` }, display: { shot: i, group: 'draft' } }),
+      node(`shot-${i}-extract`, 'succeeded', { display: { shot: i } }),
+    ])
+    return [...shots, node('gate', 'suspended')]
+  }
+  if (x.biz_id === 'J007') return [node('gen', 'failed', { error_code: 'moderation', display: { result: true } })]
+  if (x.status === 'running' || x.status === 'queued') return [node('gen', x.status === 'queued' ? 'ready' : 'running', { display: { result: true }, queue_reason: x.status === 'queued' ? 'capacity' : '' })]
+  if (x.status === 'succeeded') return [node('gen', 'succeeded', { outputs: { 'asset-id': x.cover }, display: { result: true } })]
+  return []
+}
+
 export function createDemoApi(img: Img) {
   const jobs = sampleJobs()
   const projects = [
-    { biz_id: 'P1', name: '海岸之城', description: '在阳光明媚的海滨城市，感受海风与山坡小镇的宁静。', created_at: T('01T00:00'), asset_count: 24, job_count: 8, character_count: 2, last_activity_at: T('24T06:20'), cover_urls: [img('tram-hero')] },
-    { biz_id: 'P2', name: '日落计划', description: '', created_at: T('05T00:00'), asset_count: 3, job_count: 2, character_count: 0, last_activity_at: T('20T08:00'), cover_urls: [img('sunset')] },
+    { biz_id: 'P1', name: '海岸之城', description: '在阳光明媚的海滨城市，感受海风与山坡小镇的宁静。', created_at: T('01T00:00'), asset_count: 24, job_count: 8, character_count: 2, last_activity_at: T('24T06:20'), cover_urls: [img('tram-hero.jpg')] },
+    { biz_id: 'P2', name: '日落计划', description: '', created_at: T('05T00:00'), asset_count: 3, job_count: 2, character_count: 0, last_activity_at: T('20T08:00'), cover_urls: [img('sunset.jpg')] },
   ]
   const me = { biz_id: 'demo-user', email: 'demo@example.com', phone: null, balance: 860, held: 350, is_admin: true, entitlements: ['openai_image'], comic_ai: true }
 
@@ -105,7 +136,7 @@ export function createDemoApi(img: Img) {
     retry_of_job_id: '',
     project_id: x.project_id,
     cover_asset_id: x.cover,
-    cover_url: img(x.cover),
+    cover_url: img(`${x.cover}.jpg`),
     cover_type: x.workflow_name.startsWith('video') ? 'video' : 'image',
   })
 
@@ -166,11 +197,50 @@ export function createDemoApi(img: Img) {
         jobs.splice(jobs.indexOf(x), 1)
         return { status: 204 }
       }
-      if (method === 'GET') return { status: 200, body: { ...view(x), nodes: [], spec: {}, review_deadline: null } }
+      if (method === 'GET') {
+        return {
+          status: 200,
+          body: { ...view(x), nodes: nodesFor(x), spec: SPECS[x.biz_id] ?? {}, review_deadline: x.status === 'awaiting_review' ? '2026-09-30T06:10:00Z' : null },
+        }
+      }
     }
     if (path === '/capabilities') {
       return { status: 200, body: { image: { max_n: 9, max_prompt_chars: 1500 }, video: { duration_min: 4, duration_max: 15, max_prompt_chars: 7000, resolutions: ['768P', '2K'], ratios: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'] } } }
     }
+    const review = path.match(/^\/jobs\/([^/]+)\/resume(\/quote)?$/)
+    if (review && method === 'POST') {
+      const x = find(review[1])
+      if (!x || x.status !== 'awaiting_review') return { status: 409, body: { code: 'not_awaiting_review', message: 'not waiting' } }
+      const d = (body ?? {}) as { selected_shots?: number[]; redo_shots?: number[]; quote_total?: number }
+      const redo = d.redo_shots?.length ?? 0
+      const up = d.selected_shots?.length ?? 0
+      const items = [
+        ...(redo ? [{ kind: 'video_redo', count: redo, credits: redo * 40 }] : []),
+        ...(up ? [{ kind: 'video_upgrade', count: up, credits: up * 64 }] : []),
+        { kind: 'video_compose', count: 1, credits: 0 },
+      ]
+      const total = redo * 40 + up * 64
+      if (review[2]) return { status: 200, body: { items, total, all_upgrade: 3 * 64 } }
+      if (d.quote_total !== total) return { status: 409, body: { code: 'price_changed', message: 'changed', params: { credits_total: total } } }
+      x.status = 'running'
+      x.reserved += total
+      return { status: 204 }
+    }
+    const asset = path.match(/^\/assets\/([^/]+)$/)
+    if (asset && method === 'GET') {
+      const id = asset[1]
+      const video = CLIPS.includes(id)
+      if (!video && !IMAGES.includes(id)) return { status: 404, body: { code: 'not_found', message: 'asset' } }
+      return {
+        status: 200,
+        body: {
+          biz_id: id, type: video ? 'video' : 'image', public_url: img(`${id}.${video ? 'mp4' : 'jpg'}`), thumb_url: video ? '' : img(`${id}.jpg`),
+          mime: video ? 'video/mp4' : 'image/jpeg', duration_ms: video ? 2000 : 0, width: video ? 640 : 1536, height: video ? 360 : 1024,
+          resolution_tag: video ? '768P' : '', created_at: T('24T06:20'), project_id: 'P1', is_public: false, prompt: '',
+        },
+      }
+    }
+    if (asset && method === 'PATCH') return { status: 204 }
     const lists: Record<string, unknown> = {
       '/assets': { assets: [] },
       '/characters': { characters: [] },

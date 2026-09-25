@@ -2,8 +2,8 @@ import { API_BASE } from '../lib/api/client'
 import { useAuthStore } from '../lib/authStore'
 import { createDemoApi } from './api'
 
-const images = import.meta.glob('./assets/*.jpg', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
-const img = (name: string) => images[`./assets/${name}.jpg`] ?? ''
+const files = import.meta.glob('./assets/*.{jpg,mp4}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
+const img = (file: string) => files[`./assets/${file}`] ?? ''
 
 /** Serves the API from sample data in the browser (VITE_DEMO=1 only). */
 export function installDemo() {

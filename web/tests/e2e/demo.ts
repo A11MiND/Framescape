@@ -3,7 +3,7 @@ import { createDemoApi } from '../../src/demo/api'
 
 /** Routes the API to the demo sample data (signed in as the demo admin). */
 export async function useDemoApi(page: Page, opts: { lang?: 'zh' | 'en'; theme?: 'light' | 'dark' } = {}) {
-  const handle = createDemoApi((name) => `/src/demo/assets/${name}.jpg`)
+  const handle = createDemoApi((file) => `/src/demo/assets/${file}`)
   await page.addInitScript(({ lang, theme }) => {
     localStorage.setItem('aigc.auth', JSON.stringify({ accessToken: 'demo', refreshToken: 'demo' }))
     localStorage.setItem('aigc.lang', lang)
