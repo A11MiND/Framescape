@@ -42,6 +42,15 @@ export function draftShots(job: JobDetail): DraftShot[] {
     .sort((a, b) => a.index - b.index)
 }
 
+/** The job status whose pill describes a step in this state. */
+export function stepPillStatus(status: string): string {
+  if (status === 'pending') return 'queued'
+  if (status === 'waiting' || status === 'ready') return 'running'
+  if (status === 'suspended') return 'awaiting_review'
+  if (status === 'skipped') return 'cancelled'
+  return status
+}
+
 /** A readable name for an execution step. */
 export function nodeLabel(t: TFunction, n: JobNode): string {
   const d = n.display ?? {}

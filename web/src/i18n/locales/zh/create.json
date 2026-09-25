@@ -133,6 +133,11 @@
     "unavailable": {
       "title": "GPT 生图暂不可生成",
       "body": "此环境没有配置 OpenAI 生成服务。"
+    },
+    "output": {
+      "label": "输出",
+      "single": "单图与批量",
+      "sequence": "连续图片"
     }
   },
   "cost": {
@@ -182,5 +187,66 @@
     "priceChanged": "费用已变化，请确认新的报价。",
     "insufficient": "积分不足以预留本次费用。",
     "topUp": "前往积分页"
+  },
+  "sequence": {
+    "title": "连续图片",
+    "description": "多张有关联的画面，每张写一句描述；后面的画面可以沿用前面某一张的构图和人物。",
+    "provider": {
+      "label": "生成服务",
+      "minimax": "MiniMax",
+      "openai": "GPT",
+      "openaiHint": "尺寸和质量对所有画面生效，每张按实际用量结算。"
+    },
+    "mode": {
+      "label": "生成方式",
+      "quick": {
+        "title": "快速独立",
+        "body": "每张单独生成，速度快；需要时手动指定引用。"
+      },
+      "continuity": {
+        "title": "连贯画面",
+        "body": "每张默认沿用上一张，人物和场景更一致；也可以改为引用更早的画面。"
+      }
+    },
+    "shots": "画面",
+    "shot": "画面 {{n}}",
+    "shotPlaceholder": "描述这一张画面",
+    "ref": {
+      "label": "引用",
+      "none": "不引用",
+      "auto": "上一张（连贯画面）",
+      "option": "画面 {{n}}",
+      "later": "画面 {{n}}（排在后面，不能引用）",
+      "first": "第一张没有可引用的画面",
+      "emptyTarget": "画面 {{n}} 还没有描述，生成时不会使用这个引用。",
+      "aria": "画面 {{n}} 引用的画面"
+    },
+    "move": {
+      "up": "上移",
+      "down": "下移",
+      "handle": "拖动调整画面 {{n}} 的顺序",
+      "hint": "也可以按 Alt + ↑ / ↓ 调整顺序",
+      "moved": "画面已移到第 {{n}} 位"
+    },
+    "more": "画面 {{n}} 的更多操作",
+    "duplicate": "复制画面",
+    "remove": "删除画面",
+    "add": "添加画面",
+    "max": "最多 {{max}} 个画面",
+    "reset": {
+      "order": "画面 {{shot}} 的引用已清除：画面 {{ref}} 现在排在它后面。",
+      "removed": "画面 {{shot}} 的引用已清除：它引用的画面 {{ref}} 已删除。",
+      "dismiss": "知道了"
+    },
+    "count": "共 {{n}} 张",
+    "countSkipped": "共 {{n}} 张，{{empty}} 个空白画面不生成",
+    "placeholder": "生成后显示在这里",
+    "lastResult": "上次生成",
+    "initialRef": {
+      "label": "初始参考图",
+      "help": "每张画面都参考这张图；引用了前面画面的那一张改为参考被引用的画面。"
+    },
+    "generate": "生成系列",
+    "gptLocked": "GPT 暂不可用于连续图片：{{reason}}"
   }
 }

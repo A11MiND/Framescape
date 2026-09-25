@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import { Lock, TriangleAlert } from 'lucide-react'
-import { Button, Card, Dialog, EmptyState, Field, SegmentedControl, Select, Skeleton } from '../../ui'
-import { createApi, type CreateRequest, type OpenAICapabilities } from '../../lib/api/create'
+import { Card, Field, SegmentedControl, Select, Skeleton } from '../../ui'
+import { createApi, type CreateRequest } from '../../lib/api/create'
 import { projectsApi } from '../../lib/api/projects'
 import { keys } from '../../lib/api/keys'
 import { hasOpenAIImage } from '../../lib/api/account'
@@ -21,6 +20,8 @@ import { ResultPane } from './ResultPane'
 import { useDraft } from './drafts'
 import { useSubmit } from './useSubmit'
 import { characterSlots, readPrefill } from './prefill'
+import { GptAccess, GptConfirm, GptSizeControl } from './gptOptions'
+import { useGptChoices, useSizeLabel } from './gptSizes'
 
 type Mode = 'general' | 'direct'
 
@@ -45,48 +46,6 @@ const INITIAL: GptDraft = {
 }
 
 const DIRECT_MAX_CHARS = 20000
-
-function gcd(a: number, b: number): number {
-  return b ? gcd(b, a % b) : a
-}
-
-function useSizeLabel() {
-  const { t } = useTranslation('create')
-  return (size: string) => {
-    const [w, h] = size.split('x').map(Number)
-    if (!w || !h) return size
-    const g = gcd(w, h)
-    const shape = w === h ? 'square' : w > h ? 'landscape' : 'portrait'
-    return `${t(`gpt.shape.${shape}`)} ${w / g}:${h / g}`
-  }
-}
-
-/** A size choice drawn as its aspect ratio, so shapes compare at a glance. */
-function SizeOption({ size, label }: { size: string; label: string }) {
-  const [w, h] = size.split('x').map(Number)
-  const scale = 14 / Math.max(w || 1, h || 1)
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      {w > 0 && h > 0 && <span aria-hidden className="rounded-[2px] border-[1.5px] border-current" style={{ width: Math.round(w * scale), height: Math.round(h * scale) }} />}
-      <span className="truncate">{label}</span>
-    </span>
-  )
-}
-
-/** Keeps a stored option only while the deployment still offers it. */
-function pickOption(stored: string, offered: string[], fallback: string) {
-  if (stored && offered.includes(stored)) return { value: stored, gone: false }
-  return { value: offered.includes(fallback) ? fallback : (offered[0] ?? ''), gone: Boolean(stored) }
-}
-
-function Access({ openai, entitled }: { openai?: OpenAICapabilities; entitled: boolean }) {
-  const { t } = useTranslation('create')
-  if (!openai?.enabled) {
-    return <EmptyState icon={<TriangleAlert className="size-7" />} title={t('gpt.unavailable.title')} body={t('gpt.unavailable.body')} />
-  }
-  if (!entitled) return <EmptyState icon={<Lock className="size-7" />} title={t('gpt.notEnabled.title')} body={t('gpt.notEnabled.body')} />
-  return null
-}
 
 function SentPreview({ request }: { request: CreateRequest }) {
   const { t } = useTranslation('create')
@@ -131,7 +90,6 @@ export default function GptStudio() {
   const projects = useQuery({ queryKey: keys.projects.list(), queryFn: projectsApi.list, enabled: ready })
   const sizeLabel = useSizeLabel()
   const [confirming, setConfirming] = useState(false)
-  const [gone, setGone] = useState<string | null>(null)
 
   useEffect(() => {
     const p = readPrefill(location.state, 'image.single')
@@ -142,18 +100,7 @@ export default function GptStudio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state])
 
-  // Options come only from the deployment; a stored value it no longer offers is replaced and repriced.
-  const size = pickOption(draft.size, openai?.sizes ?? [], '1024x1024')
-  const quality = pickOption(draft.quality, openai?.qualities ?? [], openai?.default_quality ?? 'high')
-  useEffect(() => {
-    if (!openai) return
-    const changed = [size.gone && [draft.size, size.value], quality.gone && [draft.quality, quality.value]].filter(Boolean) as string[][]
-    if (changed.length) {
-      setGone(t('gpt.optionGone', { value: changed[0][0], next: changed[0][1] }))
-      update({ size: size.value, quality: quality.value })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openai, size.gone, quality.gone])
+  const { size, quality, gone } = useGptChoices(openai, draft, update)
 
   const maxN = Math.max(1, openai?.max_n ?? 1)
   const maxRefs = openai?.max_references ?? 16
@@ -215,12 +162,24 @@ export default function GptStudio() {
         <h1 className="text-title font-semibold text-fg">{t('gpt.title')}</h1>
         {openai?.image_model && <span className="rounded-full bg-primary-soft px-3 py-1 text-caption font-medium text-primary-text">{t('gpt.model', { model: openai.image_model })}</span>}
         <span className="rounded-full bg-surface-2 px-3 py-1 text-caption text-fg-muted">{t('gpt.beta')}</span>
+        {ready && (
+          <SegmentedControl<'single' | 'sequence'>
+            className="ml-auto"
+            label={t('gpt.output.label')}
+            value="single"
+            onChange={(v) => v === 'sequence' && navigate('/create/image-sequence', { state: { sequenceProvider: 'openai' } })}
+            options={[
+              { value: 'single', label: t('gpt.output.single') },
+              { value: 'sequence', label: t('gpt.output.sequence') },
+            ]}
+          />
+        )}
       </header>
       {caps.isPending || me.isPending ? (
         <Skeleton className="h-64 w-full" />
       ) : !ready ? (
         <Card padding="none">
-          <Access openai={openai} entitled={entitled} />
+          <GptAccess openai={openai} entitled={entitled} />
         </Card>
       ) : (
         <div className="grid items-start gap-6 xl:grid-cols-[400px_minmax(0,1fr)]">
@@ -266,16 +225,7 @@ export default function GptStudio() {
                 <CharacterPicker characters={charList} value={draft.characters} onChange={(ids) => update({ characters: ids })} />
                 <p className={refCount > maxRefs ? 'text-caption text-danger-fg' : 'text-caption text-fg-muted'}>{t('reference.total', { n: refCount, max: maxRefs })}</p>
                 <PresetPicker presets={presets.data?.presets ?? []} value={draft.presets} onChange={(ids) => update({ presets: ids })} />
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-label font-medium text-fg">{t('gpt.size')}</span>
-                  <SegmentedControl
-                    fullWidth
-                    label={t('gpt.size')}
-                    value={size.value}
-                    onChange={(v) => update({ size: v })}
-                    options={(openai?.sizes ?? []).map((s) => ({ value: s, label: <SizeOption size={s} label={sizeLabel(s)} /> }))}
-                  />
-                </div>
+                <GptSizeControl sizes={openai?.sizes ?? []} value={size.value} onChange={(v) => update({ size: v })} />
                 <div className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
                   <Field label={t('gpt.quality')}>
                     <Select value={quality.value} onChange={(e) => update({ quality: e.target.value })}>
@@ -326,37 +276,7 @@ export default function GptStudio() {
           <ResultPane jobId={draft.lastJob || null} />
         </div>
       )}
-      <Dialog
-        open={confirming}
-        onOpenChange={setConfirming}
-        title={t('confirm.title')}
-        locked={job.submitting}
-        footer={
-          <>
-            <Button onClick={() => setConfirming(false)} disabled={job.submitting}>
-              {t('ui:action.cancel')}
-            </Button>
-            <Button variant="primary" loading={job.submitting} disabled={!job.canSubmit && !job.submitting} onClick={job.submit}>
-              {t('action.confirm')}
-            </Button>
-          </>
-        }
-      >
-        <dl className="flex flex-col gap-2">
-          {confirmRows.map(([k, v]) => (
-            <div key={k} className="flex justify-between gap-3 text-body">
-              <dt className="text-fg-muted">{k}</dt>
-              <dd className="text-right font-medium text-fg tabular-nums">{v}</dd>
-            </div>
-          ))}
-        </dl>
-        <p className="mt-3 text-caption text-fg-muted">{t('cost.noteUsage')}</p>
-        {job.notice && (
-          <p role="alert" className="mt-2 text-caption text-warning-fg">
-            {job.notice === 'priceChanged' ? t('error.priceChanged') : t('error.insufficient')}
-          </p>
-        )}
-      </Dialog>
+      <GptConfirm open={confirming} onOpenChange={setConfirming} rows={confirmRows} job={job} />
     </div>
   )
 }

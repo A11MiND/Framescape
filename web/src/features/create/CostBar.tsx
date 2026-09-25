@@ -13,6 +13,8 @@ interface Props {
   failed: boolean
   /** GPT is settled from reported usage: explain that the reservation is not a cap. */
   usageBased?: boolean
+  /** A line about what is being priced, such as how many images. */
+  detail?: string
   notice: SubmitNotice
   actionLabel: string
   onAction: () => void
@@ -21,7 +23,7 @@ interface Props {
 }
 
 /** The composer's footer: the server quote with its explanation and the one primary action. */
-export function CostBar({ ready = true, credits, calculating, failed, usageBased, notice, actionLabel, onAction, loading, disabled }: Props) {
+export function CostBar({ ready = true, credits, calculating, failed, usageBased, detail, notice, actionLabel, onAction, loading, disabled }: Props) {
   const { t, i18n } = useTranslation('create')
   const value = !ready ? t('cost.pending') : failed ? t('cost.unknown') : calculating || credits === undefined ? t('cost.calculating') : t('cost.value', { n: formatNumber(credits, i18n.language) })
   return (
@@ -43,6 +45,7 @@ export function CostBar({ ready = true, credits, calculating, failed, usageBased
             <div aria-live="polite" className={!ready ? 'text-body text-fg-muted' : failed ? 'text-body text-danger-fg' : 'text-section font-semibold text-fg tabular-nums'}>
               {value}
             </div>
+            {detail && <div className="text-caption text-fg-muted">{detail}</div>}
           </div>
           <InfoPopover label={t('cost.explain')}>
             <p>{t('cost.note')}</p>

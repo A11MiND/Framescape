@@ -30,7 +30,7 @@ import { useToast } from '../../../components/Toast'
 import type { JobResponse } from '../../../lib/api'
 import { resolveTab } from '../../../lib/jobResult'
 import { suggestActions, type SuggestedAction } from '../../../lib/suggestions'
-import { ACTIVE, TERMINAL, nodeLabel, paramRows, resultAssets } from './model'
+import { ACTIVE, TERMINAL, nodeLabel, paramRows, resultAssets, stepPillStatus } from './model'
 import { ResultViewer } from './ResultViewer'
 import { ReviewPanel } from './ReviewPanel'
 
@@ -161,7 +161,7 @@ function ExecutionDetails({ job }: { job: JobDetail }) {
               <span className="min-w-0 flex-1 text-body text-fg">{nodeLabel(t, n)}</span>
               {n.attempt > 1 && <span className="text-caption text-fg-muted">{t('exec.attempt', { n: n.attempt })}</span>}
               {n.started_at && <ElapsedTime start={n.started_at} end={n.finished_at ?? (ACTIVE.includes(n.status) ? null : n.started_at)} className="text-caption text-fg-muted" />}
-              <StatusPill status={n.status === 'waiting' || n.status === 'ready' || n.status === 'pending' ? (n.status === 'pending' ? 'queued' : 'running') : n.status === 'suspended' ? 'awaiting_review' : n.status === 'skipped' ? 'cancelled' : n.status} />
+              <StatusPill status={stepPillStatus(n.status)} />
               {n.retryable && (
                 <Button size="sm" loading={retry.isPending} onClick={() => retry.mutate(n.name)}>
                   {t('action.retryStep')}

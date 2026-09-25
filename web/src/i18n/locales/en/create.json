@@ -133,6 +133,11 @@
     "unavailable": {
       "title": "GPT Image is unavailable",
       "body": "OpenAI generation is not configured on this deployment."
+    },
+    "output": {
+      "label": "Output",
+      "single": "Single and batch",
+      "sequence": "Image sequence"
     }
   },
   "cost": {
@@ -182,5 +187,66 @@
     "priceChanged": "The price changed. Review the new quote.",
     "insufficient": "Your credits do not cover this reservation.",
     "topUp": "Go to credits"
+  },
+  "sequence": {
+    "title": "Image sequence",
+    "description": "Several related images, one description each; a later image can build on the composition and characters of an earlier one.",
+    "provider": {
+      "label": "Service",
+      "minimax": "MiniMax",
+      "openai": "GPT",
+      "openaiHint": "Size and quality apply to every image; each is settled by actual usage."
+    },
+    "mode": {
+      "label": "Mode",
+      "quick": {
+        "title": "Independent",
+        "body": "Each image is generated on its own, faster; pick references by hand when needed."
+      },
+      "continuity": {
+        "title": "Continuous",
+        "body": "Each image builds on the previous one by default for consistent characters and scenes; you can point to an earlier image instead."
+      }
+    },
+    "shots": "Images",
+    "shot": "Image {{n}}",
+    "shotPlaceholder": "Describe this image",
+    "ref": {
+      "label": "Builds on",
+      "none": "Nothing",
+      "auto": "Previous image (continuous)",
+      "option": "Image {{n}}",
+      "later": "Image {{n}} (comes later, not available)",
+      "first": "The first image has nothing earlier to build on",
+      "emptyTarget": "Image {{n}} has no description yet, so this reference will not be used.",
+      "aria": "What image {{n}} builds on"
+    },
+    "move": {
+      "up": "Move up",
+      "down": "Move down",
+      "handle": "Drag to reorder image {{n}}",
+      "hint": "Alt + ↑ / ↓ also reorders",
+      "moved": "Image moved to position {{n}}"
+    },
+    "more": "More actions for image {{n}}",
+    "duplicate": "Duplicate image",
+    "remove": "Delete image",
+    "add": "Add image",
+    "max": "At most {{max}} images",
+    "reset": {
+      "order": "Image {{shot}} no longer builds on image {{ref}}: that image now comes after it.",
+      "removed": "Image {{shot}} no longer builds on image {{ref}}: it was deleted.",
+      "dismiss": "Got it"
+    },
+    "count": "{{n}} images",
+    "countSkipped": "{{n}} images; {{empty}} empty ones are skipped",
+    "placeholder": "The result appears here",
+    "lastResult": "Last result",
+    "initialRef": {
+      "label": "Starting reference",
+      "help": "Every image uses this reference; an image that builds on an earlier one uses that image instead."
+    },
+    "generate": "Generate sequence",
+    "gptLocked": "GPT is not available for sequences: {{reason}}"
   }
 }

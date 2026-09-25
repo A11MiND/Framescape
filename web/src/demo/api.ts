@@ -104,6 +104,11 @@ function nodesFor(x: Job): unknown[] {
     // Mirrors the server: only a single video's gen step, and not for failures that repeat for the same request.
     retryable: status === 'failed' && x.workflow_name === 'video.single' && name === 'gen' && !['moderation', 'bad_params'].includes(String(extra.error_code ?? '')),
   })
+  if (x.createdMs && x.workflow_name === 'image.sequence') {
+    return (x.assets ?? []).map((a, i) =>
+      node(`shot-${i + 1}`, x.status === 'succeeded' ? 'succeeded' : 'running', { display: { shot: i + 1, result: true }, outputs: x.status === 'succeeded' ? { 'asset-id': a } : null }),
+    )
+  }
   if (x.createdMs) {
     return [node('gen', x.status === 'succeeded' ? 'succeeded' : 'running', { display: { result: true }, outputs: x.status === 'succeeded' ? { 'asset-ids': x.assets, 'asset-id': x.assets?.[0] } : null })]
   }
@@ -152,7 +157,8 @@ export function createDemoApi(img: Img) {
   let nextId = 100
   const estimateOf = (r: { workflow_name?: string; spec?: Record<string, unknown> }) => {
     const spec = r.spec ?? {}
-    const n = typeof spec.n === 'number' ? spec.n : 1
+    const shots = Array.isArray(spec.shots) ? spec.shots.length : 0
+    const n = r.workflow_name === 'image.sequence' ? shots : typeof spec.n === 'number' ? spec.n : 1
     if (r.workflow_name === 'image.comic4') return { credits_total: 72, items: [{ kind: 'comic4_panels', count: 1, credits: 72, basis: 'reservation' }] }
     if (spec.image_provider === 'openai') {
       const per = spec.image_quality === 'low' ? 9 : spec.image_quality === 'medium' ? 18 : 36
@@ -237,7 +243,8 @@ export function createDemoApi(img: Img) {
     if (path === '/assets' && method === 'GET') return { status: 200, body: { assets: IMAGES.filter((i) => i !== 'tram-hero').map(assetBody) } }
     const r = (body ?? {}) as { workflow_name?: string; spec?: Record<string, unknown>; quote_total?: number; project_id?: string }
     if (path === '/jobs/estimate' && method === 'POST') {
-      if (!String(r.spec?.text ?? '').trim()) return { status: 422, body: { code: 'text_length', message: 'empty', params: { field: 'text', max: 1500 } } }
+      if (r.workflow_name !== 'image.sequence' && !String(r.spec?.text ?? '').trim()) return { status: 422, body: { code: 'text_length', message: 'empty', params: { field: 'text', max: 1500 } } }
+      if (r.workflow_name === 'image.sequence' && !(r.spec?.shots as unknown[] | undefined)?.length) return { status: 422, body: { code: 'shots_required', message: 'no shots' } }
       return { status: 200, body: estimateOf(r) }
     }
     if (path === '/jobs/preview' && method === 'POST') {
@@ -250,9 +257,9 @@ export function createDemoApi(img: Img) {
       if (r.quote_total !== undefined && r.quote_total !== est.credits_total) {
         return { status: 409, body: { code: 'price_changed', message: 'changed', params: { credits_total: est.credits_total } } }
       }
-      const n = typeof r.spec?.n === 'number' ? (r.spec.n as number) : 1
+      const n = r.workflow_name === 'image.sequence' ? ((r.spec?.shots as unknown[] | undefined)?.length ?? 1) : typeof r.spec?.n === 'number' ? (r.spec.n as number) : 1
       const id = nextId++
-      const text = String(r.spec?.text ?? '')
+      const text = String(r.spec?.text ?? (r.spec?.shots as string[] | undefined)?.[0] ?? '')
       jobs.unshift({
         biz_id: `N${id}`, id: 1000 + id, workflow_name: r.workflow_name ?? 'image.single', title: text.slice(0, 20), status: 'running',
         node_total: 1, node_done: 0, node_failed: 0, reserved: est.credits_total, settled: 0, error_code: '', created_at: new Date().toISOString(),
@@ -312,7 +319,7 @@ export function createDemoApi(img: Img) {
       return {
         status: 200,
         body: {
-          image: { max_n: 9, max_prompt_chars: 1500 },
+          image: { max_n: 9, max_prompt_chars: 1500, sequence_max_shots: 12 },
           video: { duration_min: 4, duration_max: 15, max_prompt_chars: 7000, resolutions: ['768P', '2K'], ratios: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'] },
           comic: { openai_enabled: true, model: 'gpt-image-2.5-flare', max_composed_chars: 20000, max_references: 15 },
           providers: {
