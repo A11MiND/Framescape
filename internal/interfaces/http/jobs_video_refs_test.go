@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -74,4 +75,38 @@ func repeat(id string, n int) []string {
 		out[i] = id
 	}
 	return out
+}
+
+func TestVideoCharacterRefLimit(t *testing.T) {
+	s, _ := newFullTestServer(t)
+	token, uid := registerAndFund(t, s, 5000)
+	var slots []jobsvc.CharacterSlot
+	for i := 0; i < 4; i++ {
+		refs := []string{seedAsset(t, s, uid, "image", "").BizID, seedAsset(t, s, uid, "image", "").BizID, seedAsset(t, s, uid, "image", "").BizID}
+		rec := doJSON(t, s.Router(), http.MethodPost, "/api/v1/characters", createCharacterRequest{Name: fmt.Sprintf("C%d", i), RefAssetIDs: refs, Seed: 1}, token)
+		var c struct {
+			BizID string `json:"biz_id"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &c)
+		if c.BizID == "" {
+			t.Fatalf("create character: %d %s", rec.Code, rec.Body.String())
+		}
+		slots = append(slots, jobsvc.CharacterSlot{Slot: string(rune('A' + i)), CharacterID: c.BizID})
+	}
+	var before persistence.CreditAccount
+	s.db.Where("user_id = ?", uid).First(&before)
+
+	// Four characters with three reference images each would send 12.
+	if status, code := submitVideo(t, s, token, jobsvc.Spec{Text: "x", Ratio: "16:9", Characters: slots}); status != http.StatusUnprocessableEntity || code != "references_too_many" {
+		t.Fatalf("12 character reference images: %d %s, want 422 references_too_many", status, code)
+	}
+	var after persistence.CreditAccount
+	s.db.Where("user_id = ?", uid).First(&after)
+	if after.Balance != before.Balance || after.Held != before.Held {
+		t.Fatalf("the refused request changed credits: %+v -> %+v", before, after)
+	}
+	// Three characters send nine, which is allowed.
+	if status, code := submitVideo(t, s, token, jobsvc.Spec{Text: "x", Ratio: "16:9", Characters: slots[:3]}); status != http.StatusOK {
+		t.Fatalf("9 character reference images: %d %s", status, code)
+	}
 }

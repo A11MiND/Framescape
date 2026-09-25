@@ -79,6 +79,9 @@ func (s *Service) RetryNode(ctx context.Context, userID uint64, bizID, nodeName 
 			return nil, err
 		}
 	}
+	if err := checkVideoRefs(spec, refImages); err != nil {
+		return nil, err
+	}
 	duration, resolution := videoDuration(spec.DurationSeconds), videoResolution(spec.Resolution)
 	// The retry re-runs generation only, never the optional enhancement step.
 	plan := workflows.VideoSinglePlan(workflows.VideoSingle{

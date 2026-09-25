@@ -75,3 +75,13 @@ func ids(n int) []string {
 	}
 	return out
 }
+
+func TestVideoRefsCountWhatIsSent(t *testing.T) {
+	spec := Spec{Text: "x", Ratio: "16:9", Characters: []CharacterSlot{{Slot: "A", CharacterID: "c"}}}
+	if err := checkVideoRefs(spec, ids(9)); err != nil {
+		t.Fatalf("nine character reference images: %v", err)
+	}
+	if err := checkVideoRefs(spec, ids(10)); !hasCode(err, "references_too_many") {
+		t.Fatalf("ten character reference images: got %v, want references_too_many", err)
+	}
+}
