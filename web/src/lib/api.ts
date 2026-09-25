@@ -2,83 +2,9 @@ import { useAuthStore } from './authStore'
 import i18n from '../i18n'
 import type { ComicDocument, SavedComic, ComicSummary } from './comicDocument'
 
-// PRD §13.1: base /api/v1, JSON error envelope {code,message,request_id}.
-const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8080/api/v1'
+import { API_BASE, ApiError, request } from './api/client'
 
-export class ApiError extends Error {
-  code: string
-  status: number
-  constructor(code: string, message: string, status: number) {
-    super(message)
-    this.code = code
-    this.status = status
-  }
-}
-
-// A 401 mid-session means the 7-day access token (F1.1) expired, not that
-// the user did anything wrong — refreshToken has sat unused in localStorage
-// since login otherwise. This refreshes it once and replays the original
-// request rather than surfacing an error the user can't act on. Concurrent
-// 401s (several in-flight requests when the token expires) share one
-// refresh call instead of each firing their own.
-let refreshPromise: Promise<boolean> | null = null
-
-async function ensureFreshToken(): Promise<boolean> {
-  const { refreshToken, setTokens, logout } = useAuthStore.getState()
-  if (!refreshToken) return false
-  if (!refreshPromise) {
-    refreshPromise = fetch(`${API_BASE}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    })
-      .then(async (resp) => {
-        if (!resp.ok) throw new Error('refresh failed')
-        const data = (await resp.json()) as TokenPair
-        setTokens(data.access_token, data.refresh_token)
-        return true
-      })
-      .catch(() => {
-        logout()
-        return false
-      })
-      .finally(() => {
-        refreshPromise = null
-      })
-  }
-  return refreshPromise
-}
-
-async function request<T>(
-  method: string,
-  path: string,
-  body?: unknown,
-  opts: { auth?: boolean; idempotencyKey?: string; _retried?: boolean } = {},
-): Promise<T> {
-  const { auth = true, idempotencyKey, _retried = false } = opts
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (auth) {
-    const token = useAuthStore.getState().accessToken
-    if (token) headers.Authorization = `Bearer ${token}`
-  }
-  // §11.5: lets a retried submission (network timeout, double-click) return
-  // the original job instead of double-submitting — see jobsvc.Service.Create.
-  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey
-  const resp = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
-  if (resp.status === 401 && auth && !_retried && path !== '/auth/refresh') {
-    if (await ensureFreshToken()) return request<T>(method, path, body, { ...opts, _retried: true })
-  }
-  if (!resp.ok) {
-    const data = await resp.json().catch(() => ({ code: 'unknown', message: resp.statusText }))
-    throw new ApiError(data.code ?? 'unknown', data.message ?? resp.statusText, resp.status)
-  }
-  if (resp.status === 204) return undefined as T
-  return (await resp.json()) as T
-}
+export { ApiError, API_BASE }
 
 export interface TokenPair {
   access_token: string

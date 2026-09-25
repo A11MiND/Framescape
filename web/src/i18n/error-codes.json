@@ -1,0 +1,291 @@
+{
+  "api": {
+    "account_suspended": {
+      "status": 403,
+      "doc": "the account is deactivated"
+    },
+    "bad_request": {
+      "status": 400,
+      "doc": "malformed request body or parameters"
+    },
+    "cancel_failed": {
+      "status": 422,
+      "doc": "the job could not be cancelled"
+    },
+    "comic_panel_count": {
+      "status": 422,
+      "doc": "panel count out of range (params.min, params.max)"
+    },
+    "delete_failed": {
+      "status": 422,
+      "doc": "the job could not be deleted"
+    },
+    "email_not_configured": {
+      "status": 503,
+      "doc": "email codes are not available"
+    },
+    "email_send_failed": {
+      "status": 502,
+      "doc": "the email could not be sent"
+    },
+    "email_taken": {
+      "status": 409,
+      "doc": "the email is already registered"
+    },
+    "estimate_failed": {
+      "status": 422,
+      "doc": "the request cannot be priced"
+    },
+    "forbidden": {
+      "status": 403,
+      "doc": "not allowed for this account"
+    },
+    "generation_failed": {
+      "status": 502,
+      "doc": "a helper generation (rewrite, planning) failed"
+    },
+    "google_not_configured": {
+      "status": 503,
+      "doc": "Google sign-in is not available"
+    },
+    "image_count_exceeded": {
+      "status": 422,
+      "doc": "too many images (params.max)"
+    },
+    "image_quality_unsupported": {
+      "status": 422,
+      "doc": "quality not offered (params.allowed)"
+    },
+    "image_size_unsupported": {
+      "status": 422,
+      "doc": "size not offered (params.allowed)"
+    },
+    "insufficient_credits": {
+      "status": 402,
+      "doc": "the balance does not cover the reservation"
+    },
+    "internal": {
+      "status": 500,
+      "doc": "server error; the message names the failed step only"
+    },
+    "invalid_asset": {
+      "status": 422,
+      "doc": "asset reference invalid"
+    },
+    "invalid_code": {
+      "status": 401,
+      "doc": "verification code wrong or expired"
+    },
+    "invalid_comic": {
+      "status": 422,
+      "doc": "comic request or document is invalid"
+    },
+    "invalid_credentials": {
+      "status": 401,
+      "doc": "wrong email/phone or password"
+    },
+    "invalid_job": {
+      "status": 422,
+      "doc": "job reference invalid"
+    },
+    "invalid_project": {
+      "status": 422,
+      "doc": "project name or id invalid"
+    },
+    "invalid_title": {
+      "status": 422,
+      "doc": "title length out of range (params.max)"
+    },
+    "invalid_token": {
+      "status": 401,
+      "doc": "refresh or reset token invalid or expired"
+    },
+    "job_active": {
+      "status": 409,
+      "doc": "the job is still running; cancel it first (params.status)"
+    },
+    "job_finished": {
+      "status": 409,
+      "doc": "the job has already finished"
+    },
+    "last_admin": {
+      "status": 409,
+      "doc": "the last admin cannot be demoted"
+    },
+    "mime_mismatch": {
+      "status": 422,
+      "doc": "the file content does not match its type"
+    },
+    "node_not_failed": {
+      "status": 409,
+      "doc": "only failed steps can be retried"
+    },
+    "not_awaiting_review": {
+      "status": 409,
+      "doc": "the job is not waiting for a preview decision"
+    },
+    "not_found": {
+      "status": 404,
+      "doc": "the resource does not exist or is not yours"
+    },
+    "not_supported": {
+      "status": 422,
+      "doc": "the operation does not apply to this resource"
+    },
+    "openai_not_enabled": {
+      "status": 403,
+      "doc": "OpenAI image generation is not enabled for this account"
+    },
+    "price_changed": {
+      "status": 409,
+      "doc": "the quote is stale; params.credits_total is the current price"
+    },
+    "provider_option_unsupported": {
+      "status": 422,
+      "doc": "the option applies to another provider"
+    },
+    "provider_unavailable": {
+      "status": 503,
+      "doc": "the provider is not configured here (params.provider)"
+    },
+    "provider_workflow_unsupported": {
+      "status": 422,
+      "doc": "the provider does not offer this workflow (params.provider)"
+    },
+    "rate_limited": {
+      "status": 429,
+      "doc": "too many requests; retry later"
+    },
+    "reference_format": {
+      "status": 422,
+      "doc": "reference images must be PNG, JPEG or WebP"
+    },
+    "reference_incomplete": {
+      "status": 422,
+      "doc": "a reference image has not finished uploading"
+    },
+    "reference_too_large": {
+      "status": 422,
+      "doc": "a reference image is too large (params.max_mb)"
+    },
+    "reference_unavailable": {
+      "status": 422,
+      "doc": "a reference image is missing, deleted or not yours"
+    },
+    "references_too_many": {
+      "status": 422,
+      "doc": "too many reference images (params.max)"
+    },
+    "resolution_invalid": {
+      "status": 422,
+      "doc": "video resolution not offered (params.allowed)"
+    },
+    "resume_failed": {
+      "status": 422,
+      "doc": "the review decision could not be applied"
+    },
+    "retry_failed": {
+      "status": 422,
+      "doc": "the step could not be retried"
+    },
+    "review_decision_invalid": {
+      "status": 422,
+      "doc": "review decision names an unknown shot or conflicts (params.shot)"
+    },
+    "self_deactivate": {
+      "status": 409,
+      "doc": "admins cannot deactivate themselves"
+    },
+    "shot_refs_invalid": {
+      "status": 422,
+      "doc": "a shot references itself or a later shot (params.shot)"
+    },
+    "shots_required": {
+      "status": 422,
+      "doc": "at least one shot is required"
+    },
+    "sms_not_configured": {
+      "status": 503,
+      "doc": "phone sign-in is not available"
+    },
+    "sms_send_failed": {
+      "status": 502,
+      "doc": "the SMS could not be sent"
+    },
+    "story_split_failed": {
+      "status": 502,
+      "doc": "the story could not be split into panels; nothing was charged"
+    },
+    "submit_failed": {
+      "status": 422,
+      "doc": "the job could not be created; no credits were held"
+    },
+    "text_length": {
+      "status": 422,
+      "doc": "text too long or empty (params.field, params.max)"
+    },
+    "too_many_attempts": {
+      "status": 429,
+      "doc": "too many code or sign-in attempts"
+    },
+    "trial_used": {
+      "status": 409,
+      "doc": "the guest trial was already used"
+    },
+    "unauthorized": {
+      "status": 401,
+      "doc": "missing or expired sign-in"
+    },
+    "unavailable": {
+      "status": 503,
+      "doc": "a backing service is unavailable"
+    },
+    "unknown_workflow": {
+      "status": 422,
+      "doc": "unknown workflow_name"
+    },
+    "upload_missing": {
+      "status": 422,
+      "doc": "the upload has not reached storage"
+    },
+    "upload_too_large": {
+      "status": 413,
+      "doc": "the file exceeds the size limit"
+    },
+    "upstream_error": {
+      "status": 502,
+      "doc": "the provider returned an error"
+    },
+    "version_conflict": {
+      "status": 409,
+      "doc": "the document changed elsewhere; params or body carry the server version"
+    },
+    "video_ratio_required": {
+      "status": 422,
+      "doc": "text-to-video needs a fixed ratio"
+    },
+    "video_refs_exclusive": {
+      "status": 422,
+      "doc": "first/last frames cannot be combined with reference media"
+    }
+  },
+  "failure": {
+    "bad_params": "the provider rejected the parameters",
+    "cancelled": "cancelled by the user",
+    "deadline_exceeded": "the job exceeded its time limit",
+    "executor_error": "the step failed unexpectedly",
+    "executor_unavailable": "no worker can run this step",
+    "gate_expired": "the preview was not confirmed in time",
+    "incomplete_output": "fewer results than requested",
+    "input_unresolved": "an upstream result the step needs is missing",
+    "moderation": "the provider blocked the content; the message may quote it and must not be shown",
+    "poll_failed": "the remote task status could not be read",
+    "provider_account": "the platform's provider account needs attention (balance or credentials); not the user's fault",
+    "provider_busy": "the provider was over capacity after all retries",
+    "provider_ref_invalid": "the remote task reference was lost",
+    "provider_rejected": "the provider rejected the request",
+    "timeout": "the step exceeded its time limit",
+    "unexpected_result": "the step returned an unknown result",
+    "worker_lost": "the worker running the step stopped; retried while attempts remain"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "brand": "帧境",
+  "skipToContent": "跳到主要内容",
+  "nav": {
+    "label": "主导航",
+    "create": "创作",
+    "tasks": "任务",
+    "library": "素材库",
+    "projects": "项目",
+    "characters": "角色",
+    "presets": "风格预设",
+    "community": "社区",
+    "credits": "积分",
+    "settings": "设置",
+    "more": "更多",
+    "collapse": "收起导航",
+    "expand": "展开导航"
+  },
+  "top": {
+    "currentProject": "当前项目",
+    "allProjects": "全部项目",
+    "running": "进行中 {{count}}",
+    "needsReview": "待确认 {{count}}",
+    "credits": "{{count}} 积分",
+    "language": "界面语言",
+    "account": "账户菜单",
+    "notifications": "通知",
+    "signIn": "登录",
+    "signOut": "退出登录",
+    "admin": "管理后台"
+  },
+  "admin": {
+    "title": "管理后台",
+    "spend": "费用",
+    "users": "用户",
+    "backToApp": "返回创作"
+  },
+  "stream": {
+    "offline": "连接中断 · 上次更新 {{time}}",
+    "reconnecting": "正在重新连接…"
+  },
+  "more": {
+    "title": "更多",
+    "language": "语言"
+  }
+}

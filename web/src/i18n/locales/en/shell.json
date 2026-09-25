@@ -1,0 +1,46 @@
+{
+  "brand": "Framescape",
+  "skipToContent": "Skip to main content",
+  "nav": {
+    "label": "Main navigation",
+    "create": "Create",
+    "tasks": "Tasks",
+    "library": "Library",
+    "projects": "Projects",
+    "characters": "Characters",
+    "presets": "Presets",
+    "community": "Community",
+    "credits": "Credits",
+    "settings": "Settings",
+    "more": "More",
+    "collapse": "Collapse navigation",
+    "expand": "Expand navigation"
+  },
+  "top": {
+    "currentProject": "Current project",
+    "allProjects": "All projects",
+    "running": "Running {{count}}",
+    "needsReview": "Needs review {{count}}",
+    "credits": "{{count}} credits",
+    "language": "Interface language",
+    "account": "Account menu",
+    "notifications": "Notifications",
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "admin": "Admin console"
+  },
+  "admin": {
+    "title": "Admin console",
+    "spend": "Spend",
+    "users": "Users",
+    "backToApp": "Back to the app"
+  },
+  "stream": {
+    "offline": "Connection lost · last updated {{time}}",
+    "reconnecting": "Reconnecting…"
+  },
+  "more": {
+    "title": "More",
+    "language": "Language"
+  }
+}

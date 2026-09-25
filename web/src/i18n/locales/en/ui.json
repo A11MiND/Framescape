@@ -1,0 +1,48 @@
+{
+  "action": {
+    "close": "Close",
+    "cancel": "Cancel",
+    "retry": "Retry",
+    "confirm": "Confirm",
+    "save": "Save",
+    "select": "Select",
+    "clearSelection": "Clear selection",
+    "more": "More",
+    "copy": "Copy",
+    "copied": "Copied"
+  },
+  "field": {
+    "optional": "(optional)"
+  },
+  "confirm": {
+    "target": "Target",
+    "effects": "Effect"
+  },
+  "state": {
+    "loadFailed": "Could not load",
+    "loading": "Loading",
+    "empty": "Nothing here yet"
+  },
+  "status": {
+    "queued": "Queued",
+    "running": "Running",
+    "awaiting_review": "Needs review",
+    "succeeded": "Completed",
+    "partial": "Partly completed",
+    "failed": "Failed",
+    "cancelling": "Cancelling",
+    "cancelled": "Cancelled",
+    "unknown": "Unknown status"
+  },
+  "time": {
+    "elapsed": "Elapsed {{duration}}",
+    "lastSync": "Last updated {{time}}"
+  },
+  "unknownValue": "--",
+  "unit": {
+    "hours": "{{n}}h",
+    "minutes": "{{n}}m",
+    "seconds": "{{n}}s"
+  },
+  "listSeparator": ", "
+}

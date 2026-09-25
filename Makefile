@@ -1,7 +1,7 @@
 .PHONY: build build-api build-worker build-cli build-migrate \
 	docker-up docker-down docker-logs docker-build docker-restart-app \
 	migrate run-api run-worker run-fakeprovider test-infra-up test-infra-down \
-	web test lint
+	web test lint error-codes
 
 # --- Local (non-Docker) dev: matches the manual three-process workflow used
 # throughout this project's development, just as `make` targets instead of
@@ -50,7 +50,12 @@ test:
 	go test ./...
 
 lint:
-	cd web && npx oxlint
+	cd web && npm run lint
+
+# Regenerates the frontend snapshot of the API and failure code catalog;
+# npm run lint then reports codes without zh/en text.
+error-codes:
+	go run ./cmd/cli error-codes > web/src/i18n/error-codes.json
 
 # --- Docker (deploy/docker-compose.yml): api/worker/migrate/web
 # (nginx-fronted frontend) run as containers alongside mysql/redis/minio,

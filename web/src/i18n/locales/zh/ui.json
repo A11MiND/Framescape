@@ -1,0 +1,48 @@
+{
+  "action": {
+    "close": "关闭",
+    "cancel": "取消",
+    "retry": "重试",
+    "confirm": "确认",
+    "save": "保存",
+    "select": "选择",
+    "clearSelection": "清除选择",
+    "more": "更多",
+    "copy": "复制",
+    "copied": "已复制"
+  },
+  "field": {
+    "optional": "（可选）"
+  },
+  "confirm": {
+    "target": "目标",
+    "effects": "生效后"
+  },
+  "state": {
+    "loadFailed": "加载失败",
+    "loading": "正在加载",
+    "empty": "暂无内容"
+  },
+  "status": {
+    "queued": "排队中",
+    "running": "进行中",
+    "awaiting_review": "待确认",
+    "succeeded": "已完成",
+    "partial": "部分完成",
+    "failed": "失败",
+    "cancelling": "取消中",
+    "cancelled": "已取消",
+    "unknown": "未知状态"
+  },
+  "time": {
+    "elapsed": "已用时 {{duration}}",
+    "lastSync": "上次更新 {{time}}"
+  },
+  "unknownValue": "--",
+  "unit": {
+    "hours": "{{n}} 小时",
+    "minutes": "{{n}} 分",
+    "seconds": "{{n}} 秒"
+  },
+  "listSeparator": "、"
+}

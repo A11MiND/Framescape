@@ -1,33 +1,43 @@
 @import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "./styles/tokens.css";
 
-/* PRD §19.2 色板: dark-first, violet-500 primary */
 html {
+  color-scheme: light;
+}
+html[data-theme='dark'] {
   color-scheme: dark;
 }
 
 body {
   margin: 0;
-  background-color: var(--color-zinc-950);
-  color: var(--color-zinc-50);
-  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  -webkit-font-smoothing: antialiased;
 }
 
-/* §07/09's "淺色主題" gap — PRD §19.2 keeps dark as the default and marks
-   light P2, so this stays an opt-in via /settings rather than a system
-   `prefers-color-scheme` follow. Every component in this app was written
-   against the literal zinc/violet/red/amber/emerald Tailwind scale
-   (bg-zinc-950, text-violet-400, etc.), never against semantic tokens —
-   rewriting every className across ~30 files to a separate token system
-   would be a much larger, riskier change than this app's P0/P1 work
-   justified touching. Tailwind v4 already expresses every utility class as
-   `var(--color-zinc-950)` etc. (see the compiled CSS), so redefining those
-   same custom properties under [data-theme="light"] re-themes the whole
-   app through the cascade without editing a single component — the zinc
-   ramp is inverted end-to-end (950 <-> 50, 900 <-> 100, ...), and the
-   light-mode-only accent shades (violet/red/amber/emerald 300/400, used as
-   light-on-dark text colors) are darkened to their ~600 equivalents so
-   text stays legible on a light ground instead of washing out.
-   setStoredTheme (lib/theme.ts) is what actually sets this attribute. */
+/* Every interactive element keeps a visible focus ring (spec section 1). */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Pages not yet rebuilt on the semantic tokens are written against the
+   literal zinc/violet scales; in the light theme those scales are inverted
+   below so they stay legible until each page is rebuilt. */
 [data-theme='light'] {
   color-scheme: light;
   --color-zinc-50: oklch(14.1% .005 285.823);
@@ -57,4 +67,9 @@ body {
 
 .animate-bar-wave {
   animation: bar-wave 1s ease-in-out infinite;
+}
+
+@keyframes indeterminate {
+  0% { left: -33%; }
+  100% { left: 100%; }
 }

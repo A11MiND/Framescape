@@ -1,32 +1,77 @@
-// §07/09's "淺色主題" gap. Same hand-rolled localStorage pattern as
-// i18n/index.ts's Lang (no need for a whole plugin for one string), applying
-// the choice as a `data-theme` attribute on <html> — index.css's
-// `[data-theme="light"]` block is what actually re-themes the app by
-// overriding the Tailwind color variables every component already renders
-// through.
+import { useSyncExternalStore } from 'react'
+
+// The theme preference is per device. A first visit is light (spec D04);
+// "system" follows the OS setting live. <html data-theme> always carries
+// the resolved theme so both the semantic tokens and the legacy zinc
+// inversion key off one attribute.
 const STORAGE_KEY = 'aigc.theme'
 
-export type Theme = 'dark' | 'light'
+export type ThemePreference = 'light' | 'dark' | 'system'
+export type Theme = 'light' | 'dark'
 
-export function getStoredTheme(): Theme {
-  return localStorage.getItem(STORAGE_KEY) === 'light' ? 'light' : 'dark'
-}
+const listeners = new Set<() => void>()
+const media = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null
 
-export function applyTheme(theme: Theme) {
-  if (theme === 'light') {
-    document.documentElement.dataset.theme = 'light'
-  } else {
-    delete document.documentElement.dataset.theme
+function readPreference(): ThemePreference {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY)
+    if (v === 'dark' || v === 'system') return v
+  } catch {
+    // storage unavailable: fall back to the default
   }
+  return 'light'
 }
 
-export function setStoredTheme(theme: Theme) {
-  localStorage.setItem(STORAGE_KEY, theme)
-  applyTheme(theme)
+let preference: ThemePreference = readPreference()
+
+export function resolveTheme(pref: ThemePreference, systemDark: boolean): Theme {
+  if (pref === 'system') return systemDark ? 'dark' : 'light'
+  return pref
 }
 
-// Applied once at module load (imported from main.tsx) so the correct
-// theme is set before first paint — same reasoning as i18n's `lng:
-// getStoredLang()` running at init instead of in a post-mount effect,
-// avoiding a flash of the wrong theme.
-applyTheme(getStoredTheme())
+function apply() {
+  document.documentElement.dataset.theme = resolveTheme(preference, media?.matches ?? false)
+  listeners.forEach((l) => l())
+}
+
+export function getThemePreference(): ThemePreference {
+  return preference
+}
+
+export function setThemePreference(next: ThemePreference) {
+  preference = next
+  try {
+    localStorage.setItem(STORAGE_KEY, next)
+  } catch {
+    // the choice still applies for this visit
+  }
+  apply()
+}
+
+export function getResolvedTheme(): Theme {
+  return resolveTheme(preference, media?.matches ?? false)
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
+/** The current preference, re-rendering when it or the OS setting changes. */
+export function useThemePreference(): [ThemePreference, Theme] {
+  const pref = useSyncExternalStore(subscribe, getThemePreference)
+  const resolved = useSyncExternalStore(subscribe, getResolvedTheme)
+  return [pref, resolved]
+}
+
+// Legacy names used by pages not yet rebuilt.
+export const getStoredTheme = getResolvedTheme
+export const setStoredTheme = (theme: Theme) => setThemePreference(theme)
+
+media?.addEventListener('change', () => {
+  if (preference === 'system') apply()
+})
+
+// Applied at module load (imported from main.tsx) so the first paint uses
+// the right theme.
+apply()

@@ -5,7 +5,7 @@ import { api, type AssetResponse } from '../lib/api'
 import { useClickOutside } from '../hooks/useClickOutside'
 
 // Plain 4-point sparkle, straight lines only (no hand-drawn curves) —
-// §07's "✨ AI 改寫按鈕，不要用emoji" ask, same reasoning as every other
+// §07's "AI 改寫按鈕，不要用emoji" ask, same reasoning as every other
 // icon replaced this session (NotificationCenter's bell, the format
 // cards): a real glyph instead of a platform-inconsistent emoji.
 function SparkleIcon({ className }: { className?: string }) {
