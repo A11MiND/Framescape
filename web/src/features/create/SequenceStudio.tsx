@@ -178,7 +178,7 @@ export default function SequenceStudio() {
     <div className="mx-auto flex max-w-[1440px] flex-col gap-5 px-4 py-6 lg:px-6">
       <CreateNav mode="image-sequence" />
       <div className="grid items-start gap-6 xl:grid-cols-[400px_minmax(0,1fr)]">
-        <Card padding="none" className="flex flex-col gap-5 p-4 lg:p-5">
+        <Card padding="none" className="order-2 flex flex-col gap-5 p-4 lg:p-5 xl:order-1">
           <div className="flex flex-col gap-1.5">
             <span className="text-label font-medium text-fg">{t('sequence.provider.label')}</span>
             <SegmentedControl<Provider>
@@ -237,20 +237,23 @@ export default function SequenceStudio() {
           </Field>
         </Card>
 
-        <div className="flex min-w-0 flex-col gap-5">
-          <header className="flex flex-col gap-1">
-            <h1 className="text-title font-semibold text-fg">{t('sequence.title')}</h1>
-            <p className="text-body text-fg-muted">{t('sequence.description')}</p>
-          </header>
-          <ChoiceCards<SequenceMode>
-            label={t('sequence.mode.label')}
-            value={draft.mode}
-            onChange={(m) => update({ mode: m })}
-            choices={[
-              { value: 'quick', title: t('sequence.mode.quick.title'), description: t('sequence.mode.quick.body') },
-              { value: 'continuity', title: t('sequence.mode.continuity.title'), description: t('sequence.mode.continuity.body') },
-            ]}
-          />
+        <div className="order-1 flex min-w-0 flex-col gap-5 xl:order-2">
+          <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
+            <header className="flex min-w-0 flex-col gap-1">
+              <h1 className="text-title font-semibold text-fg">{t('sequence.title')}</h1>
+              <p className="text-body text-fg-muted">{t('sequence.description')}</p>
+            </header>
+            <ChoiceCards<SequenceMode>
+              className="2xl:w-[560px] 2xl:shrink-0"
+              label={t('sequence.mode.label')}
+              value={draft.mode}
+              onChange={(m) => update({ mode: m })}
+              choices={[
+                { value: 'quick', title: t('sequence.mode.quick.title'), description: t('sequence.mode.quick.body') },
+                { value: 'continuity', title: t('sequence.mode.continuity.title'), description: t('sequence.mode.continuity.body') },
+              ]}
+            />
+          </div>
 
           {resets.length > 0 && (
             <div role="status" className="flex gap-3 rounded-card border border-warning bg-warning-soft p-3 text-body text-warning-fg">
@@ -331,7 +334,7 @@ export default function SequenceStudio() {
             </ol>
           </section>
 
-          <Card padding="none" className="p-4 lg:p-5">
+          <Card padding="none" className="sticky bottom-0 z-10 p-4 shadow-overlay lg:p-5">
             <CostBar
               ready={Boolean(request)}
               credits={credits}
