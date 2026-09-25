@@ -163,7 +163,7 @@ function splitPanels(text: string): string[] {
     .filter(Boolean)
 }
 
-export default function Studio() {
+export default function Studio({ initialTab = 'image.single' }: { initialTab?: Tab }) {
   const { t } = useTranslation()
   const accessToken = useAuthStore((s) => s.accessToken)
   const isGuest = !accessToken
@@ -181,7 +181,7 @@ export default function Studio() {
   const resolutionOptions = capabilities.data?.video.resolutions ?? FALLBACK_RESOLUTIONS
   const ratioOptions = capabilities.data?.video.ratios ?? RATIO_VALUES
 
-  const [tab, setTab] = useState<Tab>('image.single')
+  const [tab, setTab] = useState<Tab>(initialTab)
   // Starts empty, not pre-filled with the example — a filled composer
   // meant deleting placeholder text before typing your own prompt, every
   // time (§07 gap: found live during review). studio.examples.rooftop

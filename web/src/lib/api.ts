@@ -426,9 +426,10 @@ export const api = {
 
   // F7.1: newest-first, optional status filter, cursor pagination (see
   // jobsvc.Service.List's doc for the cursor shape — a decreasing numeric id).
-  listJobs: (opts: { status?: string; cursor?: string; limit?: number; projectId?: string } = {}) => {
+  listJobs: (opts: { status?: string; bucket?: string; cursor?: string; limit?: number; projectId?: string } = {}) => {
     const params = new URLSearchParams()
     if (opts.status) params.set('status', opts.status)
+    if (opts.bucket) params.set('bucket', opts.bucket)
     if (opts.cursor) params.set('cursor', opts.cursor)
     if (opts.limit) params.set('limit', String(opts.limit))
     if (opts.projectId) params.set('project_id', opts.projectId)

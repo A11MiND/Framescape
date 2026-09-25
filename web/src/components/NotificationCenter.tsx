@@ -48,7 +48,7 @@ export default function NotificationCenter() {
 
   const suspended = useQuery({
     queryKey: ['jobs', 'notif-suspended'],
-    queryFn: () => api.listJobs({ status: 'suspended', limit: 5 }),
+    queryFn: () => api.listJobs({ bucket: 'needs_review', limit: 5 }),
     refetchInterval: 15_000,
   })
   // Previously only 'suspended'/'succeeded' were tracked here — a job that
@@ -58,7 +58,7 @@ export default function NotificationCenter() {
   // think to check.
   const failed = useQuery({
     queryKey: ['jobs', 'notif-failed'],
-    queryFn: () => api.listJobs({ status: 'failed', limit: 5 }),
+    queryFn: () => api.listJobs({ bucket: 'failed', limit: 5 }),
     refetchInterval: 15_000,
   })
   const recent = useQuery({

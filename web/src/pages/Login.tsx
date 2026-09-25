@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { safeReturnPath } from '../app/routing'
 import { useTranslation } from 'react-i18next'
 import { api, ApiError } from '../lib/api'
 import { useAuthStore } from '../lib/authStore'
@@ -99,6 +100,9 @@ export default function Login() {
   const [busy, setBusy] = useState(false)
   const setTokens = useAuthStore((s) => s.setTokens)
   const navigate = useNavigate()
+  const location = useLocation()
+  // After sign-in, go back to the page that required it.
+  const afterSignIn = () => navigate(safeReturnPath((location.state as { from?: unknown } | null)?.from) ?? '/', { replace: true })
 
   // §07's "Google 登录/手机号注册" ask — both real providers require
   // credentials this app was never handed (Google OAuth client ID, an SMS
@@ -132,7 +136,7 @@ export default function Login() {
           try {
             const tokens = await api.googleLogin(resp.credential)
             setTokens(tokens.access_token, tokens.refresh_token)
-            navigate('/')
+            afterSignIn()
           } catch (err) {
             setError(friendlyError(err))
           }
@@ -177,7 +181,7 @@ export default function Login() {
     try {
       const tokens = await api.verifyPhoneCode(phone, phoneCode)
       setTokens(tokens.access_token, tokens.refresh_token)
-      navigate('/')
+      afterSignIn()
     } catch (err) {
       setError(friendlyError(err))
     } finally {
@@ -202,7 +206,7 @@ export default function Login() {
     try {
       const tokens = mode === 'login' ? await api.login(email, password) : await api.register(email, password, emailCode)
       setTokens(tokens.access_token, tokens.refresh_token)
-      navigate('/')
+      afterSignIn()
     } catch (err) {
       setError(friendlyError(err))
     } finally {

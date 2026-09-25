@@ -19,9 +19,9 @@
   "top": {
     "currentProject": "当前项目",
     "allProjects": "全部项目",
-    "running": "进行中 {{count}}",
-    "needsReview": "待确认 {{count}}",
-    "credits": "{{count}} 积分",
+    "running": "进行中 {{n}}",
+    "needsReview": "待确认 {{n}}",
+    "credits": "{{n}} 积分",
     "language": "界面语言",
     "account": "账户菜单",
     "notifications": "通知",
@@ -42,5 +42,9 @@
   "more": {
     "title": "更多",
     "language": "语言"
+  },
+  "lang": {
+    "zh": "中文",
+    "en": "EN"
   }
 }

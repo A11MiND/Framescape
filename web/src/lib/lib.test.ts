@@ -41,3 +41,23 @@ describe('errorText', () => {
     expect(failureText(i18n.t, 'something_new')).toBe(i18n.t('codes:unknown'))
   })
 })
+
+describe('prefillTarget', async () => {
+  const { prefillTarget, safeReturnPath } = await import('../app/routing')
+  it('opens the mode of the job being created again', () => {
+    const comic = { prefillJob: { workflowName: 'image.comic4', spec: { comic_mode: 'editable', text: 'x' } } }
+    expect(prefillTarget(comic)).toEqual({ mode: 'comic', state: { prefillComic: comic.prefillJob.spec } })
+    expect(prefillTarget({ prefillJob: { workflowName: 'image.comic4', spec: {} } })?.mode).toBe('comic-classic')
+    expect(prefillTarget({ prefillJob: { workflowName: 'video.sequence', spec: {} } })?.mode).toBe('video-sequence')
+    expect(prefillTarget({ prefillJob: { workflowName: 'image.batch', spec: {} } })?.mode).toBe('image')
+    expect(prefillTarget(null)).toBeNull()
+  })
+
+  it('follows only same-site return paths', () => {
+    expect(safeReturnPath('/jobs/1?x=2')).toBe('/jobs/1?x=2')
+    expect(safeReturnPath('//evil.example')).toBeNull()
+    expect(safeReturnPath('https://evil.example')).toBeNull()
+    expect(safeReturnPath('/login')).toBeNull()
+    expect(safeReturnPath(undefined)).toBeNull()
+  })
+})

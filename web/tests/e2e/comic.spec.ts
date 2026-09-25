@@ -10,7 +10,10 @@ async function setup(page: Page, { comicAI = true } = {}) {
   await page.route('**/api/v1/**', async route => {
     const req = route.request(), path = new URL(req.url()).pathname.split('/api/v1')[1]
     const send = (data: unknown, status = 200) => route.fulfill({ json: data, status })
-    if (path === '/me') return send({ biz_id: 'test-user', email: 'test@example.com', balance: 1000, is_admin: false, comic_ai: comicAI })
+    if (path === '/me') return send({ biz_id: 'test-user', email: 'test@example.com', phone: null, balance: 1000, held: 0, is_admin: false, comic_ai: comicAI, entitlements: comicAI ? ['openai_image'] : [] })
+    if (path === '/projects') return send({ projects: [] })
+    if (path === '/jobs/summary') return send({ needs_review: 0, active: 0, succeeded: 0, failed: 0, cancelled: 0, total: 0, statuses: {} })
+    if (path === '/stream') return route.fulfill({ status: 200, contentType: 'text/event-stream', body: ': heartbeat\n\n' })
     if (path === '/capabilities') return send({ image: { max_n: 9, max_prompt_chars: 1500 }, comic: { openai_enabled: true, model: 'gpt-image-2.5-flare' }, video: { resolutions: [], ratios: [] } })
     if (path === '/comics' && req.method() === 'GET') return send({ comics: [{ biz_id: saved.biz_id, title: saved.document.title, version: saved.version }] })
     if (path.startsWith('/comics') && req.method() !== 'GET') {
@@ -55,7 +58,7 @@ test('Chinese text, drag, resize, lock, undo and persisted reload', async ({ pag
   await page.getByRole('button', { name: '解锁', exact: true }).click()
   await page.getByRole('button', { name: '复制', exact: true }).click(); await expect(page.locator('.comic-layer')).toHaveCount(2)
   await page.getByRole('button', { name: '撤销', exact: true }).click(); await expect(page.locator('.comic-layer')).toHaveCount(1)
-  await page.getByRole('button', { name: '保存编辑稿', exact: true }).click(); await expect(page.getByRole('status')).toContainText('已保存')
+  await page.getByRole('button', { name: '保存编辑稿', exact: true }).click(); await expect(page.getByRole('main').getByRole('status')).toContainText('已保存')
   await page.screenshot({ path: 'test-results/comic-editor-desktop.png', fullPage: true })
   page.on('dialog', dialog => dialog.accept())
   await page.reload()
@@ -171,7 +174,7 @@ test('regenerate from a new comic job opens the new editor with its brief', asyn
   page.on('dialog', dialog => dialog.accept())
   await page.goto('/jobs/generation-one')
   await page.getByRole('button', { name: '以此再生成', exact: true }).click()
-  await expect(page).toHaveURL(/\/comics$/)
+  await expect(page).toHaveURL(/\/create\/comic$/)
   await expect(page.getByLabel('故事、画风与四格画面要求')).toHaveValue('清新扁平插画，阿健是工程师，小智是机器人。四格故事。')
   expect(state.jobRequests).toHaveLength(0)
 })

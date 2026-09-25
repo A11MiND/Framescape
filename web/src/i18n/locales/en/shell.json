@@ -19,9 +19,9 @@
   "top": {
     "currentProject": "Current project",
     "allProjects": "All projects",
-    "running": "Running {{count}}",
-    "needsReview": "Needs review {{count}}",
-    "credits": "{{count}} credits",
+    "running": "Running {{n}}",
+    "needsReview": "Needs review {{n}}",
+    "credits": "{{n}} credits",
     "language": "Interface language",
     "account": "Account menu",
     "notifications": "Notifications",
@@ -42,5 +42,9 @@
   "more": {
     "title": "More",
     "language": "Language"
+  },
+  "lang": {
+    "zh": "中文",
+    "en": "EN"
   }
 }

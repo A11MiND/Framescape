@@ -16,5 +16,5 @@ export const accountApi = {
 }
 
 export function hasOpenAIImage(me: Me | undefined): boolean {
-  return Boolean(me && (me.is_admin || me.entitlements.includes('openai_image')))
+  return Boolean(me && (me.is_admin || (me.entitlements ?? []).includes('openai_image')))
 }
