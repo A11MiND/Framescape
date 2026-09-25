@@ -61,6 +61,18 @@ function useSizeLabel() {
   }
 }
 
+/** A size choice drawn as its aspect ratio, so shapes compare at a glance. */
+function SizeOption({ size, label }: { size: string; label: string }) {
+  const [w, h] = size.split('x').map(Number)
+  const scale = 14 / Math.max(w || 1, h || 1)
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {w > 0 && h > 0 && <span aria-hidden className="rounded-[2px] border-[1.5px] border-current" style={{ width: Math.round(w * scale), height: Math.round(h * scale) }} />}
+      <span className="truncate">{label}</span>
+    </span>
+  )
+}
+
 /** Keeps a stored option only while the deployment still offers it. */
 function pickOption(stored: string, offered: string[], fallback: string) {
   if (stored && offered.includes(stored)) return { value: stored, gone: false }
@@ -254,16 +266,17 @@ export default function GptStudio() {
                 <CharacterPicker characters={charList} value={draft.characters} onChange={(ids) => update({ characters: ids })} />
                 <p className={refCount > maxRefs ? 'text-caption text-danger-fg' : 'text-caption text-fg-muted'}>{t('reference.total', { n: refCount, max: maxRefs })}</p>
                 <PresetPicker presets={presets.data?.presets ?? []} value={draft.presets} onChange={(ids) => update({ presets: ids })} />
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label={t('gpt.size')}>
-                    <Select value={size.value} onChange={(e) => update({ size: e.target.value })}>
-                      {(openai?.sizes ?? []).map((s) => (
-                        <option key={s} value={s}>
-                          {sizeLabel(s)}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-label font-medium text-fg">{t('gpt.size')}</span>
+                  <SegmentedControl
+                    fullWidth
+                    label={t('gpt.size')}
+                    value={size.value}
+                    onChange={(v) => update({ size: v })}
+                    options={(openai?.sizes ?? []).map((s) => ({ value: s, label: <SizeOption size={s} label={sizeLabel(s)} /> }))}
+                  />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
                   <Field label={t('gpt.quality')}>
                     <Select value={quality.value} onChange={(e) => update({ quality: e.target.value })}>
                       {(openai?.qualities ?? []).map((q) => (
@@ -273,16 +286,16 @@ export default function GptStudio() {
                       ))}
                     </Select>
                   </Field>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-label font-medium text-fg">{t('count.label')}</span>
-                  <SegmentedControl
-                    fullWidth
-                    label={t('count.label')}
-                    value={String(n)}
-                    onChange={(v) => update({ n: Number(v) })}
-                    options={Array.from({ length: maxN }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))}
-                  />
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-label font-medium text-fg">{t('count.label')}</span>
+                    <SegmentedControl
+                      fullWidth
+                      label={t('count.label')}
+                      value={String(n)}
+                      onChange={(v) => update({ n: Number(v) })}
+                      options={Array.from({ length: maxN }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))}
+                    />
+                  </div>
                 </div>
                 {request && <SentPreview request={request} />}
               </>

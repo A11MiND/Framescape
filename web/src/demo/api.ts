@@ -177,7 +177,7 @@ export function createDemoApi(img: Img) {
     error_msg: '',
     created_at: x.created_at,
     started_at: x.created_at,
-    finished_at: null,
+    finished_at: ['succeeded', 'partial', 'failed', 'cancelled'].includes(x.status) ? new Date(Date.parse(x.created_at) + 148_000).toISOString() : null,
     retry_of_job_id: '',
     project_id: x.project_id,
     cover_asset_id: x.cover,

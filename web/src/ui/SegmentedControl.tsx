@@ -34,10 +34,10 @@ export function SegmentedControl<T extends string>({ value, onChange, options, l
           value={o.value}
           disabled={o.disabled}
           className={cn(
-            'inline-flex min-w-9 items-center justify-center gap-1.5 rounded-[8px] px-3 text-body font-medium text-fg-muted transition-colors',
+            'inline-flex items-center justify-center gap-1.5 rounded-[8px] text-body font-medium text-fg-muted transition-colors',
             'hover:text-fg data-[state=on]:bg-surface data-[state=on]:text-fg data-[state=on]:shadow-sm',
             'disabled:cursor-not-allowed disabled:opacity-45',
-            fullWidth && 'flex-1',
+            fullWidth ? 'min-w-0 flex-1 px-1' : 'min-w-9 px-3',
           )}
         >
           {o.label}

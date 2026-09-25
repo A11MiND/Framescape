@@ -148,11 +148,19 @@ export default function TaskCenter() {
     </>
   )
 
+  // Wide screens put the search beside the status cards; narrower ones keep it with the filters.
+  const searchBox = (className: string) => (
+    <div className={cn('relative', className)}>
+      <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-fg-muted" />
+      <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('filter.search')} aria-label={t('filter.search')} className="pl-9" />
+    </div>
+  )
+
   return (
     <div className="mx-auto flex max-w-[1280px] flex-col gap-5 px-4 py-6 lg:px-6">
       <PageHeader title={t('title')} description={t('description')} />
 
-      <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1 md:mx-0 md:grid md:grid-cols-4 md:overflow-visible md:px-0 md:pb-0">
+      <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1 md:mx-0 md:grid md:grid-cols-4 md:overflow-visible md:px-0 md:pb-0 xl:grid-cols-[repeat(4,minmax(0,1fr))_minmax(280px,1.4fr)]">
         {BUCKETS.map((b) => {
           const style = CARD_STYLE[b]
           const current = view.bucket === b
@@ -173,13 +181,11 @@ export default function TaskCenter() {
             </button>
           )
         })}
+        {searchBox('hidden self-center xl:block')}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[220px] flex-1">
-          <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-fg-muted" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('filter.search')} aria-label={t('filter.search')} className="pl-9" />
-        </div>
+        {searchBox('min-w-[220px] flex-1 xl:hidden')}
         <div className="hidden flex-wrap items-center gap-2 md:flex">{filterControls}</div>
         <Button className="md:hidden" icon={<SlidersHorizontal aria-hidden className="size-4" />} onClick={() => setSheet(true)}>
           {activeFilters ? t('filter.buttonCount', { n: activeFilters }) : t('filter.button')}

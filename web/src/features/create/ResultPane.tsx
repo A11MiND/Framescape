@@ -44,7 +44,7 @@ function CurrentJob({ bizId }: { bizId: string }) {
           {failureText(t, j.error_code || j.nodes.find((n) => n.status === 'failed')?.error_code)}
         </p>
       )}
-      {assets.length > 0 && <ResultViewer assetIds={assets} showTitle={false} />}
+      {assets.length > 0 && <ResultViewer assetIds={assets} showTitle={false} layout="grid" />}
     </div>
   )
 }

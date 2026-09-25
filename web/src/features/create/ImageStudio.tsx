@@ -150,9 +150,11 @@ export default function ImageStudio() {
           {signedIn && (
             <>
               <ReferencePicker label={t('reference.label')} value={draft.reference} onChange={(ids) => update({ reference: ids.slice(-1) })} limits={{ max: 1 }} />
-              <CharacterPicker characters={characters.data?.characters ?? []} value={draft.characters} onChange={(ids) => update({ characters: ids })} />
-              <PresetPicker presets={presets.data?.presets ?? []} value={draft.presets} onChange={(ids) => update({ presets: ids })} />
-              <div className="flex flex-col gap-4">
+              <div className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
+                <CharacterPicker characters={characters.data?.characters ?? []} value={draft.characters} onChange={(ids) => update({ characters: ids })} />
+                <PresetPicker presets={presets.data?.presets ?? []} value={draft.presets} onChange={(ids) => update({ presets: ids })} />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
                 <div className="flex flex-col gap-1.5">
                   <span className="text-label font-medium text-fg">
                     {t('count.label')}
