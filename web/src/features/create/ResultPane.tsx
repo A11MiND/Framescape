@@ -7,13 +7,14 @@ import { Card, ElapsedTime, EmptyState, IndeterminateProgress, Skeleton, StatusP
 import { jobsApi } from '../../lib/api/jobs'
 import { keys } from '../../lib/api/keys'
 import { failureText } from '../../lib/errorText'
+import { formatDateTime } from '../../lib/format'
 import { useStream } from '../../lib/stream/context'
 import { useAuthStore } from '../../lib/authStore'
 import { ResultViewer } from '../tasks/detail/ResultViewer'
 import { ACTIVE, resultAssets } from '../tasks/detail/model'
 
 function CurrentJob({ bizId }: { bizId: string }) {
-  const { t } = useTranslation('create')
+  const { t, i18n } = useTranslation('create')
   const stream = useStream()
   const job = useQuery({
     queryKey: keys.jobs.detail(bizId),
@@ -26,7 +27,10 @@ function CurrentJob({ bizId }: { bizId: string }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <StatusPill status={j.status} />
+        <span className="flex items-center gap-3">
+          <StatusPill status={j.status} />
+          <span className="text-caption text-fg-muted tabular-nums">{formatDateTime(j.created_at, i18n.language)}</span>
+        </span>
         <Link to={`/jobs/${bizId}`} className="inline-flex items-center gap-1 text-caption font-medium text-primary-text hover:underline">
           {t('result.viewTask')}
           <ArrowRight aria-hidden className="size-3.5" />

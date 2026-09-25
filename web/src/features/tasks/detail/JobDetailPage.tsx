@@ -71,6 +71,7 @@ function InfoCard({ job }: { job: JobDetail }) {
   const project = projects.data?.projects.find((p) => p.biz_id === job.project_id)
   const shots = Array.isArray(job.spec.shots) ? (job.spec.shots as string[]) : []
   const text = typeof job.spec.text === 'string' ? (job.spec.text as string) : ''
+  const params = paramRows(t, job)
   const copy = async (s: string) => {
     try {
       await navigator.clipboard.writeText(s)
@@ -113,11 +114,17 @@ function InfoCard({ job }: { job: JobDetail }) {
       )}
       <div>
         <h2 className="mb-1.5 text-caption text-fg-muted">{t('info.params')}</h2>
-        <dl className="flex flex-col gap-1.5">
-          {paramRows(t, job).map(([k, val]) => (
-            <Row key={k} label={k} value={val} />
-          ))}
-        </dl>
+        <details className="group">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-card border border-border px-3 py-2 text-body text-fg hover:bg-surface-2">
+            <span className="truncate">{params.map(([, val]) => val).join(' · ')}</span>
+            <ChevronDown aria-hidden className="size-4 shrink-0 text-fg-muted transition-transform group-open:rotate-180" />
+          </summary>
+          <dl className="mt-2 flex flex-col gap-1.5">
+            {params.map(([k, val]) => (
+              <Row key={k} label={k} value={val} />
+            ))}
+          </dl>
+        </details>
       </div>
     </Card>
   )
