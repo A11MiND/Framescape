@@ -177,3 +177,43 @@ func TestJobStatusCountsAndReviewDeadline(t *testing.T) {
 		t.Fatalf("unknown status: %d", rec.Code)
 	}
 }
+
+// TestJobListOrderAndExclude pages oldest first and drops excluded statuses.
+func TestJobListOrderAndExclude(t *testing.T) {
+	s, _ := newFullTestServer(t)
+	r := s.Router()
+	token, _ := registerAndFund(t, s, 1000)
+	a, b, c := createJob(t, s, token), createJob(t, s, token), createJob(t, s, token)
+	if err := s.db.Exec(`UPDATE jobs SET status = 'awaiting_review' WHERE biz_id = ?`, b).Error; err != nil {
+		t.Fatal(err)
+	}
+	ids := func(url string) ([]string, string) {
+		rec := doJSON(t, r, http.MethodGet, url, nil, token)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: %d %s", url, rec.Code, rec.Body.String())
+		}
+		var body struct {
+			Jobs []struct {
+				BizID string `json:"biz_id"`
+			} `json:"jobs"`
+			NextCursor string `json:"next_cursor"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &body)
+		var out []string
+		for _, j := range body.Jobs {
+			out = append(out, j.BizID)
+		}
+		return out, body.NextCursor
+	}
+	first, next := ids("/api/v1/jobs?order=oldest&limit=2")
+	rest, _ := ids("/api/v1/jobs?order=oldest&limit=2&cursor=" + next)
+	if got := append(first, rest...); len(got) != 3 || got[0] != a || got[1] != b || got[2] != c {
+		t.Fatalf("oldest first = %v, want %v", got, []string{a, b, c})
+	}
+	if got, _ := ids("/api/v1/jobs?exclude_status=awaiting_review"); len(got) != 2 || got[0] != c || got[1] != a {
+		t.Fatalf("excluding awaiting_review = %v", got)
+	}
+	if rec := doJSON(t, r, http.MethodGet, "/api/v1/jobs?exclude_status=nope", nil, token); rec.Code != http.StatusBadRequest {
+		t.Fatalf("unknown excluded status: %d", rec.Code)
+	}
+}

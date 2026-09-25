@@ -1,5 +1,6 @@
 export { cn } from './cn'
 export { Button, IconButton, type ButtonProps, type ButtonVariant, type ButtonSize } from './Button'
+export { buttonClasses } from './buttonStyles'
 export { Field, Input, Select, Textarea } from './Field'
 export { SegmentedControl, type SegmentOption } from './SegmentedControl'
 export { Tabs, TabList, TabPanel, type TabItem } from './Tabs'

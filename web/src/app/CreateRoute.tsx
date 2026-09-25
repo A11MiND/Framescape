@@ -1,7 +1,8 @@
 import { lazy, useEffect } from 'react'
 import { Navigate, useLocation, useParams } from 'react-router-dom'
 import type { Tab } from '../lib/jobResult'
-import { RequireAuth, isCreateMode, lastCreateMode, rememberCreateMode, type CreateMode } from './routing'
+import { RequireAuth } from './guards'
+import { isCreateMode, lastCreateMode, rememberCreateMode, type CreateMode } from './routing'
 
 const Studio = lazy(() => import('../pages/Studio'))
 const ComicStudio = lazy(() => import('../pages/ComicStudio'))

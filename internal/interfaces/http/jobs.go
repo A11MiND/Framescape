@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -103,15 +104,20 @@ func writeResumeError(c *gin.Context, err error) {
 	writeError(c, err, http.StatusUnprocessableEntity, "resume_failed")
 }
 
-// handleListJobs is GET /api/v1/jobs: the user's jobs newest first.
-// Filters: bucket (needs_review|active|succeeded|failed|cancelled) or an
-// exact status, workflow, q (title contains), project_id; paged by cursor.
+// handleListJobs is GET /api/v1/jobs: the user's jobs newest first, or
+// oldest first with order=oldest. Filters: bucket
+// (needs_review|active|succeeded|failed|cancelled) or an exact status,
+// exclude_status (comma separated), workflow, q (title contains),
+// project_id; paged by cursor.
 func (s *Server) handleListJobs(c *gin.Context) {
 	ctx := c.Request.Context()
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	cursor, _ := strconv.ParseUint(c.DefaultQuery("cursor", "0"), 10, 64)
 	f := jobsvc.ListFilter{Status: c.Query("status"), Bucket: c.Query("bucket"), Workflow: c.Query("workflow"),
-		Query: c.Query("q"), Cursor: cursor, Limit: limit}
+		Query: c.Query("q"), Cursor: cursor, Limit: limit, Oldest: c.Query("order") == "oldest"}
+	if ex := c.Query("exclude_status"); ex != "" {
+		f.Exclude = strings.Split(ex, ",")
+	}
 	if pid := c.Query("project_id"); pid != "" {
 		resolved, ok := s.resolveProjectID(ctx, userID(c), pid)
 		if !ok {

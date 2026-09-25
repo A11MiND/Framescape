@@ -8,19 +8,25 @@ function Fallback({ onRetry }: { onRetry: () => void }) {
 }
 
 /** Keeps a crashing page from taking the navigation down with it. */
-export class ErrorBoundary extends Component<{ children: ReactNode; resetKey?: string }, { failed: boolean }> {
-  state = { failed: false }
+interface Props {
+  children: ReactNode
+  /** A new value (the route) clears a previous failure. */
+  resetKey?: string
+}
+
+export class ErrorBoundary extends Component<Props, { failed: boolean; key?: string }> {
+  state = { failed: false, key: this.props.resetKey }
 
   static getDerivedStateFromError() {
     return { failed: true }
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('page crashed', error, info.componentStack)
+  static getDerivedStateFromProps(props: Props, state: { failed: boolean; key?: string }) {
+    return props.resetKey !== state.key ? { failed: false, key: props.resetKey } : null
   }
 
-  componentDidUpdate(prev: { resetKey?: string }) {
-    if (this.state.failed && prev.resetKey !== this.props.resetKey) this.setState({ failed: false })
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('page crashed', error, info.componentStack)
   }
 
   render() {

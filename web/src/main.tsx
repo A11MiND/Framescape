@@ -25,6 +25,13 @@ const queryClient = new QueryClient({
   },
 })
 
+// Demo mode serves sample data for screenshot review; the branch is removed
+// from production builds.
+if (import.meta.env.VITE_DEMO === '1') {
+  const { installDemo } = await import('./demo/install')
+  installDemo()
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>

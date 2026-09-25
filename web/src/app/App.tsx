@@ -3,7 +3,8 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AdminLayout } from './shell/AdminLayout'
 import { AppLayout } from './shell/AppLayout'
 import CreateRoute from './CreateRoute'
-import { RedirectKeeping, RequireAdmin, RequireAuth, lastCreateMode, prefillTarget } from './routing'
+import { RedirectKeeping, RequireAdmin, RequireAuth } from './guards'
+import { lastCreateMode, prefillTarget } from './routing'
 
 const Login = lazy(() => import('../pages/Login'))
 const Characters = lazy(() => import('../pages/Characters'))
@@ -11,7 +12,7 @@ const Presets = lazy(() => import('../pages/Presets'))
 const Assets = lazy(() => import('../pages/Assets'))
 const AssetDetail = lazy(() => import('../pages/AssetDetail'))
 const Community = lazy(() => import('../pages/Community'))
-const Jobs = lazy(() => import('../pages/Jobs'))
+const TaskCenter = lazy(() => import('../features/tasks/TaskCenter'))
 const JobDetail = lazy(() => import('../pages/JobDetail'))
 const Credits = lazy(() => import('../pages/Credits'))
 const Projects = lazy(() => import('../pages/Projects'))
@@ -44,7 +45,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/create/:mode?" element={<CreateRoute />} />
         <Route path="/community" element={<Community />} />
-        <Route path="/jobs" element={<Authed><Jobs /></Authed>} />
+        <Route path="/jobs" element={<Authed><TaskCenter /></Authed>} />
         <Route path="/jobs/:bizId" element={<Authed><JobDetail /></Authed>} />
         <Route path="/assets" element={<Authed><Assets /></Authed>} />
         <Route path="/assets/:assetId" element={<Authed><AssetDetail /></Authed>} />

@@ -1,23 +1,9 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { cn } from './cn'
+import { sizes, variants, type ButtonSize, type ButtonVariant } from './buttonStyles'
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-outline'
-export type ButtonSize = 'sm' | 'md' | 'lg'
-
-const variants: Record<ButtonVariant, string> = {
-  primary: 'bg-primary text-white hover:bg-primary-hover',
-  secondary: 'bg-surface text-fg border border-border-control hover:bg-surface-2',
-  ghost: 'text-primary-text hover:bg-primary-soft',
-  danger: 'bg-danger text-white hover:bg-danger-hover',
-  'danger-outline': 'bg-surface text-danger-fg border border-danger hover:bg-danger-soft',
-}
-
-const sizes: Record<ButtonSize, string> = {
-  sm: 'h-8 px-3 text-body gap-1.5',
-  md: 'h-10 px-4 text-body gap-2',
-  lg: 'h-12 px-5 text-body-lg font-semibold gap-2',
-}
+export type { ButtonSize, ButtonVariant }
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant

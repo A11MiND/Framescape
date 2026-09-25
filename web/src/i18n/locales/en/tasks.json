@@ -1,0 +1,90 @@
+{
+  "title": "Tasks",
+  "description": "Your image, video and comic generation tasks.",
+  "cards": {
+    "needs_review": "Needs review",
+    "active": "Running",
+    "succeeded": "Completed",
+    "failed": "Failed"
+  },
+  "filter": {
+    "label": "Status",
+    "all": "All",
+    "groups": "Groups",
+    "other": "Other statuses",
+    "failedHint": "Failed (incl. partly completed)",
+    "project": "Project",
+    "allProjects": "All projects",
+    "type": "Type",
+    "allTypes": "All types",
+    "order": "Sort",
+    "newest": "Newest first",
+    "oldest": "Oldest first",
+    "search": "Search task titles",
+    "withCount": "{{label}} ({{n}})",
+    "button": "Filters",
+    "sheetTitle": "Filter tasks",
+    "buttonCount": "Filters ({{n}})"
+  },
+  "type": {
+    "image.single": "Image",
+    "image.sequence": "Image sequence",
+    "image.comic4": "Comic",
+    "video.single": "Video",
+    "video.sequence": "Video sequence",
+    "unknown": "Other"
+  },
+  "pinned": "Waiting for your decision",
+  "pinnedHint": "These video previews need you to keep, redo or upgrade each clip.",
+  "column": {
+    "task": "Task",
+    "type": "Type",
+    "progress": "Progress",
+    "status": "Status",
+    "credits": "Credits",
+    "created": "Created",
+    "actions": "Actions"
+  },
+  "credits": "Reserved {{reserved}} · settled {{settled}}",
+  "progress": "{{done}} / {{total}} steps",
+  "untitled": "Untitled task",
+  "retryOf": "Retry of another task",
+  "action": {
+    "view": "View",
+    "review": "Review",
+    "reason": "See why",
+    "rename": "Rename",
+    "cancel": "Cancel task",
+    "delete": "Delete record",
+    "more": "More actions",
+    "loadMore": "Load more"
+  },
+  "rename": {
+    "title": "Rename task",
+    "label": "Title"
+  },
+  "cancelConfirm": {
+    "title": "Cancel this task?",
+    "effect1": "Steps that have not started will not run",
+    "effect2": "Costs already incurred are settled; the rest of the reservation is returned",
+    "confirm": "Cancel task"
+  },
+  "deleteConfirm": {
+    "title": "Delete this task record?",
+    "effect1": "The record is removed from the task list",
+    "effect2": "Generated works stay in the library",
+    "confirm": "Delete record"
+  },
+  "done": {
+    "renamed": "Renamed",
+    "cancelling": "Cancellation requested; waiting for the server",
+    "deleted": "Record deleted"
+  },
+  "empty": {
+    "title": "No tasks yet",
+    "body": "Start your first creation from a single description.",
+    "action": "Start creating",
+    "filtered": "No tasks match these filters",
+    "clear": "Clear filters"
+  }
+}

@@ -74,8 +74,10 @@ function useField() {
   return useContext(FieldContext)
 }
 
+// Width is left to the caller for selects (inline filters are content
+// width); inputs and textareas fill their container.
 const controlBase =
-  'w-full rounded-card border bg-surface text-body text-fg placeholder:text-fg-muted transition-colors ' +
+  'rounded-card border bg-surface text-body text-fg placeholder:text-fg-muted transition-colors ' +
   'hover:border-fg-muted focus-visible:border-primary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-primary/20 ' +
   'disabled:cursor-not-allowed disabled:bg-surface-2 disabled:opacity-70'
 
@@ -95,7 +97,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
       ref={ref}
       {...rest}
       {...controlProps(field, rest)}
-      className={cn(controlBase, 'h-10 px-3', field?.invalid ? 'border-danger' : 'border-border-control', className)}
+      className={cn(controlBase, 'h-10 w-full px-3', field?.invalid ? 'border-danger' : 'border-border-control', className)}
     />
   )
 })
@@ -110,7 +112,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
       ref={ref}
       {...rest}
       {...controlProps(field, rest)}
-      className={cn(controlBase, 'h-10 px-3 pr-8', field?.invalid ? 'border-danger' : 'border-border-control', className)}
+      className={cn(controlBase, 'h-10 px-3 pr-8', field ? 'w-full' : 'max-w-full', field?.invalid ? 'border-danger' : 'border-border-control', className)}
     >
       {children}
     </select>
@@ -151,7 +153,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
         {...controlProps(field, rest)}
         className={cn(
           controlBase,
-          'min-h-24 resize-y px-3 py-2',
+          'min-h-24 w-full resize-y px-3 py-2',
           maxChars !== undefined && 'pb-7',
           field?.invalid || over ? 'border-danger' : 'border-border-control',
           className,

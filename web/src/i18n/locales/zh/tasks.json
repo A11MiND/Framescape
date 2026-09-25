@@ -1,0 +1,90 @@
+{
+  "title": "任务",
+  "description": "管理你的图片、视频与漫画生成任务。",
+  "cards": {
+    "needs_review": "待确认",
+    "active": "进行中",
+    "succeeded": "已完成",
+    "failed": "失败"
+  },
+  "filter": {
+    "label": "状态",
+    "all": "全部",
+    "groups": "分组",
+    "other": "其他状态",
+    "failedHint": "失败（含部分完成）",
+    "project": "项目",
+    "allProjects": "全部项目",
+    "type": "类型",
+    "allTypes": "全部类型",
+    "order": "排序",
+    "newest": "创建时间：新→旧",
+    "oldest": "创建时间：旧→新",
+    "search": "搜索任务标题",
+    "withCount": "{{label}}（{{n}}）",
+    "button": "筛选",
+    "sheetTitle": "筛选任务",
+    "buttonCount": "筛选（{{n}}）"
+  },
+  "type": {
+    "image.single": "图片",
+    "image.sequence": "连续图片",
+    "image.comic4": "漫画",
+    "video.single": "视频",
+    "video.sequence": "连续视频",
+    "unknown": "其他"
+  },
+  "pinned": "待你确认",
+  "pinnedHint": "这些视频预览需要你选择保留、重做或升级。",
+  "column": {
+    "task": "作品 / 任务",
+    "type": "类型",
+    "progress": "进度",
+    "status": "状态",
+    "credits": "积分",
+    "created": "创建时间",
+    "actions": "操作"
+  },
+  "credits": "预留 {{reserved}} · 已结算 {{settled}}",
+  "progress": "{{done}} / {{total}} 步",
+  "untitled": "未命名任务",
+  "retryOf": "重试自另一任务",
+  "action": {
+    "view": "查看",
+    "review": "去确认",
+    "reason": "查看原因",
+    "rename": "重命名",
+    "cancel": "取消任务",
+    "delete": "删除记录",
+    "more": "更多操作",
+    "loadMore": "加载更多"
+  },
+  "rename": {
+    "title": "重命名任务",
+    "label": "标题"
+  },
+  "cancelConfirm": {
+    "title": "取消这个任务？",
+    "effect1": "未开始的步骤不再执行",
+    "effect2": "已产生的费用照常结算，剩余预留退回",
+    "confirm": "取消任务"
+  },
+  "deleteConfirm": {
+    "title": "删除这条任务记录？",
+    "effect1": "记录从任务列表中移除",
+    "effect2": "已生成的作品仍保留在素材库",
+    "confirm": "删除记录"
+  },
+  "done": {
+    "renamed": "已重命名",
+    "cancelling": "已请求取消，等待服务端确认",
+    "deleted": "已删除记录"
+  },
+  "empty": {
+    "title": "还没有任务",
+    "body": "从一句描述开始你的第一次创作。",
+    "action": "去创作",
+    "filtered": "没有符合条件的任务",
+    "clear": "清除筛选"
+  }
+}

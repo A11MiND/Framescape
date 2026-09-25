@@ -465,16 +465,21 @@ var bucketStatuses = map[string][]string{
 // ListFilter narrows a job listing. Status is an exact status; Bucket a
 // group of statuses; Query matches the title.
 type ListFilter struct {
-	Status    string
-	Bucket    string
+	Status string
+	Bucket string
+	// Exclude drops these statuses, e.g. awaiting_review when the task
+	// center shows those pinned above the list.
+	Exclude   []string
 	Workflow  string
 	Query     string
 	ProjectID *uint64
 	Cursor    uint64
 	Limit     int
+	// Oldest lists oldest first; the cursor then pages forward.
+	Oldest bool
 }
 
-// List returns a user's jobs newest first, paged by id cursor.
+// List returns a user's jobs newest first (or oldest first), paged by id cursor.
 func (s *Service) List(ctx context.Context, userID uint64, f ListFilter) ([]persistence.Job, uint64, error) {
 	limit := f.Limit
 	if limit <= 0 || limit > 100 {
@@ -494,20 +499,36 @@ func (s *Service) List(ctx context.Context, userID uint64, f ListFilter) ([]pers
 		}
 		q = q.Where("status IN ?", statuses)
 	}
+	if len(f.Exclude) > 0 {
+		for _, st := range f.Exclude {
+			if !slices.Contains(jobStatuses, st) {
+				return nil, 0, apperr.New("bad_request", fmt.Sprintf("unknown status %q", st))
+			}
+		}
+		q = q.Where("status NOT IN ?", f.Exclude)
+	}
 	if f.Workflow != "" {
 		q = q.Where("workflow_name = ?", f.Workflow)
 	}
 	if f.Query != "" {
 		q = q.Where("title LIKE ?", "%"+escapeLike(f.Query)+"%")
 	}
+	order := "id DESC"
+	if f.Oldest {
+		order = "id ASC"
+	}
 	if f.Cursor > 0 {
-		q = q.Where("id < ?", f.Cursor)
+		if f.Oldest {
+			q = q.Where("id > ?", f.Cursor)
+		} else {
+			q = q.Where("id < ?", f.Cursor)
+		}
 	}
 	if f.ProjectID != nil {
 		q = q.Where("project_id = ?", *f.ProjectID)
 	}
 	var rows []persistence.Job
-	if err := q.Order("id DESC").Limit(limit).Find(&rows).Error; err != nil {
+	if err := q.Order(order).Limit(limit).Find(&rows).Error; err != nil {
 		return nil, 0, fmt.Errorf("list jobs: %w", err)
 	}
 	var next uint64
