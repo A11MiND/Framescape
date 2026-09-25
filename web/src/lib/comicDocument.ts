@@ -1,3 +1,4 @@
+import { ComicError } from './comicError'
 import { z } from 'zod'
 
 export const PAGE_WIDTH = 1536
@@ -54,15 +55,17 @@ const documentSchema = z.object({
 }).refine(d => new Set(d.layers.map(l => l.id)).size === d.layers.length)
 export function parseComicDocument(value: unknown): ComicDocument {
   const result = documentSchema.safeParse(value)
-  if (!result.success) throw new Error('编辑稿格式无效、版本不支持或内容超出限制。')
+  if (!result.success) throw new ComicError('invalidDocument')
   return result.data
 }
-export function newComic(): ComicDocument {
-  return { schema_version: 1, title: '未命名四格漫画', mode: 'editable', brief: '', background: '', context: '', references: [], page_asset_id: '', panel_asset_ids: ['', '', '', ''], layers: [] }
+/** A blank comic; callers pass the localized title. */
+export function newComic(title = 'Untitled comic'): ComicDocument {
+  return { schema_version: 1, title, mode: 'editable', brief: '', background: '', context: '', references: [], page_asset_id: '', panel_asset_ids: ['', '', '', ''], layers: [] }
 }
 export const charCount = (s: string) => Array.from(s).length
-export function newLayer(kind: ComicLayer['kind'], id: string, panel = 0): ComicLayer {
-  return { id, kind, x: (panel % 2) * .5 + .035, y: Math.floor(panel / 2) * .5 + .035, w: kind === 'logo' ? .12 : .4, h: kind === 'logo' ? .12 : .16, text: kind === 'logo' ? '' : '在这里输入对白', font_size: 32, color: '#172033', fill: '#ffffff', tail: kind === 'bubble' ? 'left' : 'none', locked: false }
+/** A new layer; callers pass the localized placeholder dialogue. */
+export function newLayer(kind: ComicLayer['kind'], id: string, panel = 0, placeholder = ''): ComicLayer {
+  return { id, kind, x: (panel % 2) * .5 + .035, y: Math.floor(panel / 2) * .5 + .035, w: kind === 'logo' ? .12 : .4, h: kind === 'logo' ? .12 : .16, text: kind === 'logo' ? '' : placeholder, font_size: 32, color: '#172033', fill: '#ffffff', tail: kind === 'bubble' ? 'left' : 'none', locked: false }
 }
 export function constrainLayer(l: ComicLayer): ComicLayer {
   const w = Math.max(.02, Math.min(1, l.w)), h = Math.max(.02, Math.min(1, l.h))
@@ -76,7 +79,8 @@ export function applyGeneratedImage(doc: ComicDocument, assetID: string, panel: 
 }
 // Source retrieval is local and reviewable, not an LLM summary. Never send the
 // entire 200k source to an image model or silently cut off the approved brief.
-export function sourceExcerpts(source: string, query: string, limit = 6500): string {
+/** `rangeLabel` marks each excerpt with its position in the source for review. */
+export function sourceExcerpts(source: string, query: string, rangeLabel: (from: number, to: number) => string, limit = 6500): string {
   const chars = Array.from(source)
   const terms = Array.from(new Set(query.toLowerCase().match(/[a-z0-9]{2,}|[\u3400-\u9fff]{2,}/g) ?? []))
     .flatMap(t => /[\u3400-\u9fff]/.test(t) ? Array.from(t).slice(0, -1).map((_, i) => t.slice(i, i + 2)) : [t])
@@ -87,7 +91,7 @@ export function sourceExcerpts(source: string, query: string, limit = 6500): str
   }
   let length = 0
   return chunks.sort((a, b) => b.score - a.score || a.start - b.start).slice(0, 7).sort((a, b) => a.start - b.start)
-    .map(chunk => `[原文字符 ${chunk.start + 1}–${chunk.start + charCount(chunk.text)}]\n${chunk.text}`)
+    .map(chunk => `${rangeLabel(chunk.start + 1, chunk.start + charCount(chunk.text))}\n${chunk.text}`)
     .filter(text => { length += charCount(text) + 2; return length <= limit }).join('\n\n')
 }
 export function wrapText(text: string, width: number, measure: (text: string) => number): string[] {

@@ -1,3 +1,4 @@
+import { ComicError } from './comicError'
 import { PAGE_WIDTH as W, PAGE_HEIGHT as H, wrapText, type ComicDocument, type ComicLayer } from './comicDocument'
 
 export type ComicImages = Record<string, HTMLImageElement>
@@ -5,7 +6,7 @@ export function loadComicImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image(); image.crossOrigin = 'anonymous'
     image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error('图片加载失败。请检查素材链接及存储服务的跨域设置。'))
+    image.onerror = () => reject(new ComicError('imageLoadFailed'))
     image.src = url
   })
 }
@@ -16,16 +17,16 @@ function contain(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: numb
 }
 // One renderer is used for the preview and export. No DOM screenshot, remote
 // SVG, foreignObject, or separate text-wrapping implementation is involved.
-export function renderComic(canvas: HTMLCanvasElement, doc: ComicDocument, images: ComicImages): string[] {
+export function renderComic(canvas: HTMLCanvasElement, doc: ComicDocument, images: ComicImages, panelLabel: (n: number) => string = String): string[] {
   canvas.width = W; canvas.height = H
   const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('浏览器不支持画布')
+  if (!ctx) throw new ComicError('noCanvas')
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H)
   if (images[doc.page_asset_id]) contain(ctx, images[doc.page_asset_id], 0, 0, W, H)
   else {
     ctx.fillStyle = '#f1f5f9'; ctx.fillRect(0, 0, W, H)
     ctx.fillStyle = '#64748b'; ctx.font = '28px sans-serif'; ctx.textAlign = 'center'
-    for (let i = 0; i < 4; i++) ctx.fillText(`第 ${i + 1} 格`, (i % 2) * W / 2 + W / 4, Math.floor(i / 2) * H / 2 + H / 4)
+    for (let i = 0; i < 4; i++) ctx.fillText(panelLabel(i + 1), (i % 2) * W / 2 + W / 4, Math.floor(i / 2) * H / 2 + H / 4)
   }
   doc.panel_asset_ids.forEach((id, i) => {
     if (!images[id]) return
@@ -68,16 +69,17 @@ function drawTextLayer(ctx: CanvasRenderingContext2D, l: ComicLayer): boolean {
   ctx.restore()
   return overflow
 }
-export async function exportComic(doc: ComicDocument, images: ComicImages): Promise<Blob> {
-  await document.fonts.load('32px "Noto Sans TC"', doc.layers.map(l => l.text).join('') || '漫画')
+/** `fontSample` loads the lettering font when the page has no text yet. */
+export async function exportComic(doc: ComicDocument, images: ComicImages, fontSample: string): Promise<Blob> {
+  await document.fonts.load('32px "Noto Sans TC"', doc.layers.map(l => l.text).join('') || fontSample)
   await document.fonts.ready
   const canvas = document.createElement('canvas')
-  if (renderComic(canvas, doc, images).length) throw new Error('对白超出对话框，请放大对话框或减小字号后再导出。')
+  if (renderComic(canvas, doc, images).length) throw new ComicError('overflow')
   for (const id of [doc.page_asset_id, ...doc.panel_asset_ids, ...doc.layers.map(l => l.asset_id ?? '')].filter(Boolean)) {
-    if (!images[id]) throw new Error('仍有图片未加载，暂时不能导出。')
+    if (!images[id]) throw new ComicError('imagesPending')
   }
   return new Promise((resolve, reject) => {
-    try { canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('无法导出图片')), 'image/png') }
-    catch { reject(new Error('图片跨域设置阻止导出，请检查存储服务 CORS。')) }
+    try { canvas.toBlob(blob => blob ? resolve(blob) : reject(new ComicError('exportFailed')), 'image/png') }
+    catch { reject(new ComicError('exportBlocked')) }
   })
 }

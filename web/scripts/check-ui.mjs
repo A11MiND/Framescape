@@ -55,6 +55,8 @@ const PALETTE =
   /\b(?:bg|text|border|ring|from|to|via|fill|stroke|outline|divide|placeholder|decoration|shadow|accent|caret)-(?:zinc|violet|neutral|gray|slate|stone|red|amber|emerald|green|blue|yellow|orange|purple|pink|indigo|sky|teal|cyan|lime|rose|fuchsia)-\d{2,3}\b/
 const REBUILT = ['ui', 'app', 'features', 'lib/api', 'lib/stream', 'lib/format.ts', 'lib/errorText.ts', 'lib/theme.ts'].map((p) => path.join(src, p))
 const isRebuilt = (p) => REBUILT.some((r) => p === r || p.startsWith(r + path.sep))
+// Localized but not yet restyled: checked for CJK text only.
+const LOCALIZED = ['pages/ComicStudio.tsx', 'components/ComicCanvas.tsx', 'lib/comicDocument.ts', 'lib/comicRender.ts', 'lib/comicImport.ts', 'lib/comicError.ts', 'lib/comicErrorText.ts'].map((p) => path.join(src, p))
 
 function walk(dir) {
   for (const name of fs.readdirSync(dir)) {
@@ -66,11 +68,13 @@ function walk(dir) {
     if (!/\.(tsx?|css|json|html)$/.test(name)) continue
     const rel = path.relative(root, p)
     const lines = fs.readFileSync(p, 'utf8').split('\n')
-    const code = /\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name) && isRebuilt(p)
+    const source = /\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name)
+    const code = source && isRebuilt(p)
+    const localized = source && LOCALIZED.includes(p)
     lines.forEach((line, i) => {
       const at = `${rel}:${i + 1}`
       if (EMOJI.test(line)) problems.push(`${at}: emoji`)
-      if (code && CJK.test(line)) problems.push(`${at}: CJK text belongs in a locale file`)
+      if ((code || localized) && CJK.test(line)) problems.push(`${at}: CJK text belongs in a locale file`)
       if (code && PALETTE.test(line)) problems.push(`${at}: raw palette class, use a semantic token`)
     })
   }

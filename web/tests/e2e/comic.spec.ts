@@ -2,11 +2,14 @@ import { test, expect, type Page } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import { newComic } from '../../src/lib/comicDocument'
 
-async function setup(page: Page, { comicAI = true } = {}) {
+async function setup(page: Page, { comicAI = true, lang = 'zh' } = {}) {
   const document = newComic(); document.title = '港燈 ESG 漫画'; document.brief = '清新扁平插画，阿健是工程师，小智是机器人。四格故事。'; document.page_asset_id = 'page-original'
   let saved = { biz_id: 'draft-one', version: 1, document }
   const state = { conflict: false, finished: false, jobRequests: [] as Record<string, unknown>[], assetUploads: 0 }
-  await page.addInitScript(() => localStorage.setItem('aigc.auth', JSON.stringify({ accessToken: 'test-token', refreshToken: 'test-refresh' })))
+  await page.addInitScript((l) => {
+    localStorage.setItem('aigc.auth', JSON.stringify({ accessToken: 'test-token', refreshToken: 'test-refresh' }))
+    localStorage.setItem('aigc.lang', l)
+  }, lang)
   await page.route('**/api/v1/**', async route => {
     const req = route.request(), path = new URL(req.url()).pathname.split('/api/v1')[1]
     const send = (data: unknown, status = 200) => route.fulfill({ json: data, status })
@@ -43,8 +46,10 @@ async function setup(page: Page, { comicAI = true } = {}) {
   })
   await page.route('**/mock-upload', route => route.fulfill({ status: 200 }))
   await page.goto('/comics')
-  await page.getByLabel('已保存的编辑稿').selectOption('draft-one')
-  await expect(page.getByLabel('标题', { exact: true })).toHaveValue('港燈 ESG 漫画')
+  if (lang === 'zh') {
+    await page.getByLabel('已保存的编辑稿').selectOption('draft-one')
+    await expect(page.getByLabel('标题', { exact: true })).toHaveValue('港燈 ESG 漫画')
+  }
   return state
 }
 
@@ -98,6 +103,10 @@ test('200k source stays background; only reviewed excerpts go to generation', as
   await page.getByRole('button', { name: '按故事提取相关摘录' }).click()
   const excerpt = await page.getByLabel('送给模型的背景摘录（请核对事实）').inputValue()
   expect(excerpt.length).toBeLessThan(8000)
+  // Excerpts are sent only after the user confirms checking them (spec D25).
+  await page.getByRole('button', { name: '检查费用并生成' }).click()
+  await expect(page.getByRole('alert')).toContainText('请先确认已检查将发送的摘录')
+  await page.getByLabel('我已检查将发送的摘录').check()
   await page.getByRole('button', { name: '检查费用并生成' }).click()
   await page.getByRole('button', { name: '确认生成整页' }).click()
   await expect.poll(() => state.jobRequests.length).toBe(1)
@@ -127,7 +136,7 @@ test('saving conflict leaves current text intact', async ({ page }) => {
   await page.getByRole('button', { name: '添加对话框', exact: true }).click()
   await page.getByLabel('对白文字', { exact: true }).fill('必须保留的修改')
   await page.getByRole('button', { name: '保存编辑稿', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('其他窗口')
+  await expect(page.getByRole('alert')).toContainText('别处修改')
   await expect(page.getByLabel('对白文字', { exact: true })).toHaveValue('必须保留的修改')
 })
 
@@ -216,4 +225,21 @@ test('references come from the asset library, WebP allowed, GIF filtered out', a
   const spec = state.jobRequests[0].spec as Record<string, unknown>
   expect(spec.reference_image_asset_ids).toEqual(['lib-png', 'lib-webp'])
   expect(spec.text).toContain('参考图 1：阿健的长相')
+})
+
+test('the comic editor is fully translated in English', async ({ page }) => {
+  await setup(page, { lang: 'en' })
+  await expect(page.getByRole('heading', { name: 'Four-panel comic studio' })).toBeVisible()
+  await page.getByLabel('Saved drafts').selectOption('draft-one')
+  await expect(page.getByLabel('Title', { exact: true })).toHaveValue('港燈 ESG 漫画')
+  await page.getByRole('button', { name: 'Add speech bubble' }).click()
+  await page.getByText('Background material', { exact: true }).click()
+  const untranslated = await page.evaluate(() => {
+    const main = document.querySelector('main')!.cloneNode(true) as HTMLElement
+    main.querySelectorAll('select, option, textarea, input').forEach((el) => el.remove())
+    return [...main.querySelectorAll('button, label, h1, h2, legend, summary, p')]
+      .map((el) => el.textContent ?? '')
+      .filter((text) => /[\u4e00-\u9fff]/.test(text))
+  })
+  expect(untranslated).toEqual([])
 })

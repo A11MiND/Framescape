@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { comicErrorText } from '../lib/comicErrorText'
 import { api } from '../lib/api'
 import { constrainLayer, type ComicDocument, type ComicLayer } from '../lib/comicDocument'
 import { loadComicImage, renderComic, type ComicImages } from '../lib/comicRender'
@@ -12,6 +14,7 @@ interface Props {
   onImages: (images: ComicImages) => void
 }
 export default function ComicCanvas({ document: doc, selected, onSelect, onChange, onDelete, onImages }: Props) {
+  const { t } = useTranslation('comic')
   const canvas = useRef<HTMLCanvasElement>(null)
   const surface = useRef<HTMLDivElement>(null)
   const cache = useRef<ComicImages>({})
@@ -28,29 +31,29 @@ export default function ComicCanvas({ document: doc, selected, onSelect, onChang
       if (!cache.current[id]) cache.current[id] = await loadComicImage((await api.getAsset(id)).public_url)
       return [id, cache.current[id]] as const
     })).then(entries => { if (!cancelled) { const next = Object.fromEntries(entries); setImages(next); onImages(next); setError('') } })
-      .catch(err => { if (!cancelled) setError(String(err.message)) })
+      .catch(err => { if (!cancelled) setError(comicErrorText(t, err)) })
     return () => { cancelled = true }
-  }, [assetKey, onImages])
+  }, [assetKey, onImages, t])
   useEffect(() => {
     let cancelled = false
     const rendered = transient ? { ...doc, layers: doc.layers.map(l => l.id === transient.id ? transient : l) } : doc
     const text = rendered.layers.map(l => l.text).join('')
-    document.fonts.load('32px "Noto Sans TC"', text || '漫画').then(() => {
-      if (!cancelled && canvas.current) setOverflow(renderComic(canvas.current, rendered, images))
-    }).catch(() => { if (!cancelled) setError('字体加载失败，请重试后再导出。') })
+    document.fonts.load('32px "Noto Sans TC"', text || t('canvas.fontSample')).then(() => {
+      if (!cancelled && canvas.current) setOverflow(renderComic(canvas.current, rendered, images, n => t('canvas.panel', { n })))
+    }).catch(() => { if (!cancelled) setError(t('error.fontFailed')) })
     return () => { cancelled = true }
-  }, [doc, images, transient])
+  }, [doc, images, transient, t])
   const stopDrag = (commit: boolean) => {
     // A plain click (no movement) must not add an undo entry or clear the quote.
     if (drag.current && commit && drag.current.next !== drag.current.layer) onChange(drag.current.next)
     drag.current = null; setTransient(null)
   }
   return <div className="space-y-2">
-    <div ref={surface} className="comic-surface" aria-label="四格漫画画布">
-      <canvas ref={canvas} role="img" aria-label="漫画预览，文字和 Logo 可以在上方图层编辑" />
+    <div ref={surface} className="comic-surface" aria-label={t('canvas.label')}>
+      <canvas ref={canvas} role="img" aria-label={t('canvas.preview')} />
       {doc.layers.map(original => {
         const l = transient?.id === original.id ? transient : original
-        return <div key={l.id} role="button" tabIndex={0} aria-label={`${l.kind === 'logo' ? 'Logo' : '对白'}图层：${l.text || l.id}`} aria-pressed={selected === l.id}
+        return <div key={l.id} role="button" tabIndex={0} aria-label={l.kind === 'logo' ? t('canvas.layerLogo', { name: l.text || l.id }) : t('canvas.layerText', { name: l.text || l.id })} aria-pressed={selected === l.id}
           className={`comic-layer ${selected === l.id ? 'is-selected' : ''} ${l.locked ? 'is-locked' : ''}`}
           style={{ left: `${l.x * 100}%`, top: `${l.y * 100}%`, width: `${l.w * 100}%`, height: `${l.h * 100}%` }}
           onFocus={() => onSelect(l.id)}
@@ -80,7 +83,7 @@ export default function ComicCanvas({ document: doc, selected, onSelect, onChang
       })}
     </div>
     {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
-    {overflow.length > 0 && <p role="alert" className="text-sm text-amber-500">{overflow.length} 个文本框内容溢出。请放大文本框或减小字号；修复后才能导出。</p>}
-    <p className="text-xs text-zinc-500">拖动图层移动，右下角调整大小；选中后可用方向键微调。原图中的文字无法直接修改。</p>
+    {overflow.length > 0 && <p role="alert" className="text-sm text-amber-500">{t('canvas.overflow', { n: overflow.length })}</p>}
+    <p className="text-xs text-zinc-500">{t('canvas.hint')}</p>
   </div>
 }

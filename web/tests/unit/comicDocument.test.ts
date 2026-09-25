@@ -24,9 +24,9 @@ test('Chinese and supplementary characters are not split by UTF16 units', () => 
 })
 test('200k background retrieves relevant excerpts with source coordinates', () => {
   const source = '普通内容。'.repeat(199_000 / 5) + '2050绿色能源转型，港燈工程師到社区探访长者。'
-  const excerpt = sourceExcerpts(source, '社区探访长者')
+  const excerpt = sourceExcerpts(source, '社区探访长者', (from, to) => `[原文字符 ${from}–${to}]`)
   assert.ok(excerpt.includes('社区探访长者')); assert.ok(excerpt.includes('[原文字符')); assert.ok(charCount(excerpt) <= 6500)
-  assert.equal(sourceExcerpts('', 'story'), '')
+  assert.equal(sourceExcerpts('', 'story', (from, to) => `[${from}-${to}]`), '')
 })
 test('invalid panel indices are rejected', () => assert.throws(() => applyGeneratedImage(newComic(), 'x', 5)))
 test('imported editable JSON is validated before rendering', () => {
