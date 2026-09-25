@@ -57,10 +57,10 @@ function useItem(job: JobListItem) {
 function TitleBlock({ job, title, reason, retryLabel }: { job: JobListItem; title: string; reason: string | null; retryLabel: string }) {
   return (
     <div className="min-w-0">
-      <Link to={`/jobs/${job.biz_id}`} className="block truncate text-body font-medium text-fg hover:underline">
+      <Link to={`/jobs/${job.biz_id}`} className="line-clamp-2 text-body font-medium break-words text-fg hover:underline">
         {title}
       </Link>
-      {reason && <p className="truncate text-caption text-danger-fg">{reason}</p>}
+      {reason && <p className="line-clamp-2 text-caption break-words text-danger-fg">{reason}</p>}
       {!reason && job.retry_of_job_id && (
         <Link to={`/jobs/${job.retry_of_job_id}`} className="text-caption text-fg-muted hover:underline">
           {retryLabel}
@@ -83,12 +83,12 @@ export function TaskRow({ job, highlight }: { job: JobListItem; highlight?: bool
         </div>
       </td>
       <td className="px-3 text-body whitespace-nowrap text-fg-muted">{v.type}</td>
-      <td className="px-3 text-body whitespace-nowrap text-fg-muted tabular-nums">{v.progress}</td>
+      <td className="hidden px-3 text-body whitespace-nowrap text-fg-muted tabular-nums xl:table-cell">{v.progress}</td>
       <td className="px-3">
         <StatusPill status={job.status} />
       </td>
-      <td className="px-3 text-caption whitespace-nowrap text-fg tabular-nums">{v.credits}</td>
-      <td className="px-3 text-caption whitespace-nowrap text-fg-muted tabular-nums">{v.created}</td>
+      <td className="hidden px-3 text-caption whitespace-nowrap text-fg tabular-nums lg:table-cell">{v.credits}</td>
+      <td className="hidden px-3 text-caption whitespace-nowrap text-fg-muted tabular-nums xl:table-cell">{v.created}</td>
       <td className="py-2 pr-4 pl-3">
         <div className="flex items-center justify-end gap-1">
           <Link to={`/jobs/${job.biz_id}`} className={buttonClasses(v.primary.variant, 'sm')}>

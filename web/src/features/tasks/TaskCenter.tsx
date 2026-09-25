@@ -25,15 +25,15 @@ function TaskList({ jobs, highlight }: { jobs: JobListItem[]; highlight?: string
   return (
     <>
       <div className="hidden overflow-x-auto rounded-card border border-border bg-surface md:block">
-        <table className="w-full min-w-[880px] text-left">
+        <table className="w-full text-left">
           <thead>
             <tr className="border-b border-border bg-surface-2 text-caption text-fg-muted">
               <th scope="col" className="py-2.5 pr-3 pl-4 font-medium">{t('column.task')}</th>
               <th scope="col" className="px-3 font-medium">{t('column.type')}</th>
-              <th scope="col" className="px-3 font-medium">{t('column.progress')}</th>
+              <th scope="col" className="hidden px-3 font-medium xl:table-cell">{t('column.progress')}</th>
               <th scope="col" className="px-3 font-medium">{t('column.status')}</th>
-              <th scope="col" className="px-3 font-medium">{t('column.credits')}</th>
-              <th scope="col" className="px-3 font-medium">{t('column.created')}</th>
+              <th scope="col" className="hidden px-3 font-medium lg:table-cell">{t('column.credits')}</th>
+              <th scope="col" className="hidden px-3 font-medium xl:table-cell">{t('column.created')}</th>
               <th scope="col" className="py-2.5 pr-4 pl-3 text-right font-medium">{t('column.actions')}</th>
             </tr>
           </thead>
