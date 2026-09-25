@@ -68,6 +68,7 @@
     "upstream_error": "The provider returned an error. Try again shortly.",
     "version_conflict": "This was changed elsewhere. Choose which version to keep.",
     "video_ratio_required": "Choose an aspect ratio for text-to-video.",
+    "ratio_invalid": "This ratio is not offered. Choose one of: {{allowed}}.",
     "video_refs_exclusive": "First and last frames cannot be combined with reference media."
   },
   "failure": {

@@ -63,6 +63,7 @@ var ErrorCatalog = map[string]ErrorSpec{
 	"resolution_invalid":            {http.StatusUnprocessableEntity, "video resolution not offered (params.allowed)"},
 	"video_refs_exclusive":          {http.StatusUnprocessableEntity, "first/last frames cannot be combined with reference media"},
 	"video_ratio_required":          {http.StatusUnprocessableEntity, "text-to-video needs a fixed ratio"},
+	"ratio_invalid":                 {http.StatusUnprocessableEntity, "video ratio not offered (params.allowed)"},
 	"shots_required":                {http.StatusUnprocessableEntity, "at least one shot is required"},
 	"shots_too_many":                {http.StatusUnprocessableEntity, "more shots than one image sequence allows (params.max)"},
 	"shot_refs_invalid":             {http.StatusUnprocessableEntity, "a shot references itself or a later shot (params.shot)"},

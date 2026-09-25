@@ -13,7 +13,7 @@ import (
 func failedVideoJob(t *testing.T, s *Server, eng *testEngine, token, code string) string {
 	t.Helper()
 	rec := doJSON(t, s.Router(), http.MethodPost, "/api/v1/jobs",
-		createJobRequest{WorkflowName: "video.single", Spec: jobsvc.Spec{Text: "a tram along the coast"}}, token)
+		createJobRequest{WorkflowName: "video.single", Spec: jobsvc.Spec{Text: "a tram along the coast", Ratio: "16:9"}}, token)
 	var created map[string]any
 	_ = json.Unmarshal(rec.Body.Bytes(), &created)
 	bizID, _ := created["biz_id"].(string)

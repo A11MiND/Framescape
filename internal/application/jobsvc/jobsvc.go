@@ -44,6 +44,24 @@ func errResolution(got string) error {
 	return apperr.New("resolution_invalid", fmt.Sprintf("resolution must be one of %v, got %q", capability.VideoResolutions, got), "allowed", capability.VideoResolutions)
 }
 
+// checkVideoRefs applies the video reference rules before anything is
+// reserved: frames and reference media are exclusive, and text-to-video needs
+// one of the offered ratios. refImages are the reference images the call
+// will actually send (explicit ones, or the bound characters').
+func checkVideoRefs(spec Spec, refImages []string) error {
+	mode, _, _, err := prompt.CompileVideoRefs(prompt.VideoRefs{
+		Ratio: spec.Ratio, FirstFrameAssetID: spec.FirstFrameAssetID, LastFrameAssetID: spec.LastFrameAssetID,
+		ReferenceImageAssetIDs: refImages, ReferenceVideoAssetIDs: spec.ReferenceVideoAssetIDs, ReferenceAudioAssetIDs: spec.ReferenceAudioAssetIDs,
+	})
+	if err != nil {
+		return err
+	}
+	if mode == "t2va" && !slices.Contains(capability.VideoRatios, spec.Ratio) {
+		return apperr.New("ratio_invalid", fmt.Sprintf("ratio must be one of %v, got %q", capability.VideoRatios, spec.Ratio), "allowed", capability.VideoRatios)
+	}
+	return nil
+}
+
 // CharacterSlot binds a character to a generation slot.
 type CharacterSlot struct {
 	Slot        string `json:"slot"`
@@ -292,6 +310,9 @@ func (s *Service) prepareVideoSingle(ctx context.Context, userID uint64, spec Sp
 			return nil, "", err
 		}
 	}
+	if err := checkVideoRefs(spec, refImages); err != nil {
+		return nil, "", err
+	}
 	plan := workflows.VideoSinglePlan(workflows.VideoSingle{
 		UserID: userID, Prompt: compiled.Prompt, Duration: videoDuration(spec.DurationSeconds), Resolution: videoResolution(spec.Resolution),
 		Ratio: spec.Ratio, FirstFrame: spec.FirstFrameAssetID, LastFrame: spec.LastFrameAssetID,
@@ -415,6 +436,14 @@ func EstimateBreakdown(workflowName string, spec Spec) ([]EstimateItem, int, err
 	case "video.single":
 		if spec.Resolution != "" && !slices.Contains(capability.VideoResolutions, spec.Resolution) {
 			return nil, 0, errResolution(spec.Resolution)
+		}
+		// Bound characters stand in as reference images when nothing else is attached.
+		refImages := spec.ReferenceImageAssetIDs
+		if len(refImages) == 0 && spec.FirstFrameAssetID == "" && spec.LastFrameAssetID == "" && len(spec.Characters) > 0 {
+			refImages = []string{spec.Characters[0].CharacterID}
+		}
+		if err := checkVideoRefs(spec, refImages); err != nil {
+			return nil, 0, err
 		}
 		items = []EstimateItem{{Kind: ItemKindVideoGeneration, Count: 1,
 			Credits: creditsvc.EstimateVideoCredits(videoDuration(spec.DurationSeconds), videoResolution(spec.Resolution))}}

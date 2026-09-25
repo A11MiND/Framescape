@@ -68,6 +68,7 @@
     "upstream_error": "生成服务返回错误，请稍后重试。",
     "version_conflict": "内容已在别处修改，请选择保留哪一版。",
     "video_ratio_required": "文字生成视频需要选择画面比例。",
+    "ratio_invalid": "不支持这个画面比例，可选：{{allowed}}。",
     "video_refs_exclusive": "首尾帧不能与参考素材同时使用。"
   },
   "failure": {
