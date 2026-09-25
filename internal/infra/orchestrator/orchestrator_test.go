@@ -160,9 +160,7 @@ func TestAsyncNodeSurvivesWorkerCrashWithoutResubmitting(t *testing.T) {
 	h.disp.drop.Store(true)
 	h.clock.advance(time.Minute)
 	h.disp.drop.Store(false)
-	if _, err := h.orch.Sweep(h.ctx); err != nil {
-		t.Fatal(err)
-	}
+	h.sweep()
 	if n = h.node(job, "shot-1"); n.Status != workflow.NodeWaiting {
 		t.Fatalf("after lease expiry status = %s, want waiting again", n.Status)
 	}
@@ -191,12 +189,9 @@ func TestSyncWorkerCrashIsRetriedBySweeper(t *testing.T) {
 		t.Fatalf("claim: %v %v", ok, err)
 	}
 	h.clock.advance(2 * time.Minute)
-	stats, err := h.orch.Sweep(h.ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stats.LeasesExpired != 1 {
-		t.Fatalf("expired leases = %d, want 1", stats.LeasesExpired)
+	stats := h.sweep()
+	if stats.LeasesExpired == 0 {
+		t.Fatal("no expired lease recovered")
 	}
 	h.drain(20)
 	if st, _ := h.jobStatus(job); st != workflow.JobSucceeded {
@@ -217,8 +212,8 @@ func TestLostDispatchIsResent(t *testing.T) {
 		t.Fatalf("status = %s, want still queued", st)
 	}
 	h.clock.advance(31 * time.Second)
-	if stats, err := h.orch.Sweep(h.ctx); err != nil || stats.Redispatched == 0 {
-		t.Fatalf("sweep: %+v %v", stats, err)
+	if stats := h.sweep(); stats.Redispatched == 0 {
+		t.Fatalf("sweep: %+v", stats)
 	}
 	h.drain(10)
 	if st, _ := h.jobStatus(job); st != workflow.JobSucceeded {
@@ -320,9 +315,7 @@ func TestDeadlineAbortsJob(t *testing.T) {
 	job := h.submit(&workflow.Plan{Deadline: time.Minute, Nodes: []workflow.NodeSpec{{Name: "gen", Executor: "t.ok"}}})
 	h.disp.drop.Store(true)
 	h.clock.advance(2 * time.Minute)
-	if _, err := h.orch.Sweep(h.ctx); err != nil {
-		t.Fatal(err)
-	}
+	h.sweep()
 	st, code := h.jobStatus(job)
 	if st != workflow.JobFailed || code != "deadline_exceeded" {
 		t.Fatalf("status = %s (%s), want failed/deadline_exceeded", st, code)
@@ -336,9 +329,7 @@ func TestGateTTLExpiresJob(t *testing.T) {
 		t.Logf("initial status %s", st)
 	}
 	h.clock.advance(2 * time.Hour)
-	if _, err := h.orch.Sweep(h.ctx); err != nil {
-		t.Fatal(err)
-	}
+	h.sweep()
 	st, code := h.jobStatus(job)
 	if st != workflow.JobFailed || code != "gate_expired" {
 		t.Fatalf("status = %s (%s), want failed/gate_expired", st, code)
@@ -355,9 +346,7 @@ func TestUnpublishedEventsAreResent(t *testing.T) {
 		t.Fatal("events published while publisher was failing")
 	}
 	h.clock.advance(10 * time.Second)
-	if _, err := h.orch.Sweep(h.ctx); err != nil {
-		t.Fatal(err)
-	}
+	h.sweep()
 	types := h.pub.types(job.BizID)
 	if !slices.Contains(types, EventJobFinished) {
 		t.Fatalf("finished event not re-published: %v", types)

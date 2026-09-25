@@ -409,3 +409,28 @@ func (a *asyncFixture) Poll(_ context.Context, req *executor.ExecuteRequest, ref
 	}{AssetID: "video-" + req.TaskName, Cost: 2.5})
 	return executor.PollResult{Done: true, Outputs: out}, nil
 }
+
+// sweep runs Sweep until a pass repairs nothing and returns the totals.
+// Other packages' tests share the database, and their rows can fill one
+// pass's batch; each pass stamps the rows it repairs, so repeated passes
+// reach this test's own rows.
+func (h *harness) sweep() SweepStats {
+	h.t.Helper()
+	var total SweepStats
+	for range 50 {
+		st, err := h.orch.Sweep(h.ctx)
+		if err != nil {
+			h.t.Fatalf("sweep: %v", err)
+		}
+		total.Redispatched += st.Redispatched
+		total.LeasesExpired += st.LeasesExpired
+		total.PollsResent += st.PollsResent
+		total.EventsResent += st.EventsResent
+		total.JobsAborted += st.JobsAborted
+		total.JobsRepaired += st.JobsRepaired
+		if st == (SweepStats{}) {
+			break
+		}
+	}
+	return total
+}
