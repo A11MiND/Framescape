@@ -29,6 +29,12 @@ func (s *Server) handleGetCapabilities(c *gin.Context) {
 			"max_references": comic.MaxReferences, "max_layers": comic.MaxLayers,
 			"output": gin.H{"width": 1536, "height": 1024, "format": "png", "quality": "high"},
 		},
+		// Direct uploads: the size each asset type may have once stored.
+		"uploads": gin.H{
+			"image": gin.H{"max_bytes": maxUploadBytesByType["image"]},
+			"video": gin.H{"max_bytes": maxUploadBytesByType["video"]},
+			"audio": gin.H{"max_bytes": maxUploadBytesByType["audio"]},
+		},
 		"image": gin.H{
 			"max_n":              capability.ImageMaxN,
 			"sequence_max_shots": capability.ImageSequenceMaxShots,

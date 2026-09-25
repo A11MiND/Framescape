@@ -134,6 +134,7 @@ func (s *Server) Router() *gin.Engine {
 		authed.POST("/assets/:bizID/restore", s.handleRestoreAsset)
 		authed.POST("/assets/trash/empty", s.handleEmptyTrash)
 		authed.POST("/assets/batch-download", s.handleBatchDownloadAssets)
+		authed.POST("/assets/batch", s.handleBatchAssets)
 		authed.POST("/characters", s.handleCreateCharacter)
 		authed.GET("/characters", s.handleListCharacters)
 		authed.PATCH("/characters/:bizID", s.handleUpdateCharacter)

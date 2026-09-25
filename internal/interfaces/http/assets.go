@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	"aigc-platform/internal/application/upkeep"
@@ -83,10 +84,24 @@ func (s *Server) handleListAssets(c *gin.Context) {
 	if term := c.Query("q"); term != "" {
 		q = q.Where("JSON_UNQUOTE(JSON_EXTRACT(meta, '$.prompt')) LIKE ?", "%"+term+"%")
 	}
+	// Pages continue after the last row's id (newest first).
+	if cur := c.Query("cursor"); cur != "" {
+		after, err := strconv.ParseUint(cur, 10, 64)
+		if err != nil || after == 0 {
+			c.JSON(http.StatusBadRequest, errBody("bad_request", "invalid cursor"))
+			return
+		}
+		q = q.Where("id < ?", after)
+	}
 	var rows []persistence.Asset
-	if err := q.Order("id DESC").Limit(limit).Find(&rows).Error; err != nil {
+	if err := q.Order("id DESC").Limit(limit + 1).Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, errBody("internal", "list assets"))
 		return
+	}
+	nextCursor := ""
+	if len(rows) > limit {
+		rows = rows[:limit]
+		nextCursor = strconv.FormatUint(rows[limit-1].ID, 10)
 	}
 
 	// Batch-resolve project_id -> biz_id once for the whole page rather
@@ -147,7 +162,11 @@ func (s *Server) handleListAssets(c *gin.Context) {
 		}
 		out = append(out, row)
 	}
-	c.JSON(http.StatusOK, gin.H{"assets": out})
+	body := gin.H{"assets": out}
+	if nextCursor != "" {
+		body["next_cursor"] = nextCursor
+	}
+	c.JSON(http.StatusOK, body)
 }
 
 // handleCommunityFeed is the community feed's read side (migration 00010):
@@ -495,7 +514,60 @@ func (s *Server) handleListTrash(c *gin.Context) {
 		}
 		out = append(out, j)
 	}
-	c.JSON(http.StatusOK, gin.H{"assets": out})
+	var total int64
+	if err := s.db.WithContext(c.Request.Context()).Model(&persistence.Asset{}).
+		Where("user_id = ? AND deleted_at IS NOT NULL", userID(c)).Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "count trash"))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"assets": out, "total": total})
+}
+
+// batchAssetsRequest applies one change to up to maxBatchAssets of the
+// caller's assets: delete (to the trash), restore, or move to a project
+// (project_id "" clears it).
+type batchAssetsRequest struct {
+	Op        string   `json:"op" binding:"required,oneof=delete restore move"`
+	IDs       []string `json:"ids" binding:"required,min=1,max=200"`
+	ProjectID *string  `json:"project_id"`
+}
+
+// handleBatchAssets is POST /api/v1/assets/batch; it answers how many assets changed.
+func (s *Server) handleBatchAssets(c *gin.Context) {
+	var req batchAssetsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
+		return
+	}
+	ctx := c.Request.Context()
+	q := s.db.WithContext(ctx).Model(&persistence.Asset{}).Where("biz_id IN ? AND user_id = ?", req.IDs, userID(c))
+	var res *gorm.DB
+	switch req.Op {
+	case "delete":
+		res = q.Where("deleted_at IS NULL").Update("deleted_at", time.Now())
+	case "restore":
+		res = q.Where("deleted_at IS NOT NULL").Update("deleted_at", nil)
+	case "move":
+		if req.ProjectID == nil {
+			c.JSON(http.StatusBadRequest, errBody("bad_request", "project_id is required to move assets"))
+			return
+		}
+		var target any
+		if *req.ProjectID != "" {
+			resolved, ok := s.resolveProjectID(ctx, userID(c), *req.ProjectID)
+			if !ok {
+				c.JSON(http.StatusNotFound, errBody("not_found", "project not found"))
+				return
+			}
+			target = resolved
+		}
+		res = q.Where("deleted_at IS NULL").Update("project_id", target)
+	}
+	if res.Error != nil {
+		c.JSON(http.StatusInternalServerError, errBody("internal", "update assets"))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"affected": res.RowsAffected})
 }
 
 // handleRestoreAsset undoes a soft-delete — the only way trash rows leave
