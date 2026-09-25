@@ -10,7 +10,7 @@ import { errorText } from '../../../lib/errorText'
 import { useToast } from '../../../components/Toast'
 
 /** The results of a job: one large contained view, a strip to switch, and actions by asset type. */
-export function ResultViewer({ assetIds }: { assetIds: string[] }) {
+export function ResultViewer({ assetIds, showTitle = true }: { assetIds: string[]; showTitle?: boolean }) {
   const { t } = useTranslation('job')
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -37,7 +37,7 @@ export function ResultViewer({ assetIds }: { assetIds: string[] }) {
   return (
     <section aria-labelledby="results-title" className="flex flex-col gap-3">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 id="results-title" className="text-section font-semibold text-fg">
+        <h2 id="results-title" className={showTitle ? 'text-section font-semibold text-fg' : 'sr-only'}>
           {t('results.title')}
         </h2>
         {assetIds.length > 1 && <span className="text-caption text-fg-muted">{t('results.count', { n: assetIds.length })}</span>}

@@ -163,7 +163,7 @@ function splitPanels(text: string): string[] {
     .filter(Boolean)
 }
 
-export default function Studio({ initialTab = 'image.single' }: { initialTab?: Tab }) {
+export default function Studio({ initialTab = 'image.single', embedded = false }: { initialTab?: Tab; embedded?: boolean }) {
   const { t } = useTranslation()
   const accessToken = useAuthStore((s) => s.accessToken)
   const isGuest = !accessToken
@@ -679,6 +679,7 @@ export default function Studio({ initialTab = 'image.single' }: { initialTab?: T
   return (
     <AppShell>
       <div className="mx-auto max-w-4xl space-y-8 px-6 py-10">
+        {!embedded && (
         <header className="text-center">
           {/* A native <select> used to live here — its closed state could be
               themed, but the open dropdown list is rendered by the OS/browser
@@ -694,8 +695,10 @@ export default function Studio({ initialTab = 'image.single' }: { initialTab?: T
           </h1>
           {isGuest && <p className="mt-2 text-sm text-zinc-500">{t('studio.guestHint')}</p>}
         </header>
+        )}
 
         {/* ── Format quick-switch cards ──────────────────────────── */}
+        {!embedded && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {TABS.map((tb) => {
             // image.sequence rides along under the "单图" card (its own
@@ -721,10 +724,11 @@ export default function Studio({ initialTab = 'image.single' }: { initialTab?: T
             )
           })}
         </div>
+        )}
 
         {/* ── Composer ─────────────────────────────────────────── */}
         <div className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
-          {(tab === 'image.single' || tab === 'image.sequence') && (
+          {!embedded && (tab === 'image.single' || tab === 'image.sequence') && (
             <div className="flex gap-2 text-sm">
               {([
                 ['image.single', 'studio.imageMode.single'],

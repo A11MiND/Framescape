@@ -3,6 +3,10 @@
 export const keys = {
   me: ['me'] as const,
   capabilities: ['capabilities'] as const,
+  characters: ['characters'] as const,
+  presets: ['presets'] as const,
+  estimate: (r: unknown) => ['estimate', r] as const,
+  preview: (r: unknown) => ['preview', r] as const,
   projects: {
     all: ['projects'] as const,
     list: () => ['projects', 'list'] as const,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -215,5 +216,41 @@ func TestJobListOrderAndExclude(t *testing.T) {
 	}
 	if rec := doJSON(t, r, http.MethodGet, "/api/v1/jobs?exclude_status=nope", nil, token); rec.Code != http.StatusBadRequest {
 		t.Fatalf("unknown excluded status: %d", rec.Code)
+	}
+}
+
+// TestPreviewRequestExpandsPresets previews the compiled prompt and
+// references without creating a job.
+func TestPreviewRequestExpandsPresets(t *testing.T) {
+	s, _ := newFullTestServer(t)
+	r := s.Router()
+	token, uid := registerAndFund(t, s, 100)
+	ref := seedAsset(t, s, uid, "image", "")
+	var fragment string
+	s.db.Raw(`SELECT prompt_fragment FROM presets WHERE biz_id = '01PRESETWATERCOLOR00000000'`).Row().Scan(&fragment)
+	if fragment == "" {
+		t.Skip("system presets not seeded")
+	}
+	spec := jobsvc.Spec{Text: "a cat on a wall", PresetIDs: []string{"01PRESETWATERCOLOR00000000"}, SourceImageAssetID: ref.BizID}
+	rec := doJSON(t, r, http.MethodPost, "/api/v1/jobs/preview", createJobRequest{WorkflowName: "image.single", Spec: spec}, token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("preview: %d %s", rec.Code, rec.Body.String())
+	}
+	var p jobsvc.Preview
+	_ = json.Unmarshal(rec.Body.Bytes(), &p)
+	if !strings.Contains(p.Prompt, "a cat on a wall") || !strings.Contains(p.Prompt, fragment) {
+		t.Fatalf("prompt = %q, want the text and the preset fragment %q", p.Prompt, fragment)
+	}
+	if len(p.References) != 1 || p.References[0] != ref.BizID {
+		t.Fatalf("references = %v", p.References)
+	}
+	var jobs int64
+	s.db.Model(&persistence.Job{}).Where("user_id = ?", uid).Count(&jobs)
+	if jobs != 0 {
+		t.Fatal("preview created a job")
+	}
+	rec = doJSON(t, r, http.MethodPost, "/api/v1/jobs/preview", createJobRequest{WorkflowName: "video.single", Spec: jobsvc.Spec{Text: "x"}}, token)
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "not_supported") {
+		t.Fatalf("video preview: %d %s", rec.Code, rec.Body.String())
 	}
 }

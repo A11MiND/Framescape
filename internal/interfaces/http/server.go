@@ -109,6 +109,7 @@ func (s *Server) Router() *gin.Engine {
 		authed.GET("/jobs/summary", s.handleJobsSummary)
 		authed.PATCH("/jobs/:bizID", s.handleUpdateJob)
 		authed.POST("/jobs/estimate", s.handleEstimateJob)
+		authed.POST("/jobs/preview", s.handlePreviewJob)
 		authed.GET("/jobs/:bizID", s.handleGetJob)
 		authed.GET("/jobs/:bizID/events", s.handleJobEvents)
 		authed.GET("/stream", s.handleStream)

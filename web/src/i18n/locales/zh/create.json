@@ -1,0 +1,186 @@
+{
+  "nav": {
+    "label": "创作模式",
+    "family": {
+      "image": "图片",
+      "comic": "漫画",
+      "video": "视频"
+    },
+    "mode": {
+      "image": "单图与批量",
+      "image-sequence": "连续图片",
+      "gpt": "GPT 生图",
+      "comic": "GPT 可编辑漫画",
+      "comic-classic": "经典漫画",
+      "video": "单段视频",
+      "video-sequence": "连续视频"
+    },
+    "badge": {
+      "beta": "内测未开通",
+      "unavailable": "暂不可生成"
+    }
+  },
+  "prompt": {
+    "label": "描述画面",
+    "placeholder": "描述你想生成的画面",
+    "example": "阳光明媚的海滨城市，一辆红色有轨电车行驶在靠海的街道上，远处是蓝色的大海和山城。",
+    "useExample": "填入示例",
+    "rewrite": "AI 润色",
+    "mentionHint": "输入 @ 引用角色，输入 # 引用素材库里的图片",
+    "mentionCharacters": "角色",
+    "mentionAssets": "最近的图片",
+    "mentionEmpty": "没有可引用的内容",
+    "imageN": "图{{n}}",
+    "tooLong": "描述不能超过 {{max}} 字",
+    "required": "请先描述画面"
+  },
+  "rewrite": {
+    "title": "润色建议",
+    "original": "原文",
+    "suggestion": "建议",
+    "accept": "接受建议",
+    "keep": "保留原文",
+    "failed": "润色失败，原文未改动"
+  },
+  "reference": {
+    "label": "参考图片",
+    "fromLibrary": "从素材库选择",
+    "upload": "上传",
+    "remove": "移除参考图 {{n}}",
+    "uploading": "正在上传…",
+    "pickTitle": "选择参考图",
+    "pickEmpty": "素材库里还没有图片",
+    "count": "已选 {{n}} / {{max}}",
+    "confirm": "使用所选",
+    "tooMany": "参考图最多 {{max}} 张",
+    "format": "仅支持 {{formats}} 格式",
+    "tooLarge": "单张不能超过 {{mb}} MB",
+    "total": "参考图合计 {{n}} / {{max}} 张（含角色参考图）"
+  },
+  "character": {
+    "label": "角色",
+    "none": "未选择角色",
+    "add": "添加角色",
+    "remove": "移除角色 {{name}}",
+    "choose": "选择角色",
+    "empty": "还没有角色，去角色库创建",
+    "refs": "{{n}} 张参考图"
+  },
+  "presets": {
+    "label": "风格预设",
+    "none": "未选择",
+    "choose": "选择预设",
+    "selected": "已选 {{n}} 个",
+    "title": "选择风格预设",
+    "category": {
+      "style": "风格",
+      "pose": "姿势",
+      "composition": "构图",
+      "lighting": "灯光",
+      "camera": "镜头"
+    },
+    "done": "完成",
+    "clear": "清空"
+  },
+  "count": {
+    "label": "数量"
+  },
+  "project": {
+    "label": "项目",
+    "none": "未归属项目"
+  },
+  "gpt": {
+    "title": "GPT 生图",
+    "model": "OpenAI · {{model}}",
+    "beta": "内测",
+    "mode": {
+      "label": "生成方式",
+      "general": "通用",
+      "direct": "原词直出"
+    },
+    "modeHint": {
+      "general": "支持角色与风格预设，生成前可查看实际发送内容。",
+      "direct": "原样发送你的描述：固定 1536×1024、高质量、PNG、每次 1 张，不支持批量。"
+    },
+    "size": "尺寸",
+    "quality": "质量",
+    "qualityOpt": {
+      "low": "快速",
+      "medium": "标准",
+      "high": "精细",
+      "xhigh": "超精细",
+      "max": "最高"
+    },
+    "shape": {
+      "square": "方形",
+      "landscape": "横向",
+      "portrait": "纵向"
+    },
+    "optionGone": "之前选择的 {{value}} 已不再提供，已改为 {{next}}，费用已重新计算。",
+    "preview": {
+      "show": "查看实际发送内容",
+      "hide": "收起",
+      "loading": "正在生成预览…",
+      "prompt": "发送的描述",
+      "refs": "参考图 {{n}} 张",
+      "failed": "暂时无法预览"
+    },
+    "baked": "图中文字会直接画进图片，之后不能逐字编辑。",
+    "notEnabled": {
+      "title": "GPT 生图内测未开通",
+      "body": "该账号暂未开通内测。你仍可以使用单图与批量、漫画和视频。"
+    },
+    "unavailable": {
+      "title": "GPT 生图暂不可生成",
+      "body": "此环境没有配置 OpenAI 生成服务。"
+    }
+  },
+  "cost": {
+    "label": "预计",
+    "value": "{{n}} 积分",
+    "unknown": "暂时无法计算费用",
+    "calculating": "正在计算…",
+    "explain": "费用说明",
+    "note": "提交时预留这些积分；任务结束后按实际结果结算，未用完的部分退回。",
+    "noteUsage": "GPT 生图按服务商返回的实际用量结算；预留不是用量上限，超出部分从余额扣除，只有服务商未返回用量时按预留计费。",
+    "pending": "填写描述后显示费用"
+  },
+  "action": {
+    "generate": "生成图片",
+    "reviewCost": "检查费用",
+    "confirm": "确认生成",
+    "signIn": "登录后生成",
+    "trial": "免费试用一次"
+  },
+  "confirm": {
+    "title": "确认生成",
+    "model": "模型",
+    "mode": "方式",
+    "size": "尺寸",
+    "quality": "质量",
+    "count": "数量",
+    "references": "参考图",
+    "reservation": "预留积分"
+  },
+  "result": {
+    "title": "生成结果",
+    "emptyTitle": "从一句描述开始",
+    "emptyBody": "描述你想要的画面，生成的结果会显示在这里。",
+    "running": "正在生成",
+    "viewTask": "查看任务",
+    "recent": "最近创作",
+    "viewAll": "查看全部",
+    "submitted": "已提交，结果会显示在这里"
+  },
+  "guest": {
+    "title": "免费试用 1 次",
+    "body": "登录后可获得更多创作额度，并使用角色、预设和项目。",
+    "signIn": "立即登录",
+    "result": "试用结果"
+  },
+  "error": {
+    "priceChanged": "费用已变化，请确认新的报价。",
+    "insufficient": "积分不足以预留本次费用。",
+    "topUp": "前往积分页"
+  }
+}

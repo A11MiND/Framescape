@@ -12,6 +12,8 @@ import zhTasks from './locales/zh/tasks.json'
 import enTasks from './locales/en/tasks.json'
 import zhJob from './locales/zh/job.json'
 import enJob from './locales/en/job.json'
+import zhCreate from './locales/zh/create.json'
+import enCreate from './locales/en/create.json'
 
 // The flat "translation" namespace belongs to pages not yet rebuilt; new
 // code uses one namespace per area (ui, codes, shell, and one per feature).
@@ -37,8 +39,8 @@ export function setStoredLang(lang: Lang) {
 }
 
 export const resources = {
-  zh: { translation: zh, ui: zhUi, codes: zhCodes, shell: zhShell, tasks: zhTasks, job: zhJob },
-  en: { translation: en, ui: enUi, codes: enCodes, shell: enShell, tasks: enTasks, job: enJob },
+  zh: { translation: zh, ui: zhUi, codes: zhCodes, shell: zhShell, tasks: zhTasks, job: zhJob, create: zhCreate },
+  en: { translation: en, ui: enUi, codes: enCodes, shell: enShell, tasks: enTasks, job: enJob, create: enCreate },
 } as const
 
 i18n.use(initReactI18next).init({

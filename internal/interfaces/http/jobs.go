@@ -261,6 +261,23 @@ func (s *Server) handleEstimateJob(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"credits_total": credits, "items": items})
 }
 
+// handlePreviewJob is POST /api/v1/jobs/preview: the prompt and references
+// a single-call image request would send (characters and presets
+// expanded), without submitting or reserving anything.
+func (s *Server) handlePreviewJob(c *gin.Context) {
+	var req createJobRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
+		return
+	}
+	p, err := s.jobs.PreviewRequest(c.Request.Context(), userID(c), req.WorkflowName, req.Spec)
+	if err != nil {
+		writeError(c, err, http.StatusUnprocessableEntity, "estimate_failed")
+		return
+	}
+	c.JSON(http.StatusOK, p)
+}
+
 // handleCancelJob is POST /api/v1/jobs/{bizID}/cancel (F7.4).
 // jobsvc.Service.Cancel's own doc covers why this doesn't touch credits
 // directly.

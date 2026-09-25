@@ -1,0 +1,186 @@
+{
+  "nav": {
+    "label": "Creation mode",
+    "family": {
+      "image": "Image",
+      "comic": "Comic",
+      "video": "Video"
+    },
+    "mode": {
+      "image": "Single & batch",
+      "image-sequence": "Image sequence",
+      "gpt": "GPT Image",
+      "comic": "GPT editable comic",
+      "comic-classic": "Classic comic",
+      "video": "Single clip",
+      "video-sequence": "Video sequence"
+    },
+    "badge": {
+      "beta": "Beta access required",
+      "unavailable": "Unavailable"
+    }
+  },
+  "prompt": {
+    "label": "Describe the image",
+    "placeholder": "Describe the image you want",
+    "example": "A red tram running along a seaside street in a sunny coastal city, with the blue ocean and hillside town in the distance.",
+    "useExample": "Use an example",
+    "rewrite": "Improve prompt",
+    "mentionHint": "Type @ to mention a character, # to reference a library image",
+    "mentionCharacters": "Characters",
+    "mentionAssets": "Recent images",
+    "mentionEmpty": "Nothing to mention",
+    "imageN": "Image {{n}}",
+    "tooLong": "Keep the description within {{max}} characters",
+    "required": "Describe the image first"
+  },
+  "rewrite": {
+    "title": "Suggested rewrite",
+    "original": "Original",
+    "suggestion": "Suggestion",
+    "accept": "Use suggestion",
+    "keep": "Keep original",
+    "failed": "The rewrite failed; your text is unchanged"
+  },
+  "reference": {
+    "label": "Reference image",
+    "fromLibrary": "Choose from library",
+    "upload": "Upload",
+    "remove": "Remove reference {{n}}",
+    "uploading": "Uploading…",
+    "pickTitle": "Choose reference images",
+    "pickEmpty": "No images in your library yet",
+    "count": "{{n}} of {{max}} selected",
+    "confirm": "Use selected",
+    "tooMany": "Up to {{max}} reference images",
+    "format": "Only {{formats}} files are supported",
+    "tooLarge": "Each image must be at most {{mb}} MB",
+    "total": "{{n}} of {{max}} reference images (character references included)"
+  },
+  "character": {
+    "label": "Characters",
+    "none": "No character",
+    "add": "Add character",
+    "remove": "Remove {{name}}",
+    "choose": "Choose a character",
+    "empty": "No characters yet; create one in Characters",
+    "refs": "{{n}} reference images"
+  },
+  "presets": {
+    "label": "Style presets",
+    "none": "None",
+    "choose": "Choose presets",
+    "selected": "{{n}} selected",
+    "title": "Choose style presets",
+    "category": {
+      "style": "Style",
+      "pose": "Pose",
+      "composition": "Composition",
+      "lighting": "Lighting",
+      "camera": "Camera"
+    },
+    "done": "Done",
+    "clear": "Clear"
+  },
+  "count": {
+    "label": "Count"
+  },
+  "project": {
+    "label": "Project",
+    "none": "No project"
+  },
+  "gpt": {
+    "title": "GPT Image",
+    "model": "OpenAI · {{model}}",
+    "beta": "Beta",
+    "mode": {
+      "label": "Mode",
+      "general": "General",
+      "direct": "Prompt as written"
+    },
+    "modeHint": {
+      "general": "Supports characters and presets; check what will be sent before generating.",
+      "direct": "Your text is sent as written: fixed 1536×1024, high quality, PNG, one image per task, no batches."
+    },
+    "size": "Size",
+    "quality": "Quality",
+    "qualityOpt": {
+      "low": "Fast",
+      "medium": "Standard",
+      "high": "Detailed",
+      "xhigh": "Extra detailed",
+      "max": "Maximum"
+    },
+    "shape": {
+      "square": "Square",
+      "landscape": "Landscape",
+      "portrait": "Portrait"
+    },
+    "optionGone": "{{value}} is no longer offered; switched to {{next}} and repriced.",
+    "preview": {
+      "show": "Show what will be sent",
+      "hide": "Hide",
+      "loading": "Preparing the preview…",
+      "prompt": "Prompt sent",
+      "refs": "{{n}} reference images",
+      "failed": "The preview is not available"
+    },
+    "baked": "Text in the image is drawn into it and cannot be edited afterwards.",
+    "notEnabled": {
+      "title": "GPT Image beta is not enabled",
+      "body": "This account is not in the beta yet. You can still use single & batch images, comics and video."
+    },
+    "unavailable": {
+      "title": "GPT Image is unavailable",
+      "body": "OpenAI generation is not configured on this deployment."
+    }
+  },
+  "cost": {
+    "label": "Estimated",
+    "value": "{{n}} credits",
+    "unknown": "The cost cannot be calculated right now",
+    "calculating": "Calculating…",
+    "explain": "About the cost",
+    "note": "These credits are reserved when you submit. When the task ends it is settled and the unused part returns.",
+    "noteUsage": "GPT Image is settled by the usage the provider reports. The reservation is not a cap: anything beyond it comes from your balance, and only when no usage is reported is the reservation charged.",
+    "pending": "Shown once you describe the image"
+  },
+  "action": {
+    "generate": "Generate",
+    "reviewCost": "Review cost",
+    "confirm": "Confirm and generate",
+    "signIn": "Sign in to generate",
+    "trial": "Try once free"
+  },
+  "confirm": {
+    "title": "Confirm generation",
+    "model": "Model",
+    "mode": "Mode",
+    "size": "Size",
+    "quality": "Quality",
+    "count": "Count",
+    "references": "References",
+    "reservation": "Reserved credits"
+  },
+  "result": {
+    "title": "Results",
+    "emptyTitle": "Start with a description",
+    "emptyBody": "Describe what you want; the results appear here.",
+    "running": "Generating",
+    "viewTask": "View task",
+    "recent": "Recent work",
+    "viewAll": "View all",
+    "submitted": "Submitted; results will appear here"
+  },
+  "guest": {
+    "title": "One free try",
+    "body": "Sign in for more credits, characters, presets and projects.",
+    "signIn": "Sign in",
+    "result": "Trial result"
+  },
+  "error": {
+    "priceChanged": "The price changed. Review the new quote.",
+    "insufficient": "Your credits do not cover this reservation.",
+    "topUp": "Go to credits"
+  }
+}
