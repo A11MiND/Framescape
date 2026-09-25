@@ -30,6 +30,7 @@ import { useToast } from '../../../components/Toast'
 import type { JobResponse } from '../../../lib/api'
 import { resolveTab } from '../../../lib/jobResult'
 import { suggestActions, type SuggestedAction } from '../../../lib/suggestions'
+import { PanelRetry } from './PanelRetry'
 import { ACTIVE, TERMINAL, nodeLabel, paramRows, resultAssets, stepPillStatus } from './model'
 import { ResultViewer } from './ResultViewer'
 import { ReviewPanel } from './ReviewPanel'
@@ -341,6 +342,7 @@ export default function JobDetailPage() {
                       {t('action.retryStep')}
                     </Button>
                   )}
+                  {job.panel_retry && <PanelRetry bizId={job.biz_id} />}
                 </div>
               </Card>
             )}

@@ -169,5 +169,17 @@
     "effect1": "Everyone can see this work in the community",
     "effect2": "Its generation prompt is shown with it; private references stay private",
     "confirm": "Publish"
+  },
+  "panelRetry": {
+    "action": "Edit and redraw unfinished panels",
+    "title": "Redraw unfinished panels",
+    "body": "Finished panels are kept; these panels are generated again and the page is recomposed.",
+    "newTask": "This creates a new task linked to this one; this task stays as it is.",
+    "panel": "Panel {{n}}",
+    "cost": "About {{n}} credits",
+    "costPending": "Calculating the cost",
+    "failed": "Cannot redraw: {{reason}}",
+    "confirm": "Create task and redraw",
+    "done": "Redraw task created"
   }
 }

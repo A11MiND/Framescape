@@ -86,6 +86,7 @@ const SPECS: Record<string, Record<string, unknown>> = {
   J012: { shots: ['电车沿着海岸缓缓驶入画面，阳光洒在车身上。', '海边咖啡馆的露台，俯瞰平静的海湾。', '日落时分的海岸小镇，金色的阳光洒在海面上。'], duration_seconds: 5, ratio: '16:9' },
   J007: { text: '霓虹闪烁的城市夜景，镜头缓缓推进。', duration_seconds: 5, ratio: '16:9' },
   J009: { text: '雪山倒映在平静的湖面上，清晨的薄雾。', n: 4 },
+  J005: { panels: ['柠檬挂在枝头，阳光正好', '女孩摘下柠檬，放进篮子', '柠檬切片，泡进冰水里', '女孩举起一杯柠檬汽水，笑着干杯'] },
 }
 
 function liveStatus(x: Job): Job {
@@ -296,6 +297,16 @@ export function createDemoApi(img: Img) {
       return { status: 200, body: { text: `${String((body as { text?: string })?.text ?? '').replace(/[。.]$/, '')}，清晨柔和的光线，电影感构图。` } }
     }
     if (path === '/trial/image' && method === 'POST') return { status: 200, body: { image_url: img('tram-hero.jpg') } }
+    const panelRetry = path.match(/^\/jobs\/(J005)\/panels\/retry(\/quote)?$/)
+    if (panelRetry && method === 'POST') {
+      const quote = { panels: [{ index: 4, text: (SPECS.J005.panels as string[])[3] }], items: [{ kind: 'comic4_panels', count: 1, credits: 10 }, { kind: 'prompt_enhance', count: 1, credits: 10 }], credits_total: 20 }
+      if (panelRetry[2]) return { status: 200, body: quote }
+      const src = find('J005')!
+      if ((body as { quote_total?: number })?.quote_total !== quote.credits_total) return { status: 409, body: { code: 'price_changed', message: 'changed', params: { credits_total: quote.credits_total } } }
+      const id = nextId++
+      jobs.unshift({ ...src, biz_id: `N${id}`, id: 1000 + id, status: 'running', node_done: 0, node_failed: 0, reserved: 20, settled: 0, error_code: '', created_at: new Date().toISOString(), createdMs: Date.now(), assets: ['lemon'], retryOf: 'J005', spec: SPECS.J005 })
+      return { status: 200, body: { biz_id: `N${id}`, status: 'running' } }
+    }
     const retry = path.match(/^\/jobs\/([^/]+)\/nodes\/([^/]+)\/retry$/)
     if (retry && method === 'POST') {
       const src = find(retry[1])
@@ -336,7 +347,7 @@ export function createDemoApi(img: Img) {
         liveStatus(x)
         return {
           status: 200,
-          body: { ...view(x), nodes: nodesFor(x), spec: x.spec ?? SPECS[x.biz_id] ?? {}, review_deadline: x.status === 'awaiting_review' ? '2026-09-30T06:10:00Z' : null },
+          body: { ...view(x), nodes: nodesFor(x), spec: x.spec ?? SPECS[x.biz_id] ?? {}, review_deadline: x.status === 'awaiting_review' ? '2026-09-30T06:10:00Z' : null, panel_retry: x.biz_id === 'J005' },
         }
       }
     }

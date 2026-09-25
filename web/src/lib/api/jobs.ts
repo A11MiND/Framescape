@@ -79,6 +79,8 @@ export interface JobDetail {
   project_id: string
   credits: JobCredits
   review_deadline: string | null
+  /** A classic comic whose unfinished panels can be redrawn as a new task. */
+  panel_retry?: boolean
   error_code: string
   cover_asset_id: string
   created_at: string
@@ -106,6 +108,12 @@ export interface ReviewQuote {
   all_upgrade: number
 }
 
+export interface ComicRetryQuote {
+  panels: { index: number; text: string }[]
+  items: QuoteItem[]
+  credits_total: number
+}
+
 export const jobsApi = {
   summary: (projectId?: string) => request<JobCounts>('GET', `/jobs/summary${query({ project_id: projectId })}`),
   list: (f: JobListFilter) =>
@@ -117,6 +125,9 @@ export const jobsApi = {
   quoteReview: (bizId: string, d: ReviewDecision, signal?: AbortSignal) =>
     request<ReviewQuote>('POST', `/jobs/${bizId}/resume/quote`, d, { signal }),
   resume: (bizId: string, d: ReviewDecision & { quote_total: number }) => request<void>('POST', `/jobs/${bizId}/resume`, d),
+  quoteComicRetry: (bizId: string) => request<ComicRetryQuote>('POST', `/jobs/${bizId}/panels/retry/quote`, {}),
+  retryComicPanels: (bizId: string, texts: Record<number, string>, quoteTotal: number) =>
+    request<{ biz_id: string }>('POST', `/jobs/${bizId}/panels/retry`, { texts, quote_total: quoteTotal }, { idempotencyKey: crypto.randomUUID() }),
   retryNode: (bizId: string, node: string) =>
     request<{ biz_id: string }>('POST', `/jobs/${bizId}/nodes/${node}/retry`, {}, { idempotencyKey: crypto.randomUUID() }),
 }

@@ -114,3 +114,31 @@ test('a changed price keeps the choices and asks to confirm again', async ({ pag
   await expect(page.getByRole('radiogroup', { name: '片段 1 的处理' }).getByRole('radio', { name: '重做' })).toHaveAttribute('aria-checked', 'true')
   await expect(page.getByLabel('重做时使用的描述（可修改）')).toHaveValue('电车在黄昏时驶入画面')
 })
+
+test('a partial classic comic redraws its unfinished panels as a new linked task', async ({ page }) => {
+  await useDemoApi(page)
+  let sent: Record<string, unknown> | null = null
+  page.on('request', (r) => {
+    if (r.method() === 'POST' && r.url().endsWith('/jobs/J005/panels/retry')) sent = r.postDataJSON()
+  })
+  await page.goto('/jobs/J005')
+  await page.getByRole('button', { name: '修改并重绘未完成的格' }).click()
+  const dialog = page.getByRole('dialog', { name: '重绘未完成的格' })
+  await expect(dialog).toContainText('已完成的格会保留')
+  await expect(dialog).toContainText('预计 20 积分')
+  await expect(dialog).toContainText('这会新建一个任务')
+  const panel = dialog.getByRole('textbox', { name: '第 4 格' })
+  await expect(panel).toHaveValue('女孩举起一杯柠檬汽水，笑着干杯')
+  await panel.fill('女孩和朋友一起举杯')
+  await dialog.getByRole('button', { name: '新建任务并重绘' }).click()
+  await expect(page).toHaveURL(/\/jobs\/N\d+$/)
+  expect(sent).toEqual({ texts: { 4: '女孩和朋友一起举杯' }, quote_total: 20 })
+  await expect(page.getByRole('link', { name: '重试自另一任务' })).toBeVisible()
+})
+
+test('only classic comics offer to redraw panels', async ({ page }) => {
+  await useDemoApi(page)
+  await page.goto('/jobs/J007')
+  await expect(page.getByRole('heading', { name: '生成失败' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '修改并重绘未完成的格' })).toHaveCount(0)
+})
