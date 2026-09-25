@@ -18,6 +18,8 @@ export interface PrefillFields {
   size?: string
   quality?: string
   mode?: 'general' | 'direct'
+  panels?: string[]
+  story?: string
   shots?: string[]
   /** Per shot, the 1-based number of an earlier shot it builds on, or 0. */
   shotRefs?: number[]
@@ -46,6 +48,8 @@ interface PrefillSpec {
   image_size?: string
   image_quality?: string
   comic_mode?: string
+  panels?: string[]
+  story?: string
   shots?: string[]
   shot_source_refs?: number[]
   image_sequence_mode?: string
@@ -80,6 +84,8 @@ export function readPrefill(state: unknown, workflow: string): PrefillFields | n
   if (spec.reference_image_asset_ids) out.references = spec.reference_image_asset_ids
   if (spec.image_size) out.size = spec.image_size
   if (spec.image_quality) out.quality = spec.image_quality
+  if (spec.panels) out.panels = spec.panels
+  if (spec.story) out.story = spec.story
   if (spec.shots) out.shots = spec.shots
   if (spec.shot_source_refs) out.shotRefs = spec.shot_source_refs
   if (spec.image_sequence_mode) out.sequenceMode = spec.image_sequence_mode === 'continuity' ? 'continuity' : 'quick'

@@ -1,23 +1,18 @@
 import { lazy, useEffect } from 'react'
 import { Navigate, useLocation, useParams } from 'react-router-dom'
-import type { Tab } from '../lib/jobResult'
 import { CreateNav } from '../features/create/CreateNav'
 import { RequireAuth } from './guards'
 import { isCreateMode, lastCreateMode, rememberCreateMode, type CreateMode } from './routing'
 
-const Studio = lazy(() => import('../pages/Studio'))
 const ComicStudio = lazy(() => import('../pages/ComicStudio'))
 const ImageStudio = lazy(() => import('../features/create/ImageStudio'))
 const GptStudio = lazy(() => import('../features/create/GptStudio'))
 const SequenceStudio = lazy(() => import('../features/create/SequenceStudio'))
 const VideoStudio = lazy(() => import('../features/create/VideoStudio'))
 const VideoSequenceStudio = lazy(() => import('../features/create/VideoSequenceStudio'))
+const ComicClassicStudio = lazy(() => import('../features/create/ComicClassicStudio'))
 
-// Modes not rebuilt yet keep the existing studio form under the new mode navigation.
-const LEGACY_TAB: Partial<Record<CreateMode, Tab>> = {
-  'comic-classic': 'image.comic4',
-}
-
+// The comic editor keeps its own page layout under the mode navigation.
 function Legacy({ mode, children }: { mode: CreateMode; children: React.ReactNode }) {
   return (
     <>
@@ -40,6 +35,13 @@ export default function CreateRoute() {
     return <Navigate replace to={{ pathname: `/create/${lastCreateMode()}`, search: location.search }} state={location.state} />
   }
   if (mode === 'image') return <ImageStudio />
+  if (mode === 'comic-classic') {
+    return (
+      <RequireAuth>
+        <ComicClassicStudio />
+      </RequireAuth>
+    )
+  }
   if (mode === 'video-sequence') {
     return (
       <RequireAuth>
@@ -68,18 +70,11 @@ export default function CreateRoute() {
       </RequireAuth>
     )
   }
-  if (mode === 'comic') {
-    return (
-      <Legacy mode={mode}>
-        <RequireAuth>
-          <ComicStudio />
-        </RequireAuth>
-      </Legacy>
-    )
-  }
   return (
     <Legacy mode={mode}>
-      <Studio key={mode} initialTab={LEGACY_TAB[mode]} embedded />
+      <RequireAuth>
+        <ComicStudio />
+      </RequireAuth>
     </Legacy>
   )
 }

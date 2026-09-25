@@ -396,5 +396,34 @@
     },
     "moved": "镜头已移到第 {{n}} 位",
     "handle": "拖动调整镜头 {{n}} 的顺序"
+  },
+  "classic": {
+    "title": "经典漫画",
+    "description": "经典生成使用 MiniMax 或 Gemini 直接出整页漫画，不保证可编辑的文字层；需要逐格编辑文字请用「GPT 可编辑漫画」。",
+    "tab": {
+      "label": "分镜来源",
+      "panels": "自己写分镜",
+      "story": "从故事拆分"
+    },
+    "count": "分镜数量",
+    "provider": {
+      "label": "生成模型",
+      "minimax": "MiniMax",
+      "gemini": "Gemini",
+      "geminiOff": "Gemini 暂不可用：此环境没有配置"
+    },
+    "panels": "分镜内容（{{n}} 格）",
+    "panel": "第 {{n}} 格",
+    "panelPlaceholder": "这一格的画面和动作",
+    "fillAll": "请填写每一格的内容",
+    "story": {
+      "label": "输入你的故事",
+      "placeholder": "写下完整的故事，生成时会自动拆成 {{n}} 格",
+      "help": "拆分在生成时进行，结果可在任务详情中查看；拆分会另计费用。"
+    },
+    "reference": "参考图片",
+    "charactersHelp": "角色会按分镜自动分配到各格，并保持外观一致。",
+    "baked": "对白和文字会直接画进图片，生成后不能再编辑。",
+    "generate": "生成漫画（{{n}} 格）"
   }
 }

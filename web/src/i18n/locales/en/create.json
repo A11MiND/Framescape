@@ -396,5 +396,34 @@
     },
     "moved": "Shot moved to position {{n}}",
     "handle": "Drag to reorder shot {{n}}"
+  },
+  "classic": {
+    "title": "Classic comic",
+    "description": "Classic generation draws the whole page with MiniMax or Gemini and has no editable text layer; use GPT editable comic to edit text panel by panel.",
+    "tab": {
+      "label": "Panels from",
+      "panels": "Write panels",
+      "story": "Split a story"
+    },
+    "count": "Panels",
+    "provider": {
+      "label": "Model",
+      "minimax": "MiniMax",
+      "gemini": "Gemini",
+      "geminiOff": "Gemini is not configured here"
+    },
+    "panels": "Panels ({{n}})",
+    "panel": "Panel {{n}}",
+    "panelPlaceholder": "What happens in this panel",
+    "fillAll": "Fill in every panel",
+    "story": {
+      "label": "Your story",
+      "placeholder": "Write the whole story; it is split into {{n}} panels when generating",
+      "help": "The split happens during generation and is shown in the task; it is charged separately."
+    },
+    "reference": "Reference image",
+    "charactersHelp": "Characters are assigned to panels automatically and kept consistent.",
+    "baked": "Dialogue and text are drawn into the image and cannot be edited afterwards.",
+    "generate": "Generate comic ({{n}} panels)"
   }
 }

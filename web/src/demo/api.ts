@@ -181,6 +181,15 @@ export function createDemoApi(img: Img) {
       const items = [{ kind: 'video_generation', count: 1, credits: base }, ...(spec.prompt_enhance ? [{ kind: 'prompt_enhance', count: 1, credits: 10 }] : [])]
       return { credits_total: items.reduce((n, i) => n + i.credits, 0), items }
     }
+    if (r.workflow_name === 'image.comic4' && !spec.comic_mode) {
+      const panels = Array.isArray(spec.panels) ? spec.panels.length : typeof spec.n === 'number' ? spec.n : 4
+      const items = [
+        { kind: 'comic4_panels', count: panels, credits: panels * 10 },
+        ...(spec.story ? [{ kind: 'story_split', count: 1, credits: 2 }] : []),
+        { kind: 'prompt_enhance', count: panels, credits: panels * 2 },
+      ]
+      return { credits_total: items.reduce((n, i) => n + i.credits, 0), items }
+    }
     if (r.workflow_name === 'image.comic4') return { credits_total: 72, items: [{ kind: 'comic4_panels', count: 1, credits: 72, basis: 'reservation' }] }
     if (spec.image_provider === 'openai') {
       const per = spec.image_quality === 'low' ? 9 : spec.image_quality === 'medium' ? 18 : 36
@@ -269,7 +278,7 @@ export function createDemoApi(img: Img) {
     }
     const r = (body ?? {}) as { workflow_name?: string; spec?: Record<string, unknown>; quote_total?: number; project_id?: string }
     if (path === '/jobs/estimate' && method === 'POST') {
-      if (!r.workflow_name?.endsWith('.sequence') && !String(r.spec?.text ?? '').trim()) return { status: 422, body: { code: 'text_length', message: 'empty', params: { field: 'text', max: 1500 } } }
+      if (!r.workflow_name?.endsWith('.sequence') && !(r.workflow_name === 'image.comic4' && !r.spec?.comic_mode) && !String(r.spec?.text ?? '').trim()) return { status: 422, body: { code: 'text_length', message: 'empty', params: { field: 'text', max: 1500 } } }
       if ((r.workflow_name === 'image.sequence' || r.workflow_name === 'video.sequence') && !(r.spec?.shots as unknown[] | undefined)?.length) return { status: 422, body: { code: 'shots_required', message: 'no shots' } }
       return { status: 200, body: estimateOf(r) }
     }
@@ -289,7 +298,7 @@ export function createDemoApi(img: Img) {
       jobs.unshift({
         biz_id: `N${id}`, id: 1000 + id, workflow_name: r.workflow_name ?? 'image.single', title: text.slice(0, 20), status: 'running',
         node_total: 1, node_done: 0, node_failed: 0, reserved: est.credits_total, settled: 0, error_code: '', created_at: new Date().toISOString(),
-        project_id: r.project_id ?? '', cover: 'tram-1', createdMs: Date.now(), assets: r.workflow_name === 'video.sequence' ? Array.from({ length: n }, (_, i) => CLIPS[i % CLIPS.length]) : r.workflow_name === 'video.single' ? ['clip-1'] : ['tram-1', 'tram-2', 'tram-3', 'tram-4', 'bay', 'sunset', 'cat', 'lemon', 'night'].slice(0, n), spec: r.spec,
+        project_id: r.project_id ?? '', cover: 'tram-1', createdMs: Date.now(), assets: r.workflow_name === 'image.comic4' ? ['lemon'] : r.workflow_name === 'video.sequence' ? Array.from({ length: n }, (_, i) => CLIPS[i % CLIPS.length]) : r.workflow_name === 'video.single' ? ['clip-1'] : ['tram-1', 'tram-2', 'tram-3', 'tram-4', 'bay', 'sunset', 'cat', 'lemon', 'night'].slice(0, n), spec: r.spec,
       })
       return { status: 200, body: { biz_id: `N${id}`, status: 'running', workflow_run_id: '' } }
     }
