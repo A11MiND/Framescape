@@ -60,7 +60,7 @@ export function CreateNav({ mode }: { mode: CreateMode }) {
                 )}
               >
                 {t(`nav.mode.${m}`)}
-                {m === 'gpt' && gptBadge && <span className="rounded-full bg-surface-2 px-2 text-badge text-fg-muted">{gptBadge}</span>}
+                {m === 'gpt' && <span className="rounded-full bg-surface-2 px-2 text-badge text-fg-muted">{gptBadge ?? 'OpenAI'}</span>}
               </Link>
             </li>
           )
