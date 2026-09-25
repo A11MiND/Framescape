@@ -372,7 +372,7 @@ func (s *Server) handleGetJob(c *gin.Context) {
 		"biz_id": job.BizID, "workflow_name": job.WorkflowName, "title": job.Title, "status": job.Status,
 		"workflow_run_id": job.WorkflowRunID, "retry_of_job_id": retryOfBizID, "project_id": projectBizID,
 		"credit_estimated": job.CreditEstimated, "credit_held": job.CreditHeld, "credit_settled": job.CreditSettled,
-		"credits": credits[job.ID], "review_deadline": reviewDeadline,
+		"credits": credits[job.ID], "review_deadline": reviewDeadline, "panel_retry": s.jobs.CanRetryComicPanels(ctx, job),
 		"error_code": job.ErrorCode, "error_msg": job.ErrorMsg, "cover_asset_id": job.CoverAssetID,
 		"created_at": job.CreatedAt, "started_at": job.StartedAt, "finished_at": job.FinishedAt,
 		"nodes": nodes,
@@ -380,4 +380,37 @@ func (s *Server) handleGetJob(c *gin.Context) {
 		// preview gate's shot duration).
 		"spec": json.RawMessage(job.Spec),
 	})
+}
+
+// handleQuoteComicRetry is POST /api/v1/jobs/{bizID}/panels/retry/quote: the
+// unfinished panels of a classic comic, their text and what redrawing costs.
+func (s *Server) handleQuoteComicRetry(c *gin.Context) {
+	q, err := s.jobs.QuoteComicRetry(c.Request.Context(), userID(c), c.Param("bizID"))
+	if err != nil {
+		writeError(c, err, http.StatusUnprocessableEntity, "retry_failed")
+		return
+	}
+	c.JSON(http.StatusOK, q)
+}
+
+type retryComicPanelsRequest struct {
+	// Texts replaces the text of some redrawn panels, keyed by 1-based panel.
+	Texts      map[int]string `json:"texts"`
+	QuoteTotal *int           `json:"quote_total,omitempty"`
+}
+
+// handleRetryComicPanels is POST /api/v1/jobs/{bizID}/panels/retry: redraws
+// the unfinished panels as a new job linked to this one.
+func (s *Server) handleRetryComicPanels(c *gin.Context) {
+	var req retryComicPanelsRequest
+	if err := c.ShouldBindJSON(&req); err != nil && err.Error() != "EOF" {
+		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
+		return
+	}
+	job, err := s.jobs.RetryComicPanels(c.Request.Context(), userID(c), c.Param("bizID"), req.Texts, req.QuoteTotal)
+	if err != nil {
+		writeError(c, err, http.StatusUnprocessableEntity, "retry_failed")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"biz_id": job.BizID, "status": job.Status})
 }

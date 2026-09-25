@@ -3,6 +3,7 @@ package jobsvc
 import (
 	"aigc-platform/internal/pkg/apperr"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -175,8 +176,15 @@ func (s *Service) prepareImageComic4(ctx context.Context, userID uint64, spec Sp
 		}
 		plans[i] = p
 	}
-	built, err := buildComic4Plan(userID, plans, strategy, layout, style, normalizeImageProvider(spec.ImageProvider))
-	return built, plans[0].RawText, err
+	provider := normalizeImageProvider(spec.ImageProvider)
+	built, err := buildComic4Plan(userID, plans, strategy, layout, style, provider)
+	if err != nil {
+		return nil, "", err
+	}
+	if built.Meta, err = json.Marshal(comic4Meta{Provider: provider, Style: style, Layout: layout, Subject: subject, Panels: panelMetas(plans)}); err != nil {
+		return nil, "", err
+	}
+	return built, plans[0].RawText, nil
 }
 
 func buildComic4Plan(userID uint64, plans []panelPlan, strategy, layout, style, provider string) (*workflow.Plan, error) {

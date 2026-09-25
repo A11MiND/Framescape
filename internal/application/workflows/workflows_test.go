@@ -205,3 +205,40 @@ func TestVideoSequenceResumePatch(t *testing.T) {
 		t.Fatal("conflicting decision accepted")
 	}
 }
+
+func TestComic4RetryRedrawsOnlyUnfinishedPanels(t *testing.T) {
+	plan, err := Comic4RetryPlan(Comic4Retry{UserID: 1, Provider: ProviderMiniMax, Style: "s", Layout: "grid", Panels: []Comic4RetryPanel{
+		{ComicPanel: ComicPanel{Index: 1}, Keep: "a1"},
+		{ComicPanel: ComicPanel{Index: 2}, Keep: "a2"},
+		{ComicPanel: ComicPanel{Index: 3, EnhancePrompt: "e3", Dialogue: "hi", RefAsset: "a2"}},
+		{ComicPanel: ComicPanel{Index: 4, EnhancePrompt: "e4"}, RefPanel: 3},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := byName(t, plan)
+	for _, kept := range []string{"panel-1", "panel-2", "enhance-panel-1", "enhance-panel-2"} {
+		if _, ok := n[kept]; ok {
+			t.Fatalf("%s succeeded before and must not run again", kept)
+		}
+	}
+	if got := litValue(t, n["panel-3"].Inputs["source-image-asset-id"]); got != "a2" {
+		t.Fatalf("panel 3 must reuse panel 2's image, got %v", got)
+	}
+	if got := litValue(t, n["panel-3"].Inputs["expected-dialogue"]); got != "hi" {
+		t.Fatalf("panel 3 dialogue gate = %v", got)
+	}
+	if deps := n["panel-4"].Dependencies(); !reflect.DeepEqual(deps, []string{"enhance-panel-4", "panel-3"}) {
+		t.Fatalf("panel 4 deps = %v", deps)
+	}
+	list := n["compose"].Inputs["asset-ids"].List
+	if len(list) != 4 || litValue(t, list[0]) != "a1" || litValue(t, list[1]) != "a2" || list[2].Ref.Node != "panel-3" || list[3].Ref.Node != "panel-4" {
+		t.Fatalf("compose must keep the panel order: %+v", list)
+	}
+	if _, err := Comic4RetryPlan(Comic4Retry{Panels: []Comic4RetryPanel{{ComicPanel: ComicPanel{Index: 1}, Keep: "a"}}}); err == nil {
+		t.Fatal("a retry that redraws nothing must be refused")
+	}
+	if _, err := Comic4RetryPlan(Comic4Retry{Panels: []Comic4RetryPanel{{ComicPanel: ComicPanel{Index: 2}, RefPanel: 2}}}); err == nil {
+		t.Fatal("a panel cannot reference itself or a later panel")
+	}
+}

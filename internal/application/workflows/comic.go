@@ -79,7 +79,6 @@ func Comic4Plan(c Comic4) (*workflow.Plan, error) {
 	panelNames := make([]workflow.Input, 0, len(c.Panels))
 	for _, p := range c.Panels {
 		panelName := fmt.Sprintf("panel-%d", p.Index)
-		enhanceName := fmt.Sprintf("enhance-panel-%d", p.Index)
 		ref := lit("")
 		refList := lit([]string{})
 		switch {
@@ -96,23 +95,98 @@ func Comic4Plan(c Comic4) (*workflow.Plan, error) {
 			ref, refList = from(prev, "asset-id"), workflow.ListOf(from(prev, "asset-id"))
 		}
 
-		enhance := node(enhanceName, "minimax.prompt_enhance", panelEnhance, map[string]workflow.Input{
-			"prompt": lit(p.EnhancePrompt), "duration": lit("5"), "ratio": lit("1:1"),
-			"first-frame-asset-id": lit(""), "last-frame-asset-id": lit(""),
-			"reference-image-asset-ids": refList, "reference-video-asset-ids": lit([]string{}), "reference-audio-asset-ids": lit([]string{}),
-		})
-		nodes = append(nodes, withDisplay(enhance, "panel", p.Index, "group", "enhance"))
-
-		panel := node(panelName, imageExec, imagePolicy, map[string]workflow.Input{
-			"prompt": from(enhanceName, "enhanced-prompt"), "source-image-asset-id": ref, "user-id": lit(uid), "n": lit("1"), "seed": lit(p.Seed),
-		})
-		panel.Check = workflow.CheckAllRequested
-		nodes = append(nodes, withDisplay(gates(panel, p.Dialogue), "panel", p.Index))
+		enhance, panel := panelNodes(imageExec, uid, p, ref, refList)
+		nodes = append(nodes, enhance, gates(panel, p.Dialogue))
 		panelNames = append(panelNames, from(panelName, "asset-id"))
 	}
 
 	compose := node("compose", "local.compose", composePolicy, map[string]workflow.Input{
 		"asset-ids": workflow.ListOf(panelNames...), "layout": lit(c.Layout), "user-id": lit(uid),
+	})
+	nodes = append(nodes, withDisplay(compose, "result", true))
+	return &workflow.Plan{Deadline: defaultDeadline, Nodes: nodes}, nil
+}
+
+// panelNodes are the two steps of one panel: H3-Context-IR writes the image
+// prompt, then the image model draws it.
+func panelNodes(imageExec, uid string, p ComicPanel, ref, refList workflow.Input) (workflow.NodeSpec, workflow.NodeSpec) {
+	enhanceName := fmt.Sprintf("enhance-panel-%d", p.Index)
+	enhance := node(enhanceName, "minimax.prompt_enhance", panelEnhance, map[string]workflow.Input{
+		"prompt": lit(p.EnhancePrompt), "duration": lit("5"), "ratio": lit("1:1"),
+		"first-frame-asset-id": lit(""), "last-frame-asset-id": lit(""),
+		"reference-image-asset-ids": refList, "reference-video-asset-ids": lit([]string{}), "reference-audio-asset-ids": lit([]string{}),
+	})
+	panel := node(fmt.Sprintf("panel-%d", p.Index), imageExec, imagePolicy, map[string]workflow.Input{
+		"prompt": from(enhanceName, "enhanced-prompt"), "source-image-asset-id": ref, "user-id": lit(uid), "n": lit("1"), "seed": lit(p.Seed),
+	})
+	panel.Check = workflow.CheckAllRequested
+	return withDisplay(enhance, "panel", p.Index, "group", "enhance"), withDisplay(panel, "panel", p.Index)
+}
+
+// Comic4RetryPanel is one panel of a classic comic retry: kept from the
+// original job by its image, or drawn again.
+type Comic4RetryPanel struct {
+	ComicPanel
+	// Keep is the image of a panel that already succeeded; the others are redrawn.
+	Keep string
+	// RefPanel, when set, is an earlier panel redrawn in the same retry whose
+	// image is this panel's reference; otherwise RefAsset (possibly empty) is.
+	RefPanel int
+}
+
+// Comic4Retry redraws a classic comic's unfinished panels and composes the
+// page again with the panels that succeeded.
+type Comic4Retry struct {
+	UserID   uint64
+	Provider string
+	Style    string
+	Layout   string
+	Panels   []Comic4RetryPanel
+}
+
+// Comic4RetryPlan builds the retry: each redrawn panel keeps its original
+// reference (a stylized anchor, or the previous panel's image), and the
+// compose step lays out kept and redrawn panels in their original order.
+func Comic4RetryPlan(r Comic4Retry) (*workflow.Plan, error) {
+	uid := strconv.FormatUint(r.UserID, 10)
+	imageExec := "minimax.image"
+	if r.Provider == ProviderGemini {
+		imageExec = "gemini.image"
+	}
+	var nodes []workflow.NodeSpec
+	images := make([]workflow.Input, 0, len(r.Panels))
+	redrawn := 0
+	for _, p := range r.Panels {
+		if p.Keep != "" {
+			images = append(images, lit(p.Keep))
+			continue
+		}
+		ref := lit(p.RefAsset)
+		refList := lit([]string{})
+		if p.RefAsset != "" {
+			refList = lit([]string{p.RefAsset})
+		}
+		if p.RefPanel > 0 {
+			if p.RefPanel >= p.Index {
+				return nil, fmt.Errorf("panel %d may only reference an earlier panel, got %d", p.Index, p.RefPanel)
+			}
+			prev := fmt.Sprintf("panel-%d", p.RefPanel)
+			ref, refList = from(prev, "asset-id"), workflow.ListOf(from(prev, "asset-id"))
+		}
+		enhance, panel := panelNodes(imageExec, uid, p.ComicPanel, ref, refList)
+		if imageExec == "minimax.image" {
+			panel.Inputs["expected-style"] = lit(r.Style)
+			panel.Inputs["expected-dialogue"] = lit(p.Dialogue)
+		}
+		nodes = append(nodes, enhance, panel)
+		images = append(images, from(fmt.Sprintf("panel-%d", p.Index), "asset-id"))
+		redrawn++
+	}
+	if redrawn == 0 {
+		return nil, fmt.Errorf("a retry must redraw at least one panel")
+	}
+	compose := node("compose", "local.compose", composePolicy, map[string]workflow.Input{
+		"asset-ids": workflow.ListOf(images...), "layout": lit(r.Layout), "user-id": lit(uid),
 	})
 	nodes = append(nodes, withDisplay(compose, "result", true))
 	return &workflow.Plan{Deadline: defaultDeadline, Nodes: nodes}, nil
