@@ -8,12 +8,7 @@ import { keys } from '../../lib/api/keys'
 import { failureText } from '../../lib/errorText'
 import { stepPillStatus } from '../tasks/detail/model'
 import { effectiveRef, type SequenceMode, type SequenceShot } from './sequence'
-
-export interface ShotResult {
-  status: string
-  assetId?: string
-  errorCode?: string
-}
+import type { ShotResult } from './shotResults'
 
 function ResultImage({ assetId, label }: { assetId: string; label: string }) {
   const asset = useQuery({ queryKey: keys.assets.detail(assetId), queryFn: () => assetsApi.get(assetId) })

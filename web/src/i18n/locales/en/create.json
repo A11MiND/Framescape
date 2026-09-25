@@ -321,5 +321,80 @@
       "noLast": "No last frame"
     },
     "generate": "Generate video"
+  },
+  "vseq": {
+    "title": "Storyboard",
+    "description": "Break the story into shots, arrange and describe them, and generate one connected video.",
+    "add": "Add shot",
+    "max": "At most {{max}} shots",
+    "shot": "Shot {{n}}",
+    "shotPlaceholder": "Describe what happens in this shot",
+    "anchor": "Re-anchors",
+    "follow": "Continues the previous shot",
+    "anchorHint": "Re-anchoring shots use the character or reference media; the others continue from the previous shot's last frame.",
+    "pick": {
+      "label": "Refers to",
+      "aria": "Shot {{n}} refers to",
+      "none": "Chosen by the strategy",
+      "option": "Shot {{n}}",
+      "later": "Shot {{n}} (comes later, not available)"
+    },
+    "settings": {
+      "title": "Settings",
+      "perShot": "Length of each shot",
+      "total": "Total length",
+      "totalValue": "{{total}} s ({{n}} shots × {{d}} s)",
+      "ratio": "Aspect ratio",
+      "anchorLabel": "Character anchor",
+      "anchorHelp": "The first character's reference images guide re-anchoring shots; reference media is used instead when attached.",
+      "reference": "Reference media",
+      "referenceImage": "Image",
+      "referenceVideo": "Video"
+    },
+    "flow": {
+      "label": "Workflow",
+      "preview": {
+        "title": "Preview, then confirm",
+        "badge": "Recommended",
+        "body": "Generates 768P previews first; keep, redo or upgrade each shot to 2K before the final cut."
+      },
+      "direct": {
+        "title": "Generate 2K directly",
+        "body": "Skips the preview and generates 2K right away; shots cannot be reviewed."
+      },
+      "estimate": "About {{n}} credits",
+      "estimatePending": "Calculating"
+    },
+    "advanced": {
+      "title": "Advanced",
+      "continuity": "Narrative continuity",
+      "continuityHelp": "Re-anchoring shots also look at recently generated shots to keep characters and story consistent; the prompt rewrite is charged.",
+      "strategy": "Reference strategy",
+      "window": "Recent",
+      "manual": "Manual",
+      "smart": "Smart",
+      "strategyHelp": {
+        "window": "Uses the most recent shots.",
+        "manual": "Uses only the shots you pick on each shot.",
+        "smart": "Decides from the descriptions which shots to use."
+      },
+      "every": "Character refresh",
+      "everyValue": "Every {{n}} shots"
+    },
+    "action": {
+      "preview": "Generate previews ({{n}} shots)",
+      "direct": "Generate 2K ({{n}} shots)"
+    },
+    "detail": "{{n}} shots, {{total}} s in total",
+    "review": {
+      "ready": "The previews are ready to review shot by shot.",
+      "go": "Review"
+    },
+    "reset": {
+      "order": "Shot {{shot}} no longer refers to shot {{ref}}: that shot now comes after it.",
+      "removed": "Shot {{shot}} no longer refers to shot {{ref}}: it was deleted."
+    },
+    "moved": "Shot moved to position {{n}}",
+    "handle": "Drag to reorder shot {{n}}"
   }
 }

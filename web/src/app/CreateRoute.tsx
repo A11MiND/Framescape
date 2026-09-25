@@ -11,10 +11,10 @@ const ImageStudio = lazy(() => import('../features/create/ImageStudio'))
 const GptStudio = lazy(() => import('../features/create/GptStudio'))
 const SequenceStudio = lazy(() => import('../features/create/SequenceStudio'))
 const VideoStudio = lazy(() => import('../features/create/VideoStudio'))
+const VideoSequenceStudio = lazy(() => import('../features/create/VideoSequenceStudio'))
 
 // Modes not rebuilt yet keep the existing studio form under the new mode navigation.
 const LEGACY_TAB: Partial<Record<CreateMode, Tab>> = {
-  'video-sequence': 'video.sequence',
   'comic-classic': 'image.comic4',
 }
 
@@ -40,6 +40,13 @@ export default function CreateRoute() {
     return <Navigate replace to={{ pathname: `/create/${lastCreateMode()}`, search: location.search }} state={location.state} />
   }
   if (mode === 'image') return <ImageStudio />
+  if (mode === 'video-sequence') {
+    return (
+      <RequireAuth>
+        <VideoSequenceStudio />
+      </RequireAuth>
+    )
+  }
   if (mode === 'video') {
     return (
       <RequireAuth>

@@ -94,3 +94,15 @@ export function effectiveRef(shots: SequenceShot[], index: number, mode: Sequenc
   }
   return mode === 'continuity' && index > 0 ? index : null
 }
+
+/** Video sequences re-anchor every `every`-th shot (1-based), as the server plans them. */
+export function isAnchorShot(index: number, every: number): boolean {
+  const n = every > 0 ? every : 3
+  return index === 0 || index % n === 0
+}
+
+/** The shot fields of a video sequence; references become manual reference picks. */
+export function videoSequenceShots(shots: SequenceShot[]): { shots: string[]; shot_reference_overrides?: number[] } {
+  const s = sequenceSpec(shots)
+  return { shots: s.shots, ...(s.shot_source_refs ? { shot_reference_overrides: s.shot_source_refs } : {}) }
+}

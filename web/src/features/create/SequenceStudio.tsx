@@ -5,21 +5,19 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, Plus, TriangleAlert } from 'lucide-react'
 import { Button, Card, ChoiceCards, Field, SegmentedControl, Select } from '../../ui'
 import { createApi, type CreateRequest } from '../../lib/api/create'
-import { jobsApi } from '../../lib/api/jobs'
 import { projectsApi } from '../../lib/api/projects'
 import { keys } from '../../lib/api/keys'
 import { hasOpenAIImage } from '../../lib/api/account'
 import { formatNumber } from '../../lib/format'
-import { useStream } from '../../lib/stream/context'
 import { useMe } from '../../app/useMe'
 import { useCurrentProject } from '../../app/currentProject'
-import { ACTIVE } from '../tasks/detail/model'
 import { CreateNav } from './CreateNav'
 import { ReferencePicker } from './ReferencePicker'
 import { CharacterPicker } from './CharacterPicker'
 import { PresetPicker } from './PresetPicker'
 import { CostBar } from './CostBar'
-import { ShotCard, type ShotResult } from './ShotCard'
+import { ShotCard } from './ShotCard'
+import { useShotResults } from './shotResults'
 import { GptConfirm, GptSizeControl } from './gptOptions'
 import { useGptChoices, useSizeLabel } from './gptSizes'
 import { useDraft } from './drafts'
@@ -58,26 +56,6 @@ const initialDraft = (): SequenceDraft => ({
   lastShotIds: [],
 })
 const INITIAL = initialDraft()
-
-/** The last job's result per shot id: node shot-N is the Nth shot that was sent. */
-function useShotResults(jobId: string, shotIds: string[]): Record<string, ShotResult> {
-  const stream = useStream()
-  const job = useQuery({
-    queryKey: keys.jobs.detail(jobId),
-    queryFn: () => jobsApi.get(jobId),
-    enabled: Boolean(jobId),
-    refetchInterval: (q) => (stream.status !== 'open' && q.state.data && ACTIVE.includes(q.state.data.status) ? 5000 : false),
-  })
-  const out: Record<string, ShotResult> = {}
-  for (const n of job.data?.nodes ?? []) {
-    const m = n.name.match(/^shot-(\d+)$/)
-    const id = m ? shotIds[Number(m[1]) - 1] : undefined
-    if (!id) continue
-    const outputs = (n.outputs ?? {}) as { 'asset-id'?: string }
-    out[id] = { status: n.status, assetId: n.status === 'succeeded' ? outputs['asset-id'] : undefined, errorCode: n.error_code }
-  }
-  return out
-}
 
 /** Image sequence (spec P02): numbered shots that can build on earlier ones. */
 export default function SequenceStudio() {
@@ -139,7 +117,7 @@ export default function SequenceStudio() {
   const empty = shots.length - spec.shots.length
   const tooLong = shots.some((s) => [...s.text].length > maxChars)
   const project = draft.project || currentProject || ''
-  const results = useShotResults(draft.lastJob, draft.lastShotIds)
+  const { results } = useShotResults(draft.lastJob, draft.lastShotIds)
 
   const setShots = (next: SequenceShot[], changed: RefReset[] = []) => {
     update({ shots: next })

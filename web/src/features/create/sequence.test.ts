@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { duplicateShot, effectiveRef, moveShot, removeShot, sequenceSpec, type SequenceShot } from './sequence'
+import { duplicateShot, effectiveRef, isAnchorShot, moveShot, removeShot, sequenceSpec, videoSequenceShots, type SequenceShot } from './sequence'
 
 const shot = (id: string, text: string, ref: string | null = null): SequenceShot => ({ id, text, ref })
 
@@ -50,5 +50,18 @@ describe('sequence shots', () => {
     expect(effectiveRef(shots, 1, 'continuity')).toBe(1)
     expect(effectiveRef(shots, 1, 'quick')).toBeNull()
     expect(effectiveRef(shots, 2, 'quick')).toBe(1)
+  })
+})
+
+describe('video sequence shots', () => {
+  it('anchors the first shot and every n-th after it, like the server', () => {
+    expect([0, 1, 2, 3, 4, 5, 6].map((i) => isAnchorShot(i, 3))).toEqual([true, false, false, true, false, false, true])
+    expect([0, 1, 2].map((i) => isAnchorShot(i, 0))).toEqual([true, false, false])
+  })
+
+  it('sends manual picks as reference overrides, renumbered past empty shots', () => {
+    const shots = [shot('a', 'x'), shot('b', ''), shot('c', 'y'), shot('d', 'z', 'a')]
+    expect(videoSequenceShots(shots)).toEqual({ shots: ['x', 'y', 'z'], shot_reference_overrides: [0, 0, 1] })
+    expect(videoSequenceShots([shot('a', 'x')])).toEqual({ shots: ['x'] })
   })
 })

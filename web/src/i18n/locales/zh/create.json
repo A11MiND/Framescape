@@ -321,5 +321,80 @@
       "noLast": "未添加尾帧"
     },
     "generate": "生成视频"
+  },
+  "vseq": {
+    "title": "分镜规划",
+    "description": "把故事拆成多个镜头，调整顺序与描述，生成连贯的视频作品。",
+    "add": "添加镜头",
+    "max": "最多 {{max}} 个镜头",
+    "shot": "镜头 {{n}}",
+    "shotPlaceholder": "描述这个镜头的画面和动作",
+    "anchor": "重新定调",
+    "follow": "接续上一镜头",
+    "anchorHint": "重新定调的镜头会参考角色或参考素材，其余镜头接续上一镜头的最后一帧。",
+    "pick": {
+      "label": "参考镜头",
+      "aria": "镜头 {{n}} 参考的镜头",
+      "none": "按参考策略自动选择",
+      "option": "镜头 {{n}}",
+      "later": "镜头 {{n}}（排在后面，不能引用）"
+    },
+    "settings": {
+      "title": "生成设置",
+      "perShot": "每个镜头时长",
+      "total": "总时长",
+      "totalValue": "{{total}} 秒（{{n}} 个镜头 × {{d}} 秒）",
+      "ratio": "画面比例",
+      "anchorLabel": "角色锚点",
+      "anchorHelp": "第一个角色的参考图用于重新定调的镜头；有参考素材时改用参考素材。",
+      "reference": "参考素材",
+      "referenceImage": "图片",
+      "referenceVideo": "视频"
+    },
+    "flow": {
+      "label": "生成流程",
+      "preview": {
+        "title": "先预览再确认",
+        "badge": "推荐",
+        "body": "先生成 768P 预览，逐镜头确认保留、重做或升级 2K，再合成。"
+      },
+      "direct": {
+        "title": "直接生成 2K",
+        "body": "跳过预览，直接生成 2K 并合成，不能逐镜头调整。"
+      },
+      "estimate": "预计 {{n}} 积分",
+      "estimatePending": "报价计算中"
+    },
+    "advanced": {
+      "title": "高级设置",
+      "continuity": "叙事连贯",
+      "continuityHelp": "重新定调的镜头同时参考最近生成的镜头，保持人物和情节连贯，会另计提示词改写费用。",
+      "strategy": "参考策略",
+      "window": "近邻",
+      "manual": "手动",
+      "smart": "智能",
+      "strategyHelp": {
+        "window": "参考最近的几个镜头。",
+        "manual": "只参考你在镜头上选定的镜头。",
+        "smart": "根据镜头描述自动判断参考哪几个镜头。"
+      },
+      "every": "角色刷新频率",
+      "everyValue": "每 {{n}} 个镜头"
+    },
+    "action": {
+      "preview": "生成预览（{{n}} 个镜头）",
+      "direct": "直接生成 2K（{{n}} 个镜头）"
+    },
+    "detail": "共 {{n}} 个镜头，总时长 {{total}} 秒",
+    "review": {
+      "ready": "预览已生成，请逐镜头确认。",
+      "go": "去确认"
+    },
+    "reset": {
+      "order": "镜头 {{shot}} 的参考已清除：镜头 {{ref}} 现在排在它后面。",
+      "removed": "镜头 {{shot}} 的参考已清除：它参考的镜头 {{ref}} 已删除。"
+    },
+    "moved": "镜头已移到第 {{n}} 位",
+    "handle": "拖动调整镜头 {{n}} 的顺序"
   }
 }
