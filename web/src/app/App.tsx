@@ -13,6 +13,7 @@ const Assets = lazy(() => import('../pages/Assets'))
 const AssetDetail = lazy(() => import('../pages/AssetDetail'))
 const Community = lazy(() => import('../pages/Community'))
 const TaskCenter = lazy(() => import('../features/tasks/TaskCenter'))
+const ComicWorkspace = lazy(() => import('../features/comic/ComicWorkspace'))
 const JobDetailPage = lazy(() => import('../features/tasks/detail/JobDetailPage'))
 const Credits = lazy(() => import('../pages/Credits'))
 const Projects = lazy(() => import('../pages/Projects'))
@@ -44,6 +45,7 @@ export default function App() {
       <Route element={<AppLayout />}>
         <Route path="/" element={<Home />} />
         <Route path="/create/:mode?" element={<CreateRoute />} />
+        <Route path="/create/comic/:draftId/edit" element={<Authed><ComicWorkspace /></Authed>} />
         <Route path="/community" element={<Community />} />
         <Route path="/jobs" element={<Authed><TaskCenter /></Authed>} />
         <Route path="/jobs/:bizId" element={<Authed><JobDetailPage /></Authed>} />

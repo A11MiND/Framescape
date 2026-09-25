@@ -23,10 +23,14 @@ export function renderComic(canvas: HTMLCanvasElement, doc: ComicDocument, image
   if (!ctx) throw new ComicError('noCanvas')
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H)
   if (images[doc.page_asset_id]) contain(ctx, images[doc.page_asset_id], 0, 0, W, H)
-  else {
+  else if (doc.mode === 'editable') {
+    // Before generation an editable comic shows its 2x2 numbered frames; a
+    // direct page is one blank canvas.
     ctx.fillStyle = '#f1f5f9'; ctx.fillRect(0, 0, W, H)
     ctx.fillStyle = '#64748b'; ctx.font = '28px sans-serif'; ctx.textAlign = 'center'
     for (let i = 0; i < 4; i++) ctx.fillText(panelLabel(i + 1), (i % 2) * W / 2 + W / 4, Math.floor(i / 2) * H / 2 + H / 4)
+  } else {
+    ctx.fillStyle = '#f8fafc'; ctx.fillRect(0, 0, W, H)
   }
   doc.panel_asset_ids.forEach((id, i) => {
     if (!images[id]) return
@@ -40,6 +44,7 @@ export function renderComic(canvas: HTMLCanvasElement, doc: ComicDocument, image
   }
   const overflow: string[] = []
   for (const layer of doc.layers) {
+    if (layer.hidden) continue
     if (layer.kind === 'logo') {
       if (images[layer.asset_id ?? '']) contain(ctx, images[layer.asset_id!], layer.x * W, layer.y * H, layer.w * W, layer.h * H)
     } else if (drawTextLayer(ctx, layer)) overflow.push(layer.id)
@@ -75,7 +80,7 @@ export async function exportComic(doc: ComicDocument, images: ComicImages, fontS
   await document.fonts.ready
   const canvas = document.createElement('canvas')
   if (renderComic(canvas, doc, images).length) throw new ComicError('overflow')
-  for (const id of [doc.page_asset_id, ...doc.panel_asset_ids, ...doc.layers.map(l => l.asset_id ?? '')].filter(Boolean)) {
+  for (const id of [doc.page_asset_id, ...doc.panel_asset_ids, ...doc.layers.filter(l => !l.hidden).map(l => l.asset_id ?? '')].filter(Boolean)) {
     if (!images[id]) throw new ComicError('imagesPending')
   }
   return new Promise((resolve, reject) => {

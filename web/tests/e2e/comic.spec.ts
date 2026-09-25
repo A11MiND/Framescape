@@ -5,7 +5,7 @@ import { newComic } from '../../src/lib/comicDocument'
 async function setup(page: Page, { comicAI = true, lang = 'zh' } = {}) {
   const document = newComic(); document.title = '港燈 ESG 漫画'; document.brief = '清新扁平插画，阿健是工程师，小智是机器人。四格故事。'; document.page_asset_id = 'page-original'
   let saved = { biz_id: 'draft-one', version: 1, document }
-  const state = { conflict: false, finished: false, jobRequests: [] as Record<string, unknown>[], assetUploads: 0 }
+  const state = { conflict: false, finished: false, jobRequests: [] as Record<string, unknown>[], assetUploads: 0, lastSaved: null as Record<string, unknown> | null }
   await page.addInitScript((l) => {
     localStorage.setItem('aigc.auth', JSON.stringify({ accessToken: 'test-token', refreshToken: 'test-refresh' }))
     localStorage.setItem('aigc.lang', l)
@@ -21,7 +21,7 @@ async function setup(page: Page, { comicAI = true, lang = 'zh' } = {}) {
     if (path === '/comics' && req.method() === 'GET') return send({ comics: [{ biz_id: saved.biz_id, title: saved.document.title, version: saved.version }] })
     if (path.startsWith('/comics') && req.method() !== 'GET') {
       if (state.conflict) return send({ code: 'version_conflict', message: '编辑稿已在其他窗口更新，请重新载入或保存副本。' }, 409)
-      const body = req.postDataJSON(); saved = { ...saved, version: saved.version + 1, document: body.document }; return send(saved)
+      const body = req.postDataJSON(); state.lastSaved = body.document; saved = { ...saved, version: saved.version + 1, document: body.document }; return send(saved)
     }
     if (path.startsWith('/comics/')) return send(saved)
     if (path === '/jobs/estimate') return send({ credits_total: 53, items: [{ kind: 'comic4_panels', count: 1, credits: 53 }] })
@@ -53,45 +53,65 @@ async function setup(page: Page, { comicAI = true, lang = 'zh' } = {}) {
   return state
 }
 
+const layers = (page: Page) => page.locator('[data-layer]')
+const step = (page: Page, name: string) => page.getByRole('navigation', { name: '漫画步骤' }).getByRole('button', { name })
+
 test('Chinese text, drag, resize, lock, undo and persisted reload', async ({ page }) => {
   await setup(page)
   await page.getByRole('button', { name: '添加对话框', exact: true }).click()
+  await expect(step(page, '对白')).toHaveAttribute('aria-current', 'step')
   const field = page.getByLabel('对白文字', { exact: true })
   await field.fill('港燈與小智，一起照亮香港！\n99.9999% 𠮷')
   await expect(field).toHaveValue('港燈與小智，一起照亮香港！\n99.9999% 𠮷')
-  const layer = page.locator('.comic-layer').first(), before = await layer.getAttribute('style')
+  const layer = layers(page).first(), before = await layer.getAttribute('style')
   const bounds = (await layer.boundingBox())!
   await page.mouse.move(bounds.x + 30, bounds.y + 30); await page.mouse.down(); await page.mouse.move(bounds.x + 80, bounds.y + 65); await page.mouse.up()
   await expect(layer).not.toHaveAttribute('style', before!)
-  const resize = (await page.locator('.comic-resize').boundingBox())!
-  await page.mouse.move(resize.x + 10, resize.y + 10); await page.mouse.down(); await page.mouse.move(resize.x + 40, resize.y + 30); await page.mouse.up()
+  const resize = (await page.locator('[data-resize]').boundingBox())!
+  await page.mouse.move(resize.x + 5, resize.y + 5); await page.mouse.down(); await page.mouse.move(resize.x + 35, resize.y + 25); await page.mouse.up()
   await page.getByRole('button', { name: '锁定', exact: true }).click(); await expect(field).toBeDisabled()
   await page.getByRole('button', { name: '解锁', exact: true }).click()
-  await page.getByRole('button', { name: '复制', exact: true }).click(); await expect(page.locator('.comic-layer')).toHaveCount(2)
-  await page.getByRole('button', { name: '撤销', exact: true }).click(); await expect(page.locator('.comic-layer')).toHaveCount(1)
-  await page.getByRole('button', { name: '保存编辑稿', exact: true }).click(); await expect(page.getByRole('main').getByRole('status')).toContainText('已保存')
-  await page.screenshot({ path: 'test-results/comic-editor-desktop.png', fullPage: true })
-  page.on('dialog', dialog => dialog.accept())
+  await page.getByRole('button', { name: '复制', exact: true }).click(); await expect(layers(page)).toHaveCount(2)
+  await page.getByRole('button', { name: '撤销', exact: true }).click(); await expect(layers(page)).toHaveCount(1)
+  await page.getByRole('button', { name: '保存编辑稿', exact: true }).click()
+  await expect(page.getByText('编辑稿已保存到服务器。')).toBeVisible()
+  await expect(page.getByText(/已保存到账户 \d/)).toBeVisible()
   await page.reload()
-  await expect(page.getByRole('button', { name: '恢复本机编辑' })).toBeVisible()
   await page.getByRole('button', { name: '恢复本机编辑' }).click()
-  await expect(page.locator('.comic-layer')).toHaveCount(1)
-  await page.locator('.comic-layer-list button').first().click()
-  await expect(field).toHaveValue('港燈與小智，一起照亮香港！\n99.9999% 𠮷')
+  await expect(layers(page)).toHaveCount(1)
+  await layers(page).first().click()
+  await expect(page.getByLabel('对白文字', { exact: true })).toHaveValue('港燈與小智，一起照亮香港！\n99.9999% 𠮷')
 })
 
-test('exports a real PNG and blocks clipped dialogue', async ({ page }) => {
+test('hidden layers stay in the draft but are not exported', async ({ page }) => {
+  const state = await setup(page)
+  await page.getByRole('button', { name: '添加对话框', exact: true }).click()
+  await page.getByLabel('对白文字', { exact: true }).fill('只在编辑时看见')
+  await page.getByRole('tab', { name: /图层/ }).click()
+  await page.getByRole('button', { name: '隐藏「只在编辑时看见」（导出时也不包含）' }).click()
+  await expect(layers(page)).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '显示「只在编辑时看见」' })).toBeVisible()
+  await page.getByRole('button', { name: '保存编辑稿', exact: true }).click()
+  await expect(page.getByText('编辑稿已保存到服务器。')).toBeVisible()
+  expect((state.lastSaved?.layers as { hidden?: boolean }[])[0].hidden).toBe(true)
+  await expect(page.getByText('底图 · GPT 生成')).toHaveCount(0)
+})
+
+test('exports a real PNG and blocks clipped dialogue with a way to fix it', async ({ page }) => {
   await setup(page)
   await page.getByRole('button', { name: '添加对话框', exact: true }).click()
   await page.getByLabel('对白文字', { exact: true }).fill('绿色香港')
   const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: '导出 PNG', exact: true }).click()
+  await page.getByRole('button', { name: '导出 PNG', exact: true }).first().click()
   const download = await downloadPromise, data = await readFile((await download.path())!)
   expect(data.subarray(1, 4).toString()).toBe('PNG'); expect(data.readUInt32BE(16)).toBe(1536); expect(data.readUInt32BE(20)).toBe(1024)
   await page.getByLabel('对白文字', { exact: true }).fill('很长的对白'.repeat(100))
-  await expect(page.getByRole('alert')).toContainText('溢出')
-  await page.getByRole('button', { name: '导出 PNG', exact: true }).click()
+  await expect(page.getByRole('alert').filter({ hasText: '溢出' }).first()).toBeVisible()
+  await page.getByRole('button', { name: '导出 PNG', exact: true }).first().click()
   await expect(page.getByText('对白超出对话框，请放大对话框或减小字号后再导出。')).toBeVisible()
+  await expect(step(page, '导出')).toHaveAttribute('aria-current', 'step')
+  await page.getByRole('button', { name: '修复此问题' }).click()
+  await expect(page.getByLabel('对白文字', { exact: true })).toBeVisible()
 })
 
 test('200k source stays background; only reviewed excerpts go to generation', async ({ page }) => {
@@ -104,9 +124,12 @@ test('200k source stays background; only reviewed excerpts go to generation', as
   const excerpt = await page.getByLabel('送给模型的背景摘录（请核对事实）').inputValue()
   expect(excerpt.length).toBeLessThan(8000)
   // Excerpts are sent only after the user confirms checking them (spec D25).
+  await step(page, '画面').click()
   await page.getByRole('button', { name: '检查费用并生成' }).click()
   await expect(page.getByRole('alert')).toContainText('请先确认已检查将发送的摘录')
+  await step(page, '故事').click()
   await page.getByLabel('我已检查将发送的摘录').check()
+  await step(page, '画面').click()
   await page.getByRole('button', { name: '检查费用并生成' }).click()
   await page.getByRole('button', { name: '确认生成整页' }).click()
   await expect.poll(() => state.jobRequests.length).toBe(1)
@@ -118,26 +141,43 @@ test('single panel completion preserves edits made while generating', async ({ p
   const state = await setup(page)
   await page.getByRole('button', { name: '添加对话框', exact: true }).click()
   await page.getByLabel('对白文字', { exact: true }).fill('旧对白')
-  await page.getByLabel('本次生成目标').selectOption('2')
-  await page.getByRole('button', { name: '检查费用并生成' }).click()
+  await page.getByRole('button', { name: '重画第 2 格' }).click()
+  await expect(page.getByRole('dialog', { name: '确认生成' })).toContainText('只重画第 2 格')
   await page.getByRole('button', { name: '确认生成第 2 格' }).click()
   await expect.poll(() => state.jobRequests.length).toBe(1)
+  await step(page, '对白').click()
+  await layers(page).first().click()
   await page.getByLabel('对白文字', { exact: true }).fill('生成中修改的对白不能丢失')
   state.finished = true
   await expect(page.getByText('生成完成。对白和 Logo 图层已保留。请保存编辑稿。')).toBeVisible({ timeout: 12000 })
   await expect(page.getByLabel('对白文字', { exact: true })).toHaveValue('生成中修改的对白不能丢失')
   const spec = state.jobRequests[0].spec as Record<string, unknown>
   expect(spec.comic_panel).toBe(2); expect(spec.source_image_asset_id).toBe('page-original')
-  await page.getByRole('button', { name: '保存编辑稿', exact: true }).click()
 })
 
-test('saving conflict leaves current text intact', async ({ page }) => {
+test('a direct page has no panel frames and no single-panel redraw', async ({ page }) => {
+  await setup(page)
+  await step(page, '画面').click()
+  await page.getByText('原提示词直出（文字会嵌入图片）').click()
+  await expect(page.getByLabel('本次生成目标')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /重画第 \d 格/ })).toHaveCount(0)
+  await expect(page.getByText('OpenAI · gpt-image-2.5-flare · 1536×1024 · 高质量 · PNG')).toBeVisible()
+})
+
+test('a save conflict offers keeping, loading or copying, and never loses the edit', async ({ page }) => {
   const state = await setup(page); state.conflict = true
   await page.getByRole('button', { name: '添加对话框', exact: true }).click()
   await page.getByLabel('对白文字', { exact: true }).fill('必须保留的修改')
   await page.getByRole('button', { name: '保存编辑稿', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('别处修改')
+  const dialog = page.getByRole('dialog', { name: '这份编辑稿已在其他地方更新' })
+  await expect(dialog).toContainText('你的修改都还在')
+  await expect(dialog.getByRole('button', { name: '载入服务器版本' })).toBeVisible()
+  await expect(dialog.getByRole('button', { name: '另存副本' })).toBeVisible()
   await expect(page.getByLabel('对白文字', { exact: true })).toHaveValue('必须保留的修改')
+  state.conflict = false
+  await dialog.getByRole('button', { name: '保留当前编辑' }).click()
+  await expect(page.getByText('编辑稿已保存到服务器。')).toBeVisible()
+  expect(JSON.stringify(state.lastSaved)).toContain('必须保留的修改')
 })
 
 test('native composition events retain Chinese text without generation calls', async ({ page }) => {
@@ -173,20 +213,24 @@ test('PDF text import retains page provenance; empty PDF requests OCR', async ({
   await expect(page.getByRole('alert')).toContainText('OCR')
   await expect(page.getByLabel('背景原文', { exact: true })).toHaveValue(/Green energy/)
 })
-test('logo uploads as an independent layer and is not sent as a character reference', async ({ page }) => {
+
+test('a logo is an independent layer, not a character reference; an imported page is labelled as imported', async ({ page }) => {
   const state = await setup(page)
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64')
-  await page.getByLabel('添加 Logo', { exact: true }).setInputFiles({ name: 'brand.png', mimeType: 'image/png', buffer: png })
-  await expect(page.locator('.comic-layer-list')).toContainText('Logo')
+  await page.getByLabel('添加 Logo', { exact: true }).first().setInputFiles({ name: 'brand.png', mimeType: 'image/png', buffer: png })
+  await page.getByRole('tab', { name: /图层/ }).click()
+  await expect(page.getByRole('button', { name: 'Logo', exact: true })).toBeVisible()
   expect(state.assetUploads).toBe(1)
+  await page.getByLabel('导入底图', { exact: true }).first().setInputFiles({ name: 'page.png', mimeType: 'image/png', buffer: png })
+  await expect(page.getByText('底图 · 导入的图片')).toBeVisible()
+  await step(page, '画面').click()
   await page.getByRole('button', { name: '检查费用并生成' }).click(); await page.getByRole('button', { name: '确认生成整页' }).click()
   await expect.poll(() => state.jobRequests.length).toBe(1)
   expect((state.jobRequests[0].spec as Record<string, unknown>).reference_image_asset_ids).toEqual([])
 })
 
-test('regenerate from a new comic job opens the new editor with its brief', async ({ page }) => {
+test('regenerate from a new comic job opens the editor with its brief', async ({ page }) => {
   const state = await setup(page); state.finished = true
-  page.on('dialog', dialog => dialog.accept())
   await page.goto('/jobs/generation-one')
   await page.getByRole('button', { name: '以此再生成', exact: true }).click()
   await expect(page).toHaveURL(/\/create\/comic$/)
@@ -199,27 +243,31 @@ for (const width of [375, 768, 1440]) test(`responsive ${width}px, light theme a
   await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'))
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await expect(page.getByRole('button', { name: '添加对话框', exact: true })).toBeVisible()
-  await page.screenshot({ path: `test-results/comic-${width}.png`, fullPage: true })
 })
 
 test('accounts outside the OpenAI beta can edit but not generate', async ({ page }) => {
   const state = await setup(page, { comicAI: false })
+  await step(page, '画面').click()
   await expect(page.getByText('AI 生成目前为内测功能')).toBeVisible()
   await expect(page.getByRole('button', { name: '检查费用并生成' })).toBeDisabled()
   await page.getByRole('button', { name: '添加对话框', exact: true }).click()
-  await expect(page.locator('.comic-layer')).toHaveCount(1)
+  await expect(layers(page)).toHaveCount(1)
   expect(state.jobRequests).toHaveLength(0)
 })
 
-test('references come from the asset library, WebP allowed, GIF filtered out', async ({ page }) => {
+test('references come from the asset library, WebP allowed, GIF refused', async ({ page }) => {
   const state = await setup(page)
   await expect(page.getByRole('heading', { name: '人物／画风参考（0 / 15）' })).toBeVisible()
-  await page.getByRole('button', { name: '+ 选择' }).click()
-  const grid = page.locator('.comic-inputs .overflow-y-auto button')
-  await expect(grid).toHaveCount(2) // png + webp; the gif is not offered
-  await grid.nth(0).click(); await grid.nth(1).click()
+  await page.getByRole('button', { name: '从素材库选择' }).click()
+  const dialog = page.getByRole('dialog', { name: '选择参考图' })
+  const items = dialog.getByRole('listitem').getByRole('button')
+  await expect(items).toHaveCount(3)
+  await expect(items.nth(2)).toBeDisabled()
+  await items.nth(0).click(); await items.nth(1).click()
+  await dialog.getByRole('button', { name: '使用所选' }).click()
   await expect(page.getByRole('heading', { name: '人物／画风参考（2 / 15）' })).toBeVisible()
   await page.getByLabel('参考图 1 的用途').fill('阿健的长相')
+  await step(page, '画面').click()
   await page.getByRole('button', { name: '检查费用并生成' }).click(); await page.getByRole('button', { name: '确认生成整页' }).click()
   await expect.poll(() => state.jobRequests.length).toBe(1)
   const spec = state.jobRequests[0].spec as Record<string, unknown>
@@ -229,17 +277,22 @@ test('references come from the asset library, WebP allowed, GIF filtered out', a
 
 test('the comic editor is fully translated in English', async ({ page }) => {
   await setup(page, { lang: 'en' })
-  await expect(page.getByRole('heading', { name: 'Four-panel comic studio' })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Comic steps' })).toBeVisible()
   await page.getByLabel('Saved drafts').selectOption('draft-one')
   await expect(page.getByLabel('Title', { exact: true })).toHaveValue('港燈 ESG 漫画')
-  await page.getByRole('button', { name: 'Add speech bubble' }).click()
   await page.getByText('Background material', { exact: true }).click()
-  const untranslated = await page.evaluate(() => {
+  const untranslated = async () => page.evaluate(() => {
     const main = document.querySelector('main')!.cloneNode(true) as HTMLElement
     main.querySelectorAll('select, option, textarea, input').forEach((el) => el.remove())
-    return [...main.querySelectorAll('button, label, h1, h2, legend, summary, p')]
+    return [...main.querySelectorAll('button, label, h1, h2, h3, legend, summary, p, span, dt, li')]
       .map((el) => el.textContent ?? '')
-      .filter((text) => /[\u4e00-\u9fff]/.test(text))
+      .filter((text) => /[\u4e00-\u9fff]/.test(text) && !text.includes('港燈'))
   })
-  expect(untranslated).toEqual([])
+  expect(await untranslated()).toEqual([])
+  for (const s of ['Artwork', 'Dialogue', 'Export']) {
+    await page.getByRole('navigation', { name: 'Comic steps' }).getByRole('button', { name: s }).click()
+    expect(await untranslated()).toEqual([])
+  }
+  await page.getByRole('button', { name: 'Add speech bubble' }).click()
+  expect(await untranslated()).toEqual([])
 })

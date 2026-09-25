@@ -25,4 +25,8 @@ export const keys = {
   credits: {
     all: ['credits'] as const,
   },
+  comics: {
+    all: ['comics'] as const,
+    detail: (id: string) => ['comics', 'detail', id] as const,
+  },
 }

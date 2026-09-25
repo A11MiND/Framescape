@@ -19,6 +19,8 @@ export interface ComicLayer {
   fill: string
   tail: 'none' | 'left' | 'right'
   locked: boolean
+  /** Kept in the document but neither shown nor exported. */
+  hidden?: boolean
 }
 export interface ComicDocument {
   schema_version: 1
@@ -29,6 +31,8 @@ export interface ComicDocument {
   context: string
   references: { asset_id: string; label: string }[]
   page_asset_id: string
+  /** Where the page came from; absent in drafts saved before it existed. */
+  page_source?: 'generated' | 'imported'
   panel_asset_ids: string[]
   layers: ComicLayer[]
   pending?: { job_id: string; panel: number }
@@ -44,13 +48,13 @@ const layerSchema = z.object({
   x: fraction, y: fraction, w: fraction.min(.02), h: fraction.min(.02),
   text: textLimit(2000), asset_id: z.string().optional(), font_size: z.number().int().min(12).max(96),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/), fill: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-  tail: z.enum(['none', 'left', 'right']), locked: z.boolean(),
+  tail: z.enum(['none', 'left', 'right']), locked: z.boolean(), hidden: z.boolean().optional(),
 }).refine(l => l.x + l.w <= 1.000001 && l.y + l.h <= 1.000001 && (l.kind !== 'logo' || !!l.asset_id))
 const documentSchema = z.object({
   schema_version: z.literal(1), title: textLimit(128).refine(s => s.trim().length > 0), mode: z.enum(['direct', 'editable']),
   brief: textLimit(20000), background: textLimit(200000), context: textLimit(8000),
   references: z.array(z.object({ asset_id: z.string().min(1), label: textLimit(200) })).max(MAX_REFERENCES),
-  page_asset_id: z.string(), panel_asset_ids: z.array(z.string()).length(4), layers: z.array(layerSchema).max(64),
+  page_asset_id: z.string(), page_source: z.enum(['generated', 'imported']).optional(), panel_asset_ids: z.array(z.string()).length(4), layers: z.array(layerSchema).max(64),
   pending: z.object({ job_id: z.string().min(1), panel: z.number().int().min(0).max(4) }).optional(),
 }).refine(d => new Set(d.layers.map(l => l.id)).size === d.layers.length)
 export function parseComicDocument(value: unknown): ComicDocument {
@@ -73,9 +77,13 @@ export function constrainLayer(l: ComicLayer): ComicLayer {
 }
 export function applyGeneratedImage(doc: ComicDocument, assetID: string, panel: number): ComicDocument {
   if (panel < 0 || panel > 4) throw new Error('Invalid panel')
-  if (panel === 0) return { ...doc, page_asset_id: assetID, panel_asset_ids: ['', '', '', ''], pending: undefined }
+  if (panel === 0) return { ...doc, page_asset_id: assetID, page_source: 'generated', panel_asset_ids: ['', '', '', ''], pending: undefined }
   const panels = [...doc.panel_asset_ids]; panels[panel - 1] = assetID
   return { ...doc, panel_asset_ids: panels, pending: undefined }
+}
+/** A page the user brought in; it replaces the generated one and its panel redraws. */
+export function importPage(doc: ComicDocument, assetID: string): ComicDocument {
+  return { ...doc, page_asset_id: assetID, page_source: 'imported', panel_asset_ids: ['', '', '', ''] }
 }
 // Source retrieval is local and reviewable, not an LLM summary. Never send the
 // entire 200k source to an image model or silently cut off the approved brief.

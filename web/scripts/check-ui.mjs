@@ -56,7 +56,7 @@ const PALETTE =
 const REBUILT = ['ui', 'app', 'features', 'lib/api', 'lib/stream', 'lib/format.ts', 'lib/errorText.ts', 'lib/theme.ts'].map((p) => path.join(src, p))
 const isRebuilt = (p) => REBUILT.some((r) => p === r || p.startsWith(r + path.sep))
 // Localized but not yet restyled: checked for CJK text only.
-const LOCALIZED = ['pages/ComicStudio.tsx', 'components/ComicCanvas.tsx', 'lib/comicDocument.ts', 'lib/comicRender.ts', 'lib/comicImport.ts', 'lib/comicError.ts', 'lib/comicErrorText.ts'].map((p) => path.join(src, p))
+const LOCALIZED = ['lib/comicDocument.ts', 'lib/comicRender.ts', 'lib/comicImport.ts', 'lib/comicError.ts', 'lib/comicErrorText.ts'].map((p) => path.join(src, p))
 
 function walk(dir) {
   for (const name of fs.readdirSync(dir)) {

@@ -12,7 +12,8 @@
     "addLogo": "添加 Logo",
     "importPage": "导入底图",
     "undo": "撤销",
-    "redo": "重做"
+    "redo": "重做",
+    "label": "编辑工具"
   },
   "confirm": {
     "importDraft": "导入为新的编辑稿？当前内容请先保存。",
@@ -68,7 +69,10 @@
     "quote": "本次预留 {{n}} 积分。实际费用以返回用量结算；预留不是费用上限，超出部分从余额扣除。",
     "confirmPage": "确认生成整页",
     "confirmPanel": "确认生成第 {{n}} 格",
-    "cancel": "取消"
+    "cancel": "取消",
+    "sourceFormats": "支持本地 PDF（需有文字层）、TXT、Markdown。素材库只存图片和视频，资料不从素材库选择。",
+    "referencesPick": "添加参考图",
+    "referencesTitle": "参考设置"
   },
   "art": {
     "label": "漫画编辑区",
@@ -106,7 +110,8 @@
     "overflow": "{{n}} 个文本框内容溢出。请放大文本框或减小字号；修复后才能导出。",
     "hint": "拖动图层移动，右下角调整大小；选中后可用方向键微调。原图中的文字无法直接修改。",
     "panel": "第 {{n}} 格",
-    "fontSample": "漫画"
+    "fontSample": "漫画",
+    "redraw": "重画第 {{n}} 格"
   },
   "content": {
     "untitled": "未命名四格漫画",
@@ -123,7 +128,9 @@
     "copySaved": "已保存为独立副本。",
     "sourceImported": "已导入原文。请提取并检查相关摘录后再生成。",
     "generated": "生成完成。对白和 Logo 图层已保留。请保存编辑稿。",
-    "submitted": "已提交，等待生成。可以继续编辑对白。"
+    "submitted": "已提交，等待生成。可以继续编辑对白。",
+    "pageImported": "已导入底图。它来自你上传的图片，不是模型生成的。",
+    "deleted": "编辑稿已删除。"
   },
   "error": {
     "backupFull": "浏览器备份空间不足，请点击「保存编辑稿」保存到服务器。",
@@ -152,5 +159,96 @@
     "exportBlocked": "图片跨域设置阻止导出，请检查存储服务 CORS。",
     "fontFailed": "字体加载失败，请重试后再导出。",
     "invalidDocument": "编辑稿格式无效、版本不支持或内容超出限制。"
+  },
+  "steps": {
+    "label": "漫画步骤",
+    "story": "故事",
+    "art": "画面",
+    "text": "对白",
+    "export": "导出"
+  },
+  "header": {
+    "metaEditable": "3:2 · 1536×1024 · 四格",
+    "metaDirect": "3:2 · 1536×1024 · 整页",
+    "model": "OpenAI · {{model}}",
+    "more": "更多操作",
+    "delete": "删除编辑稿"
+  },
+  "status": {
+    "backedUp": "本机已备份 {{time}} · 尚未保存到账户",
+    "unsaved": "尚未保存到账户",
+    "saved": "已保存到账户 {{time}}",
+    "savedEarlier": "已保存到账户"
+  },
+  "generate": {
+    "editableHint": "生成无字的四格底图，对白在画布上添加，之后仍可修改；可以只重画某一格。",
+    "directHint": "按描述原样生成整页，文字会画进图片，不能逐字修改，也不能单格重画。",
+    "panelHint": "只重画这一格，原整页作为风格参考一起发送。",
+    "model": "OpenAI · {{model}} · 1536×1024 · 高质量 · PNG",
+    "confirmTitle": "确认生成",
+    "confirmModel": "模型",
+    "confirmScope": "范围",
+    "confirmReferences": "参考图",
+    "confirmReserve": "预留积分",
+    "credits": "{{n}} 积分"
+  },
+  "inspector": {
+    "label": "检查栏",
+    "layers": "图层",
+    "properties": "属性",
+    "pageEmpty": "底图 · 尚未生成",
+    "pageGenerated": "底图 · GPT 生成",
+    "pageImported": "底图 · 导入的图片",
+    "pageSaved": "底图",
+    "notSplittable": "不可拆分",
+    "baseHint": "人物和景物是底图的一部分，不能单独移动或删除；可编辑的只有对话框、文字和 Logo。",
+    "show": "显示「{{name}}」",
+    "hide": "隐藏「{{name}}」（导出时也不包含）",
+    "lockLayer": "锁定「{{name}}」",
+    "unlockLayer": "解锁「{{name}}」",
+    "overflowMark": "溢出",
+    "overflow": "文字超出了文本框，请放大文本框或减小字号。"
+  },
+  "export": {
+    "pageReady": "已有整页画面",
+    "pageMissing": "还没有画面：请先生成或导入底图",
+    "textFits": "所有可见文字都在文本框内",
+    "overflow": "「{{name}}」的文字超出文本框",
+    "fix": "修复此问题",
+    "note": "导出固定为 1536×1024 PNG，隐藏的图层不会导出。",
+    "backupNote": "JSON 编辑稿备份单独保存，可以在其他设备导入后继续编辑。"
+  },
+  "conflict": {
+    "title": "这份编辑稿已在其他地方更新",
+    "body": "你的修改都还在。请选择如何处理：",
+    "keep": "保留当前编辑",
+    "load": "载入服务器版本",
+    "copy": "另存副本",
+    "keepHelp": "保留当前编辑：用你现在的内容覆盖服务器上的版本。",
+    "loadHelp": "载入服务器版本：换成服务器上的内容；你的修改可以用「撤销」找回。",
+    "copyHelp": "另存副本：把你的内容保存为一份新的编辑稿，服务器上的版本保持不变。",
+    "loaded": "已载入服务器版本。按「撤销」可以找回刚才的修改。"
+  },
+  "confirmDialog": {
+    "new": {
+      "title": "新建漫画？",
+      "body": "当前编辑稿有尚未保存到账户的修改，新建后这些修改只保留在本机备份中。",
+      "confirm": "新建"
+    },
+    "switch": {
+      "title": "切换编辑稿？",
+      "body": "当前编辑稿有尚未保存到账户的修改，切换后这些修改只保留在本机备份中。",
+      "confirm": "切换"
+    },
+    "import": {
+      "title": "导入为新的编辑稿？",
+      "body": "当前编辑稿有尚未保存到账户的修改，导入后这些修改只保留在本机备份中。导入的素材必须仍在当前账号中。",
+      "confirm": "导入"
+    },
+    "delete": {
+      "title": "删除这份编辑稿？",
+      "body": "删除后无法恢复。其中用到的图片仍保留在素材库。",
+      "confirm": "删除"
+    }
   }
 }

@@ -18,7 +18,18 @@ export interface OpenAICapabilities {
 export interface Capabilities {
   image: { max_n: number; max_prompt_chars: number; sequence_max_shots?: number }
   video: { duration_min: number; duration_max: number; max_prompt_chars: number; resolutions: string[]; ratios: string[]; max_reference_videos?: number; reference_video_max_seconds?: number; sequence_max_shots?: number; max_reference_images?: number; max_reference_audios?: number }
-  comic?: { openai_enabled: boolean; model: string; max_composed_chars: number; max_references: number }
+  comic?: {
+    openai_enabled: boolean
+    model: string
+    max_title_chars?: number
+    max_brief_chars?: number
+    max_composed_chars: number
+    max_reference_label_chars?: number
+    max_context_chars?: number
+    max_background_chars?: number
+    max_references: number
+    max_layers?: number
+  }
   providers?: {
     minimax: { enabled: boolean }
     openai: OpenAICapabilities
