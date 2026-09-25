@@ -16,6 +16,8 @@ func TestVideoSingleRefsCheckedBeforeReserving(t *testing.T) {
 		{"a bound character is a reference", Spec{Text: "x", Characters: []CharacterSlot{{Slot: "A", CharacterID: "c"}}}, ""},
 		{"frames with references", Spec{Text: "x", FirstFrameAssetID: "a", ReferenceImageAssetIDs: []string{"b"}}, "video_refs_exclusive"},
 		{"last frame with audio", Spec{Text: "x", LastFrameAssetID: "a", ReferenceAudioAssetIDs: []string{"b"}}, "video_refs_exclusive"},
+		{"three reference videos", Spec{Text: "x", ReferenceVideoAssetIDs: []string{"a", "b", "c"}}, ""},
+		{"four reference videos", Spec{Text: "x", ReferenceVideoAssetIDs: []string{"a", "b", "c", "d"}}, "reference_video_budget"},
 	}
 	for _, c := range cases {
 		_, err := EstimateCredits("video.single", c.spec)

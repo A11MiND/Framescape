@@ -33,6 +33,9 @@ const (
 	VideoDurationMin    = 4
 	VideoDurationMax    = 15
 	VideoMaxPromptChars = 7000
+	// ReferenceVideoMaxSeconds is the provider's combined length budget for
+	// reference videos (at most workflows.MaxReferenceVideoClips of them).
+	ReferenceVideoMaxSeconds = 15
 )
 
 // VideoResolutions is the exhaustive, ordered set video.single accepts —

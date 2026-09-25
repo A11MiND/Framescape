@@ -178,7 +178,11 @@
     },
     "reference_unavailable": {
       "status": 422,
-      "doc": "a reference image is missing, deleted or not yours"
+      "doc": "a reference file is missing, deleted or not yours"
+    },
+    "reference_video_budget": {
+      "status": 422,
+      "doc": "reference videos over the provider's count or combined length (params.max_clips, params.max_seconds)"
     },
     "references_too_many": {
       "status": 422,

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"aigc-platform/internal/application/workflows"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -39,6 +40,9 @@ func (s *Server) handleGetCapabilities(c *gin.Context) {
 			"max_prompt_chars": capability.VideoMaxPromptChars,
 			"resolutions":      capability.VideoResolutions,
 			"ratios":           capability.VideoRatios,
+			// r2va reference videos: a count and a combined-length budget.
+			"max_reference_videos":        workflows.MaxReferenceVideoClips,
+			"reference_video_max_seconds": capability.ReferenceVideoMaxSeconds,
 		},
 		// Which providers can run here; access to OpenAI is additionally
 		// gated per user (GET /me entitlements).

@@ -11,6 +11,7 @@ import (
 
 	"aigc-platform/internal/application/creditsvc"
 	"aigc-platform/internal/application/workflows"
+	"aigc-platform/internal/domain/capability"
 	"aigc-platform/internal/domain/prompt"
 	"aigc-platform/internal/domain/workflow"
 	"aigc-platform/internal/infra/executor/minimax"
@@ -23,7 +24,7 @@ import (
 const defaultRecalibrateEvery = 3
 
 // r2va reference_video budget: at most 3 clips, 15 seconds combined.
-const referenceWindowSeconds = 15
+const referenceWindowSeconds = capability.ReferenceVideoMaxSeconds
 
 // countAnchorShots mirrors planShots' anchor rule for pricing, assuming every
 // anchor is enhanced (an upper bound).

@@ -56,8 +56,39 @@ func checkVideoRefs(spec Spec, refImages []string) error {
 	if err != nil {
 		return err
 	}
+	if len(spec.ReferenceVideoAssetIDs) > workflows.MaxReferenceVideoClips {
+		return errReferenceVideoBudget()
+	}
 	if mode == "t2va" && !slices.Contains(capability.VideoRatios, spec.Ratio) {
 		return apperr.New("ratio_invalid", fmt.Sprintf("ratio must be one of %v, got %q", capability.VideoRatios, spec.Ratio), "allowed", capability.VideoRatios)
+	}
+	return nil
+}
+
+func errReferenceVideoBudget() error {
+	return apperr.New("reference_video_budget", fmt.Sprintf("at most %d reference videos, %d seconds combined", workflows.MaxReferenceVideoClips, capability.ReferenceVideoMaxSeconds),
+		"max_clips", workflows.MaxReferenceVideoClips, "max_seconds", capability.ReferenceVideoMaxSeconds)
+}
+
+// checkReferenceVideos confirms the reference videos are the caller's and fit
+// the provider's combined-length budget, when their lengths are known.
+func (s *Service) checkReferenceVideos(ctx context.Context, userID uint64, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	var rows []persistence.Asset
+	if err := s.db.WithContext(ctx).Where("biz_id IN ? AND user_id = ? AND deleted_at IS NULL AND type = ?", ids, userID, "video").Find(&rows).Error; err != nil {
+		return err
+	}
+	if len(rows) != len(slices.Compact(slices.Sorted(slices.Values(ids)))) {
+		return apperr.New("reference_unavailable", "a reference video is missing, deleted or not a video")
+	}
+	total := 0
+	for _, r := range rows {
+		total += r.DurationMs
+	}
+	if total > capability.ReferenceVideoMaxSeconds*1000 {
+		return errReferenceVideoBudget()
 	}
 	return nil
 }
@@ -311,6 +342,9 @@ func (s *Service) prepareVideoSingle(ctx context.Context, userID uint64, spec Sp
 		}
 	}
 	if err := checkVideoRefs(spec, refImages); err != nil {
+		return nil, "", err
+	}
+	if err := s.checkReferenceVideos(ctx, userID, spec.ReferenceVideoAssetIDs); err != nil {
 		return nil, "", err
 	}
 	plan := workflows.VideoSinglePlan(workflows.VideoSingle{
