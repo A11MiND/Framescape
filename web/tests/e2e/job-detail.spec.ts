@@ -37,7 +37,7 @@ test('a partially finished task keeps the panels that worked and names the one t
   await useDemoApi(page)
   await page.goto('/jobs/J005')
   await expect(page.getByRole('heading', { name: '部分步骤失败' })).toBeVisible()
-  await expect(page.getByText('生成服务繁忙，多次重试后仍未完成。').first()).toBeVisible()
+  await expect(page.getByRole('listitem').filter({ hasText: '第 4 格' }).first()).toContainText('生成服务繁忙，多次重试后仍未完成。')
   await expect(page.getByRole('button', { name: /查看第 \d 个结果/ })).toHaveCount(3)
   await expect(page.getByRole('button', { name: '重试此步（新建任务）' })).toHaveCount(0)
   const credits = page.getByRole('heading', { name: '积分' }).locator('..')

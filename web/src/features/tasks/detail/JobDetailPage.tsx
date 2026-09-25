@@ -259,6 +259,7 @@ export default function JobDetailPage() {
     else if (s.kind === 'more-batch') createAgain()
     else navigate('/', { state: { prefillSuggestion: s } })
   }
+  const failedNodes = job.nodes.filter((n) => n.status === 'failed')
   const retryable = job.nodes.find((n) => n.status === 'failed' && RETRYABLE[job.workflow_name] === n.name)
   const took = job.finished_at && job.started_at ? formatDuration(new Date(job.finished_at).getTime() - new Date(job.started_at).getTime(), t) : null
 
@@ -319,7 +320,18 @@ export default function JobDetailPage() {
             {(job.status === 'failed' || job.status === 'partial') && (
               <Card padding="lg" className="flex flex-col gap-2 border-danger">
                 <h2 className="text-section font-semibold text-danger-fg">{job.status === 'failed' ? t('failed.title') : t('failed.partial')}</h2>
-                <p className="text-body text-fg">{failureText(t, job.error_code || job.nodes.find((n) => n.status === 'failed')?.error_code)}</p>
+                {job.status === 'partial' && failedNodes.length > 0 ? (
+                  <ul className="flex flex-col gap-1 text-body text-fg">
+                    {failedNodes.map((n) => (
+                      <li key={n.name} className="flex flex-wrap gap-x-2">
+                        <span className="font-medium">{nodeLabel(t, n)}</span>
+                        <span>{failureText(t, n.error_code || job.error_code)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-body text-fg">{failureText(t, job.error_code || failedNodes[0]?.error_code)}</p>
+                )}
                 <p className="text-caption text-fg-muted">{t('failed.hint')}</p>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="primary" onClick={createAgain}>

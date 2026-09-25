@@ -115,8 +115,8 @@ function nodesFor(x: Job): unknown[] {
   }
   if (x.biz_id === 'J007') return [node('gen', 'failed', { error_code: 'moderation', display: { result: true } })]
   if (x.biz_id === 'J005') {
-    const panels = ['lemon', 'bay', 'sunset'].map((a, i) => node(`panel-${i + 1}`, 'succeeded', { outputs: { 'asset-id': a }, display: { result: true, shot: i + 1, panel: i + 1 } }))
-    return [...panels, node('panel-4', 'failed', { error_code: 'provider_busy', attempt: 3, display: { result: true, shot: 4, panel: 4 } }), node('compose', 'skipped')]
+    const panels = ['lemon', 'bay', 'sunset'].map((a, i) => node(`panel-${i + 1}`, 'succeeded', { outputs: { 'asset-id': a }, display: { result: true, panel: i + 1 } }))
+    return [...panels, node('panel-4', 'failed', { error_code: 'provider_busy', attempt: 3, display: { result: true, panel: 4 } }), node('compose', 'skipped')]
   }
   if (x.status === 'running' || x.status === 'queued') return [node('gen', x.status === 'queued' ? 'ready' : 'running', { display: { result: true }, queue_reason: x.status === 'queued' ? 'capacity' : '' })]
   if (x.status === 'succeeded') return [node('gen', 'succeeded', { outputs: { 'asset-id': x.cover }, display: { result: true } })]
