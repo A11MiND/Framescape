@@ -159,6 +159,12 @@ export function createDemoApi(img: Img) {
     const spec = r.spec ?? {}
     const shots = Array.isArray(spec.shots) ? spec.shots.length : 0
     const n = r.workflow_name === 'image.sequence' ? shots : typeof spec.n === 'number' ? spec.n : 1
+    if (r.workflow_name === 'video.single') {
+      const secs = typeof spec.duration_seconds === 'number' ? spec.duration_seconds : 6
+      const base = secs * (spec.resolution === '2K' ? 12 : 5)
+      const items = [{ kind: 'video_generation', count: 1, credits: base }, ...(spec.prompt_enhance ? [{ kind: 'prompt_enhance', count: 1, credits: 10 }] : [])]
+      return { credits_total: items.reduce((n, i) => n + i.credits, 0), items }
+    }
     if (r.workflow_name === 'image.comic4') return { credits_total: 72, items: [{ kind: 'comic4_panels', count: 1, credits: 72, basis: 'reservation' }] }
     if (spec.image_provider === 'openai') {
       const per = spec.image_quality === 'low' ? 9 : spec.image_quality === 'medium' ? 18 : 36
@@ -240,7 +246,11 @@ export function createDemoApi(img: Img) {
     }
     if (path === '/characters' && method === 'GET') return { status: 200, body: { characters } }
     if (path === '/presets' && method === 'GET') return { status: 200, body: { presets } }
-    if (path === '/assets' && method === 'GET') return { status: 200, body: { assets: IMAGES.filter((i) => i !== 'tram-hero').map(assetBody) } }
+    if (path === '/assets' && method === 'GET') {
+      const type = new URLSearchParams(search).get('type')
+      const ids = type === 'video' ? CLIPS : type === 'audio' ? [] : IMAGES.filter((i) => i !== 'tram-hero')
+      return { status: 200, body: { assets: ids.map(assetBody) } }
+    }
     const r = (body ?? {}) as { workflow_name?: string; spec?: Record<string, unknown>; quote_total?: number; project_id?: string }
     if (path === '/jobs/estimate' && method === 'POST') {
       if (r.workflow_name !== 'image.sequence' && !String(r.spec?.text ?? '').trim()) return { status: 422, body: { code: 'text_length', message: 'empty', params: { field: 'text', max: 1500 } } }
@@ -263,7 +273,7 @@ export function createDemoApi(img: Img) {
       jobs.unshift({
         biz_id: `N${id}`, id: 1000 + id, workflow_name: r.workflow_name ?? 'image.single', title: text.slice(0, 20), status: 'running',
         node_total: 1, node_done: 0, node_failed: 0, reserved: est.credits_total, settled: 0, error_code: '', created_at: new Date().toISOString(),
-        project_id: r.project_id ?? '', cover: 'tram-1', createdMs: Date.now(), assets: ['tram-1', 'tram-2', 'tram-3', 'tram-4', 'bay', 'sunset', 'cat', 'lemon', 'night'].slice(0, n), spec: r.spec,
+        project_id: r.project_id ?? '', cover: 'tram-1', createdMs: Date.now(), assets: r.workflow_name === 'video.single' ? ['clip-1'] : ['tram-1', 'tram-2', 'tram-3', 'tram-4', 'bay', 'sunset', 'cat', 'lemon', 'night'].slice(0, n), spec: r.spec,
       })
       return { status: 200, body: { biz_id: `N${id}`, status: 'running', workflow_run_id: '' } }
     }
@@ -320,7 +330,7 @@ export function createDemoApi(img: Img) {
         status: 200,
         body: {
           image: { max_n: 9, max_prompt_chars: 1500, sequence_max_shots: 12 },
-          video: { duration_min: 4, duration_max: 15, max_prompt_chars: 7000, resolutions: ['768P', '2K'], ratios: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'] },
+          video: { duration_min: 4, duration_max: 15, max_prompt_chars: 7000, resolutions: ['768P', '2K'], ratios: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'], max_reference_videos: 3, reference_video_max_seconds: 15 },
           comic: { openai_enabled: true, model: 'gpt-image-2.5-flare', max_composed_chars: 20000, max_references: 15 },
           providers: {
             minimax: { enabled: true },

@@ -23,6 +23,17 @@ export interface PrefillFields {
   shotRefs?: number[]
   sequenceMode?: 'quick' | 'continuity'
   provider?: 'openai' | 'minimax'
+  video?: {
+    first_frame_asset_id?: string
+    last_frame_asset_id?: string
+    reference_image_asset_ids?: string[]
+    reference_video_asset_ids?: string[]
+    reference_audio_asset_ids?: string[]
+    duration_seconds?: number
+    resolution?: string
+    ratio?: string
+    prompt_enhance?: boolean
+  }
 }
 
 interface PrefillSpec {
@@ -39,6 +50,14 @@ interface PrefillSpec {
   shot_source_refs?: number[]
   image_sequence_mode?: string
   image_provider?: string
+  first_frame_asset_id?: string
+  last_frame_asset_id?: string
+  reference_video_asset_ids?: string[]
+  reference_audio_asset_ids?: string[]
+  duration_seconds?: number
+  resolution?: string
+  ratio?: string
+  prompt_enhance?: boolean
 }
 
 export function readPrefill(state: unknown, workflow: string): PrefillFields | null {
@@ -64,6 +83,7 @@ export function readPrefill(state: unknown, workflow: string): PrefillFields | n
   if (spec.shots) out.shots = spec.shots
   if (spec.shot_source_refs) out.shotRefs = spec.shot_source_refs
   if (spec.image_sequence_mode) out.sequenceMode = spec.image_sequence_mode === 'continuity' ? 'continuity' : 'quick'
+  if (workflow === 'video.single') out.video = spec
   if (spec.image_provider) out.provider = spec.image_provider === 'openai' ? 'openai' : 'minimax'
   return out
 }

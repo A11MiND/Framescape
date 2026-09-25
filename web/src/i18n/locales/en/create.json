@@ -55,7 +55,13 @@
     "tooMany": "Up to {{max}} reference images",
     "format": "Only {{formats}} files are supported",
     "tooLarge": "Each image must be at most {{mb}} MB",
-    "total": "{{n}} of {{max}} reference images (character references included)"
+    "total": "{{n}} of {{max}} reference images (character references included)",
+    "videoN": "Video {{n}}",
+    "audioN": "Audio {{n}}",
+    "pickTitleVideo": "Choose reference videos",
+    "pickTitleAudio": "Choose reference audio",
+    "pickEmptyVideo": "No videos in your library yet",
+    "pickEmptyAudio": "No audio in your library yet"
   },
   "character": {
     "label": "Characters",
@@ -248,5 +254,72 @@
     },
     "generate": "Generate sequence",
     "gptLocked": "GPT is not available for sequences: {{reason}}"
+  },
+  "video": {
+    "title": "Single video",
+    "description": "Generate one clip from text, first and last frames, or reference media.",
+    "mode": {
+      "label": "Reference",
+      "text": "Text only",
+      "frames": "First & last frame",
+      "refs": "Reference media",
+      "hint": {
+        "text": "Generated from the description alone; choose an aspect ratio.",
+        "frames": "Moves from the first frame to the last; the ratio follows the first frame.",
+        "refs": "Follows the style, characters and rhythm of reference images, video or audio; the ratio follows the references."
+      }
+    },
+    "switch": {
+      "title": "Switch to {{mode}}",
+      "body": "Frames and reference media cannot be used together. Switching clears:",
+      "confirm": "Clear and switch",
+      "item": {
+        "first": "First frame",
+        "last": "Last frame",
+        "images": "{{count}} reference images",
+        "videos": "{{count}} reference videos",
+        "audios": "{{count}} reference audio files"
+      }
+    },
+    "prompt": {
+      "label": "Motion",
+      "placeholder": "Describe the action, camera movement and pace"
+    },
+    "frames": {
+      "first": "First frame",
+      "last": "Last frame",
+      "firstRequired": "Add a first frame"
+    },
+    "refs": {
+      "label": "Reference media",
+      "images": "Images",
+      "videos": "Videos",
+      "audios": "Audio",
+      "required": "Add at least one reference",
+      "videoBudget": "Up to {{max}}, {{seconds}} seconds in total"
+    },
+    "settings": {
+      "title": "Settings",
+      "duration": "Duration",
+      "seconds": "{{n}} s",
+      "resolution": "Resolution",
+      "ratio": "Aspect ratio",
+      "ratioFollows": "Follows the reference",
+      "ratioFollowsHint": "With frames or reference media the ratio follows them and cannot be set separately."
+    },
+    "enhance": {
+      "label": "AI prompt enhancement",
+      "help": "Rewrites the description first so the action and camera are more specific.",
+      "cost": "{{n}} extra credits",
+      "costPending": "Charged extra when on; see the quote"
+    },
+    "preview": {
+      "title": "Frame preview",
+      "first": "First frame",
+      "last": "Last frame (optional)",
+      "empty": "Add a first frame to preview it here",
+      "noLast": "No last frame"
+    },
+    "generate": "Generate video"
   }
 }

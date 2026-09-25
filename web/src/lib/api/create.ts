@@ -17,7 +17,7 @@ export interface OpenAICapabilities {
 
 export interface Capabilities {
   image: { max_n: number; max_prompt_chars: number; sequence_max_shots?: number }
-  video: { duration_min: number; duration_max: number; max_prompt_chars: number; resolutions: string[]; ratios: string[] }
+  video: { duration_min: number; duration_max: number; max_prompt_chars: number; resolutions: string[]; ratios: string[]; max_reference_videos?: number; reference_video_max_seconds?: number }
   comic?: { openai_enabled: boolean; model: string; max_composed_chars: number; max_references: number }
   providers?: {
     minimax: { enabled: boolean }
@@ -48,5 +48,5 @@ export const createApi = {
   trial: (prompt: string, deviceId: string) => request<{ image_url: string }>('POST', '/trial/image', { prompt, device_id: deviceId }, { auth: false }),
   characters: () => request<{ characters: Character[] }>('GET', '/characters'),
   presets: () => request<{ presets: Preset[] }>('GET', '/presets'),
-  recentAssets: (type: 'image' | 'video', limit = 24) => request<{ assets: AssetResponse[] }>('GET', `/assets${query({ type, limit })}`),
+  recentAssets: (type: 'image' | 'video' | 'audio', limit = 24) => request<{ assets: AssetResponse[] }>('GET', `/assets${query({ type, limit })}`),
 }

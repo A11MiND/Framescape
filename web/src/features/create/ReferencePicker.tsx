@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import { Check, ImagePlus, Upload, X } from 'lucide-react'
+import { Check, ImagePlus, Music, Upload, X } from 'lucide-react'
 import { Button, Dialog, Skeleton, cn } from '../../ui'
 import { createApi } from '../../lib/api/create'
 import { assetsApi } from '../../lib/api/assets'
@@ -10,19 +10,44 @@ import { uploadAsset } from '../../lib/upload'
 import { errorText } from '../../lib/errorText'
 import { useToast } from '../../components/Toast'
 
+export type ReferenceKind = 'image' | 'video' | 'audio'
+
+const DEFAULT_ACCEPT: Record<ReferenceKind, string[]> = {
+  image: ['image/png', 'image/jpeg', 'image/webp'],
+  video: ['video/mp4', 'video/quicktime', 'video/webm'],
+  audio: ['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/aac'],
+}
+
+const INDEX_LABEL: Record<ReferenceKind, string> = { image: 'prompt.imageN', video: 'reference.videoN', audio: 'reference.audioN' }
+const PICK_TITLE: Record<ReferenceKind, string> = { image: 'reference.pickTitle', video: 'reference.pickTitleVideo', audio: 'reference.pickTitleAudio' }
+const PICK_EMPTY: Record<ReferenceKind, string> = { image: 'reference.pickEmpty', video: 'reference.pickEmptyVideo', audio: 'reference.pickEmptyAudio' }
+
+/** A still for any media kind: the image, a video's first frame, or an audio mark. */
+function Media({ kind, url, thumb }: { kind: ReferenceKind; url: string; thumb?: string }) {
+  if (kind === 'audio') {
+    return (
+      <span className="flex size-full items-center justify-center text-fg-muted">
+        <Music aria-hidden className="size-6" />
+      </span>
+    )
+  }
+  if (kind === 'video' && !thumb) return <video src={url} muted preload="metadata" className="size-full object-cover" />
+  return <img src={thumb || url} alt="" className="size-full object-cover" />
+}
+
 export interface ReferenceLimits {
   max: number
   formats?: string[]
   maxBytes?: number
 }
 
-function Thumb({ id, index, onRemove }: { id: string; index: number; onRemove: () => void }) {
+function Thumb({ id, index, kind, onRemove }: { id: string; index: number; kind: ReferenceKind; onRemove: () => void }) {
   const { t } = useTranslation('create')
   const asset = useQuery({ queryKey: keys.assets.detail(id), queryFn: () => assetsApi.get(id) })
   return (
     <li className="relative size-20 overflow-hidden rounded-thumb border border-border bg-surface-2">
-      {asset.data ? <img src={asset.data.thumb_url || asset.data.public_url} alt="" className="size-full object-cover" /> : <Skeleton className="size-full" />}
-      <span className="absolute bottom-1 left-1 rounded-badge bg-black/70 px-1.5 text-badge text-white">{t('prompt.imageN', { n: index + 1 })}</span>
+      {asset.data ? <Media kind={kind} url={asset.data.public_url} thumb={asset.data.thumb_url} /> : <Skeleton className="size-full" />}
+      <span className="absolute bottom-1 left-1 rounded-badge bg-black/70 px-1.5 text-badge text-white">{t(INDEX_LABEL[kind], { n: index + 1 })}</span>
       <button
         type="button"
         onClick={onRemove}
@@ -35,17 +60,31 @@ function Thumb({ id, index, onRemove }: { id: string; index: number; onRemove: (
   )
 }
 
-/** Attached reference images: numbered thumbnails, library picker and upload, checked against the limits. */
-export function ReferencePicker({ value, onChange, limits, label }: { value: string[]; onChange: (ids: string[]) => void; limits: ReferenceLimits; label: string }) {
+/** Attached references: numbered thumbnails, library picker and upload, checked against the limits. */
+export function ReferencePicker({
+  value,
+  onChange,
+  limits,
+  label,
+  kind = 'image',
+  required,
+}: {
+  value: string[]
+  onChange: (ids: string[]) => void
+  limits: ReferenceLimits
+  label: string
+  kind?: ReferenceKind
+  required?: boolean
+}) {
   const { t } = useTranslation('create')
   const toast = useToast()
   const input = useRef<HTMLInputElement>(null)
   const [picking, setPicking] = useState(false)
   const [chosen, setChosen] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
-  const library = useQuery({ queryKey: ['assets', 'reference-picker'], queryFn: () => createApi.recentAssets('image', 60), enabled: picking })
+  const library = useQuery({ queryKey: ['assets', 'reference-picker', kind], queryFn: () => createApi.recentAssets(kind, 60), enabled: picking })
   const room = limits.max - value.length
-  const fmtList = (limits.formats ?? []).map((f) => f.replace('image/', '').toUpperCase()).join(t('ui:listSeparator'))
+  const fmtList = (limits.formats ?? []).map((f) => f.replace(/^[a-z]+\//, '').toUpperCase()).join(t('ui:listSeparator'))
 
   const allowed = (mime: string, size: number) => {
     if (limits.formats && !limits.formats.includes(mime)) return t('reference.format', { formats: fmtList })
@@ -79,13 +118,13 @@ export function ReferencePicker({ value, onChange, limits, label }: { value: str
     <fieldset className="flex flex-col gap-2">
       <legend className="mb-1.5 text-label font-medium text-fg">
         {label}
-        <span className="ml-1 font-normal text-fg-muted">{t('ui:field.optional')}</span>
+        {!required && <span className="ml-1 font-normal text-fg-muted">{t('ui:field.optional')}</span>}
       </legend>
       <div className="flex flex-wrap items-start gap-2">
         {value.length > 0 && (
           <ul className="flex flex-wrap gap-2">
             {value.map((id, i) => (
-              <Thumb key={id} id={id} index={i} onRemove={() => onChange(value.filter((x) => x !== id))} />
+              <Thumb key={id} id={id} index={i} kind={kind} onRemove={() => onChange(value.filter((x) => x !== id))} />
             ))}
           </ul>
         )}
@@ -114,7 +153,7 @@ export function ReferencePicker({ value, onChange, limits, label }: { value: str
             <input
               ref={input}
               type="file"
-              accept={(limits.formats ?? ['image/png', 'image/jpeg', 'image/webp']).join(',')}
+              accept={(limits.formats ?? DEFAULT_ACCEPT[kind]).join(',')}
               multiple={limits.max > 1}
               className="sr-only"
               tabIndex={-1}
@@ -129,7 +168,7 @@ export function ReferencePicker({ value, onChange, limits, label }: { value: str
       <Dialog
         open={picking}
         onOpenChange={setPicking}
-        title={t('reference.pickTitle')}
+        title={t(PICK_TITLE[kind])}
         description={t('reference.count', { n: value.length + chosen.length, max: limits.max })}
         size="form"
         footer={
@@ -155,7 +194,7 @@ export function ReferencePicker({ value, onChange, limits, label }: { value: str
             ))}
           </div>
         ) : (library.data?.assets ?? []).length === 0 ? (
-          <p className="py-8 text-center text-body text-fg-muted">{t('reference.pickEmpty')}</p>
+          <p className="py-8 text-center text-body text-fg-muted">{t(PICK_EMPTY[kind])}</p>
         ) : (
           <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
             {library.data!.assets
@@ -177,7 +216,7 @@ export function ReferencePicker({ value, onChange, limits, label }: { value: str
                         on ? 'border-primary' : 'border-transparent',
                       )}
                     >
-                      <img src={a.public_url} alt="" className="size-full object-cover" />
+                      <Media kind={kind} url={a.public_url} />
                       {on && (
                         <span className="absolute top-1.5 right-1.5 inline-flex size-6 items-center justify-center rounded-full bg-primary text-white">
                           <Check aria-hidden className="size-4" />

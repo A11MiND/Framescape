@@ -55,7 +55,13 @@
     "tooMany": "参考图最多 {{max}} 张",
     "format": "仅支持 {{formats}} 格式",
     "tooLarge": "单张不能超过 {{mb}} MB",
-    "total": "参考图合计 {{n}} / {{max}} 张（含角色参考图）"
+    "total": "参考图合计 {{n}} / {{max}} 张（含角色参考图）",
+    "videoN": "视频{{n}}",
+    "audioN": "音频{{n}}",
+    "pickTitleVideo": "选择参考视频",
+    "pickTitleAudio": "选择参考音频",
+    "pickEmptyVideo": "素材库里还没有视频",
+    "pickEmptyAudio": "素材库里还没有音频"
   },
   "character": {
     "label": "角色",
@@ -248,5 +254,72 @@
     },
     "generate": "生成系列",
     "gptLocked": "GPT 暂不可用于连续图片：{{reason}}"
+  },
+  "video": {
+    "title": "单段视频",
+    "description": "用文字、首尾帧或多素材参考生成一段视频。",
+    "mode": {
+      "label": "参考方式",
+      "text": "文字生成",
+      "frames": "首尾帧",
+      "refs": "多素材参考",
+      "hint": {
+        "text": "只用文字描述生成，需要选择画面比例。",
+        "frames": "从首帧过渡到尾帧，画面比例沿用首帧。",
+        "refs": "参考图片、视频或音频的风格、人物与节奏，画面比例沿用参考。"
+      }
+    },
+    "switch": {
+      "title": "切换到「{{mode}}」",
+      "body": "首尾帧和参考素材不能同时使用，切换会清除：",
+      "confirm": "清除并切换",
+      "item": {
+        "first": "首帧",
+        "last": "尾帧",
+        "images": "{{count}} 张参考图片",
+        "videos": "{{count}} 段参考视频",
+        "audios": "{{count}} 段参考音频"
+      }
+    },
+    "prompt": {
+      "label": "运动描述",
+      "placeholder": "描述画面中的动作、镜头运动和节奏"
+    },
+    "frames": {
+      "first": "首帧",
+      "last": "尾帧",
+      "firstRequired": "请添加首帧"
+    },
+    "refs": {
+      "label": "参考素材",
+      "images": "图片",
+      "videos": "视频",
+      "audios": "音频",
+      "required": "请至少添加一个参考素材",
+      "videoBudget": "最多 {{max}} 段，合计不超过 {{seconds}} 秒"
+    },
+    "settings": {
+      "title": "生成设置",
+      "duration": "时长",
+      "seconds": "{{n}} 秒",
+      "resolution": "分辨率",
+      "ratio": "画面比例",
+      "ratioFollows": "跟随参考画面",
+      "ratioFollowsHint": "有首尾帧或参考素材时，画面比例沿用参考，不能单独设置。"
+    },
+    "enhance": {
+      "label": "AI 增强提示词",
+      "help": "生成前先改写描述，让动作和镜头更具体。",
+      "cost": "另计 {{n}} 积分",
+      "costPending": "开启后另计费用，以报价为准"
+    },
+    "preview": {
+      "title": "首尾帧预览",
+      "first": "首帧",
+      "last": "尾帧（可选）",
+      "empty": "添加首帧后在这里预览",
+      "noLast": "未添加尾帧"
+    },
+    "generate": "生成视频"
   }
 }
