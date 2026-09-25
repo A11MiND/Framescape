@@ -64,6 +64,7 @@ var ErrorCatalog = map[string]ErrorSpec{
 	"video_refs_exclusive":          {http.StatusUnprocessableEntity, "first/last frames cannot be combined with reference media"},
 	"video_ratio_required":          {http.StatusUnprocessableEntity, "text-to-video needs a fixed ratio"},
 	"shots_required":                {http.StatusUnprocessableEntity, "at least one shot is required"},
+	"shots_too_many":                {http.StatusUnprocessableEntity, "more shots than one image sequence allows (params.max)"},
 	"shot_refs_invalid":             {http.StatusUnprocessableEntity, "a shot references itself or a later shot (params.shot)"},
 	"comic_panel_count":             {http.StatusUnprocessableEntity, "panel count out of range (params.min, params.max)"},
 	"story_split_failed":            {http.StatusBadGateway, "the story could not be split into panels; nothing was charged"},

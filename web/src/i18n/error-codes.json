@@ -208,6 +208,10 @@
       "status": 422,
       "doc": "at least one shot is required"
     },
+    "shots_too_many": {
+      "status": 422,
+      "doc": "more shots than one image sequence allows (params.max)"
+    },
     "sms_not_configured": {
       "status": 503,
       "doc": "phone sign-in is not available"

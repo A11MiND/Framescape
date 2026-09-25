@@ -20,6 +20,9 @@ package capability
 const (
 	ImageMaxN           = 9    // image.single's n upper bound (covers what used to be the separate image.batch workflow) — minimax.image's own MiniMax-imposed hard limit
 	ImageMaxPromptChars = 1500 // mirrors prompt.MaxPromptChars; duplicated as a plain constant here so this package stays dependency-free
+	// ImageSequenceMaxShots bounds image.sequence: every shot is its own paid
+	// provider call.
+	ImageSequenceMaxShots = 12
 )
 
 // Characters.

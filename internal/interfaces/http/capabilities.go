@@ -29,8 +29,9 @@ func (s *Server) handleGetCapabilities(c *gin.Context) {
 			"output": gin.H{"width": 1536, "height": 1024, "format": "png", "quality": "high"},
 		},
 		"image": gin.H{
-			"max_n":            capability.ImageMaxN,
-			"max_prompt_chars": capability.ImageMaxPromptChars,
+			"max_n":              capability.ImageMaxN,
+			"sequence_max_shots": capability.ImageSequenceMaxShots,
+			"max_prompt_chars":   capability.ImageMaxPromptChars,
 		},
 		"video": gin.H{
 			"duration_min":     capability.VideoDurationMin,

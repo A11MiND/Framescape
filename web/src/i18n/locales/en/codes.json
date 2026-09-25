@@ -52,6 +52,7 @@
     "self_deactivate": "You cannot deactivate your own account.",
     "shot_refs_invalid": "Shot {{shot}} can only reference an earlier shot.",
     "shots_required": "Add at least one shot.",
+    "shots_too_many": "At most {{max}} shots.",
     "sms_not_configured": "Phone sign-in is not available.",
     "sms_send_failed": "The text message could not be sent. Try again shortly.",
     "story_split_failed": "The story could not be split into panels. No credits were charged. Try again.",

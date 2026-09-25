@@ -6,9 +6,22 @@ import (
 	"fmt"
 
 	"aigc-platform/internal/application/workflows"
+	"aigc-platform/internal/domain/capability"
 	"aigc-platform/internal/domain/prompt"
 	"aigc-platform/internal/domain/workflow"
 )
+
+// checkSequenceShots bounds the number of shots, each of which is one
+// provider call.
+func checkSequenceShots(n int) error {
+	if n == 0 {
+		return errShotsRequired
+	}
+	if n > capability.ImageSequenceMaxShots {
+		return apperr.New("shots_too_many", fmt.Sprintf("at most %d shots per image sequence", capability.ImageSequenceMaxShots), "max", capability.ImageSequenceMaxShots)
+	}
+	return nil
+}
 
 // validateShotSourceRefs rejects forward or self references, which would be
 // dependency cycles.
@@ -28,8 +41,8 @@ func validateShotSourceRefs(refs []int, shotCount int) error {
 }
 
 func (s *Service) prepareImageSequence(ctx context.Context, userID uint64, spec Spec) (*workflow.Plan, string, error) {
-	if len(spec.Shots) == 0 {
-		return nil, "", errShotsRequired
+	if err := checkSequenceShots(len(spec.Shots)); err != nil {
+		return nil, "", err
 	}
 	if err := validateShotSourceRefs(spec.ShotSourceRefs, len(spec.Shots)); err != nil {
 		return nil, "", err

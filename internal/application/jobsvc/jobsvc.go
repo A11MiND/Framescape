@@ -394,8 +394,8 @@ func EstimateBreakdown(workflowName string, spec Spec) ([]EstimateItem, int, err
 		}
 	case "image.sequence":
 		n := len(spec.Shots)
-		if n == 0 {
-			return nil, 0, errShotsRequired
+		if err := checkSequenceShots(n); err != nil {
+			return nil, 0, err
 		}
 		if openAI {
 			// One call per shot, each reserved on its own.
