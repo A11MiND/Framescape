@@ -43,6 +43,7 @@ func (s *Server) handleGetCapabilities(c *gin.Context) {
 			// r2va reference videos: a count and a combined-length budget.
 			"max_reference_videos":        workflows.MaxReferenceVideoClips,
 			"reference_video_max_seconds": capability.ReferenceVideoMaxSeconds,
+			"sequence_max_shots":          capability.VideoSequenceMaxShots,
 		},
 		// Which providers can run here; access to OpenAI is additionally
 		// gated per user (GET /me entitlements).

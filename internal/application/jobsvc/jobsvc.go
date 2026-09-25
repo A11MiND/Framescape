@@ -486,8 +486,8 @@ func EstimateBreakdown(workflowName string, spec Spec) ([]EstimateItem, int, err
 		}
 	case "video.sequence":
 		n := len(spec.Shots)
-		if n == 0 {
-			return nil, 0, errShotsRequired
+		if err := checkVideoSequence(spec); err != nil {
+			return nil, 0, err
 		}
 		kind, resolution := ItemKindSequencePreview, "768P"
 		if spec.SkipPreview {

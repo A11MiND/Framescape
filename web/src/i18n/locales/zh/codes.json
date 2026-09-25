@@ -53,7 +53,7 @@
     "self_deactivate": "不能停用自己的账号。",
     "shot_refs_invalid": "第 {{shot}} 个镜头只能引用前面的镜头。",
     "shots_required": "请至少填写一个镜头。",
-    "shots_too_many": "最多 {{max}} 个画面。",
+    "shots_too_many": "数量超过上限，最多 {{max}} 个。",
     "sms_not_configured": "手机验证码登录暂不可用。",
     "sms_send_failed": "短信发送失败，请稍后重试。",
     "story_split_failed": "故事未能拆分成分镜，未扣除积分，请重试。",

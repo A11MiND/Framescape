@@ -29,3 +29,34 @@ func TestVideoSingleRefsCheckedBeforeReserving(t *testing.T) {
 		}
 	}
 }
+
+func TestVideoSequenceCheckedBeforeReserving(t *testing.T) {
+	shots := func(n int) []string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = "a tram at dusk"
+		}
+		return out
+	}
+	cases := []struct {
+		name string
+		spec Spec
+		code string
+	}{
+		{"within the limit", Spec{Shots: shots(12), Ratio: "9:16"}, ""},
+		{"one shot over", Spec{Shots: shots(13)}, "shots_too_many"},
+		{"no shots", Spec{}, "shots_required"},
+		{"unknown ratio", Spec{Shots: shots(2), Ratio: "2:1"}, "ratio_invalid"},
+		{"unknown reference mode", Spec{Shots: shots(2), ReferenceSelectionMode: "nearest"}, "bad_request"},
+		{"forward override", Spec{Shots: shots(3), ShotReferenceOverrides: []int{0, 3, 0}}, "shot_refs_invalid"},
+	}
+	for _, c := range cases {
+		_, err := EstimateCredits("video.sequence", c.spec)
+		if c.code == "" && err != nil {
+			t.Errorf("%s: unexpected %v", c.name, err)
+		}
+		if c.code != "" && !hasCode(err, c.code) {
+			t.Errorf("%s: got %v, want %s", c.name, err, c.code)
+		}
+	}
+}

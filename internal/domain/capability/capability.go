@@ -36,6 +36,9 @@ const (
 	// ReferenceVideoMaxSeconds is the provider's combined length budget for
 	// reference videos (at most workflows.MaxReferenceVideoClips of them).
 	ReferenceVideoMaxSeconds = 15
+	// VideoSequenceMaxShots bounds video.sequence: every shot is a paid
+	// generation, and a preview adds another per redone or upgraded shot.
+	VideoSequenceMaxShots = 12
 )
 
 // VideoResolutions is the exhaustive, ordered set video.single accepts —

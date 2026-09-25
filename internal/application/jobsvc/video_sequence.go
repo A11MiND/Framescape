@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -200,6 +201,25 @@ func (s *Service) resolveCharacterRef(ctx context.Context, userID uint64, spec S
 	return "", false
 }
 
+// checkVideoSequence bounds a sequence and its options before anything is
+// reserved.
+func checkVideoSequence(spec Spec) error {
+	n := len(spec.Shots)
+	if n == 0 {
+		return errShotsRequired
+	}
+	if n > capability.VideoSequenceMaxShots {
+		return apperr.New("shots_too_many", fmt.Sprintf("at most %d shots per video sequence", capability.VideoSequenceMaxShots), "max", capability.VideoSequenceMaxShots)
+	}
+	if spec.Ratio != "" && !slices.Contains(capability.VideoRatios, spec.Ratio) {
+		return apperr.New("ratio_invalid", fmt.Sprintf("ratio must be one of %v, got %q", capability.VideoRatios, spec.Ratio), "allowed", capability.VideoRatios)
+	}
+	if !slices.Contains([]string{"", "window", "manual", "smart"}, spec.ReferenceSelectionMode) {
+		return apperr.New("bad_request", fmt.Sprintf("unknown reference_selection_mode %q", spec.ReferenceSelectionMode))
+	}
+	return validateShotReferenceOverrides(spec.ShotReferenceOverrides, n)
+}
+
 // validateShotReferenceOverrides rejects forward or self references.
 func validateShotReferenceOverrides(overrides []int, shotCount int) error {
 	for i, r := range overrides {
@@ -217,10 +237,7 @@ func validateShotReferenceOverrides(overrides []int, shotCount int) error {
 }
 
 func (s *Service) prepareVideoSequence(ctx context.Context, userID uint64, spec Spec) (*workflow.Plan, string, error) {
-	if len(spec.Shots) == 0 {
-		return nil, "", errShotsRequired
-	}
-	if err := validateShotReferenceOverrides(spec.ShotReferenceOverrides, len(spec.Shots)); err != nil {
+	if err := checkVideoSequence(spec); err != nil {
 		return nil, "", err
 	}
 	characters, err := s.resolveCharacters(ctx, userID, spec.Characters)
