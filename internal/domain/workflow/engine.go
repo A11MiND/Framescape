@@ -26,4 +26,7 @@ type NodeState struct {
 type Run struct {
 	Phase string
 	Nodes []NodeState
+	// ReviewDeadline is when a job waiting for a decision is cancelled
+	// automatically; nil otherwise.
+	ReviewDeadline *time.Time
 }

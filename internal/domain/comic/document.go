@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -67,9 +68,10 @@ const (
 
 // ImageMime is the set of image types the comic editor stores and sends to
 // OpenAI (its edits endpoint accepts PNG, JPEG and WebP).
-func ImageMime(mime string) bool {
-	return mime == "image/png" || mime == "image/jpeg" || mime == "image/webp"
-}
+// ReferenceMimes are the image types accepted as OpenAI references.
+var ReferenceMimes = []string{"image/png", "image/jpeg", "image/webp"}
+
+func ImageMime(mime string) bool { return slices.Contains(ReferenceMimes, mime) }
 
 var hexColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 

@@ -47,7 +47,11 @@ func (s *Server) handleGetCapabilities(c *gin.Context) {
 				"enabled": openAI, "image_model": config.OpenAIImageModel(), "entitlement": "openai_image",
 				"sizes": config.OpenAIImageSizes(), "qualities": config.OpenAIImageQualities(),
 				"max_n": min(config.OpenAIImageMaxN(), capability.ImageMaxN), "default_quality": openai.DefaultQuality,
-				"workflows": []string{"image.single", "image.sequence", "image.comic4"},
+				// Counted across attached images, character references and
+				// sequence links; each file is checked against the formats and size.
+				"max_references": openai.MaxReferences, "reference_formats": comic.ReferenceMimes,
+				"max_reference_bytes": openai.MaxReferenceBytes,
+				"workflows":           []string{"image.single", "image.sequence", "image.comic4"},
 			},
 			"gemini": gin.H{"enabled": config.GeminiVertexProjectID() != "", "image_model": config.GeminiImageModel()},
 		},

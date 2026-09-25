@@ -314,7 +314,7 @@ func TestJobBucketsSummaryRenameAndQuote(t *testing.T) {
 func TestCapabilitiesReportProvidersAndAuth(t *testing.T) {
 	s := newTestServer(t)
 	rec := doJSON(t, s.Router(), http.MethodGet, "/api/v1/capabilities", nil, "")
-	for _, want := range []string{`"max_composed_chars":20000`, `"phone_sms":false`, `"email_verification":false`, `"providers"`, `"entitlement":"openai_image"`} {
+	for _, want := range []string{`"max_composed_chars":20000`, `"phone_sms":false`, `"email_verification":false`, `"providers"`, `"entitlement":"openai_image"`, `"max_references":16`, `"reference_formats":["image/png","image/jpeg","image/webp"]`} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Errorf("capabilities missing %s: %s", want, rec.Body.String())
 		}

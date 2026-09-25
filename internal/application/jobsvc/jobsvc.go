@@ -483,6 +483,9 @@ func (s *Service) List(ctx context.Context, userID uint64, f ListFilter) ([]pers
 	q := s.db.WithContext(ctx).Where("user_id = ? AND deleted_at IS NULL", userID)
 	switch {
 	case f.Status != "":
+		if !slices.Contains(jobStatuses, f.Status) {
+			return nil, 0, apperr.New("bad_request", fmt.Sprintf("unknown status %q", f.Status))
+		}
 		q = q.Where("status = ?", f.Status)
 	case f.Bucket != "":
 		statuses, ok := bucketStatuses[f.Bucket]
@@ -519,8 +522,21 @@ func escapeLike(s string) string {
 	return r.Replace(s)
 }
 
-// Summary counts a user's jobs per bucket.
-func (s *Service) Summary(ctx context.Context, userID uint64, projectID *uint64) (map[string]int, error) {
+// jobStatuses are the job statuses a listing may filter on.
+var jobStatuses = []string{
+	workflow.JobQueued, workflow.JobRunning, workflow.JobAwaitingReview, workflow.JobSucceeded,
+	workflow.JobPartial, workflow.JobFailed, workflow.JobCancelling, workflow.JobCancelled,
+}
+
+// SummaryCounts counts a user's jobs per bucket and per exact status, so the
+// task center's cards and status filter read one source.
+type SummaryCounts struct {
+	Buckets  map[string]int
+	Statuses map[string]int
+}
+
+// Summary counts a user's jobs per bucket and per status.
+func (s *Service) Summary(ctx context.Context, userID uint64, projectID *uint64) (*SummaryCounts, error) {
 	q := s.db.WithContext(ctx).Model(&persistence.Job{}).Where("user_id = ? AND deleted_at IS NULL", userID)
 	if projectID != nil {
 		q = q.Where("project_id = ?", *projectID)
@@ -532,13 +548,71 @@ func (s *Service) Summary(ctx context.Context, userID uint64, projectID *uint64)
 	if err := q.Select("status, COUNT(*) AS n").Group("status").Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("summarize jobs: %w", err)
 	}
-	out := map[string]int{BucketNeedsReview: 0, BucketActive: 0, BucketSucceeded: 0, BucketFailed: 0, BucketCancelled: 0, "total": 0}
+	out := &SummaryCounts{
+		Buckets:  map[string]int{BucketNeedsReview: 0, BucketActive: 0, BucketSucceeded: 0, BucketFailed: 0, BucketCancelled: 0, "total": 0},
+		Statuses: map[string]int{},
+	}
+	for _, st := range jobStatuses {
+		out.Statuses[st] = 0
+	}
 	for _, r := range rows {
-		out["total"] += r.N
+		out.Buckets["total"] += r.N
+		if _, known := out.Statuses[r.Status]; known {
+			out.Statuses[r.Status] += r.N
+		}
 		for bucket, statuses := range bucketStatuses {
 			if slices.Contains(statuses, r.Status) {
-				out[bucket] += r.N
+				out.Buckets[bucket] += r.N
 			}
+		}
+	}
+	return out, nil
+}
+
+// CreditBreakdown is a job's credits over its lifetime. Nil fields are
+// unknown (jobs from the previous engine kept no per-job reservation).
+type CreditBreakdown struct {
+	Reserved int  `json:"reserved"` // total reserved, including review top-ups
+	Settled  int  `json:"settled"`  // total charged, including Overage
+	Overage  *int `json:"overage"`  // charged from the balance beyond the reservation
+	Released *int `json:"released"` // unused reservation returned
+	Frozen   *int `json:"frozen"`   // reservation still held
+}
+
+// Credits returns each job's credit breakdown, keyed by job id.
+func (s *Service) Credits(ctx context.Context, jobs []persistence.Job) (map[uint64]CreditBreakdown, error) {
+	out := make(map[uint64]CreditBreakdown, len(jobs))
+	ids := make([]uint64, 0, len(jobs))
+	for _, j := range jobs {
+		out[j.ID] = CreditBreakdown{Reserved: j.CreditHeld, Settled: j.CreditSettled}
+		ids = append(ids, j.ID)
+	}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var holds []struct {
+		JobID     uint64
+		HeldTotal int
+		Committed int
+		Overage   int
+		Released  int
+		Remaining int
+		Status    string
+	}
+	if err := s.db.WithContext(ctx).Table("credit_holds").
+		Select("job_id, held_total, committed, overage, released, remaining, status").
+		Where("job_id IN ?", ids).Scan(&holds).Error; err != nil {
+		return nil, fmt.Errorf("read credit holds: %w", err)
+	}
+	for _, h := range holds {
+		frozen := 0
+		if h.Status == "open" {
+			frozen = h.Remaining
+		}
+		overage, released := h.Overage, h.Released
+		out[h.JobID] = CreditBreakdown{
+			Reserved: h.HeldTotal, Settled: h.Committed + h.Overage,
+			Overage: &overage, Released: &released, Frozen: &frozen,
 		}
 	}
 	return out, nil
@@ -590,6 +664,11 @@ func (s *Service) snapshot(ctx context.Context, job *persistence.Job) (*workflow
 		nodes, err := s.orch.Nodes(ctx, job.ID)
 		if err != nil {
 			return nil, err
+		}
+		if job.Status == workflow.JobAwaitingReview {
+			if run.ReviewDeadline, err = s.orch.ReviewDeadline(ctx, job.ID); err != nil {
+				return nil, err
+			}
 		}
 		for _, n := range nodes {
 			run.Nodes = append(run.Nodes, workflow.NodeState{

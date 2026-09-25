@@ -261,16 +261,37 @@ func (o *Orchestrator) minGateTTL() time.Duration {
 }
 
 func (o *Orchestrator) gateExpired(ctx context.Context, jobID uint64, meta []byte, now time.Time) bool {
+	deadline, err := o.gateDeadline(ctx, jobID, meta)
+	return err == nil && deadline != nil && deadline.Before(now)
+}
+
+// gateDeadline is when a job's waiting gate expires: the earliest suspended
+// gate's start plus the job's gate TTL. Nil when no gate is waiting.
+func (o *Orchestrator) gateDeadline(ctx context.Context, jobID uint64, meta []byte) (*time.Time, error) {
 	ttl := o.cfg.GateTTL
 	var env planEnvelope
 	if json.Unmarshal(meta, &env) == nil && env.GateTTLS > 0 {
 		ttl = time.Duration(env.GateTTLS) * time.Second
 	}
 	var since sql.NullTime
-	if err := o.db.QueryRowContext(ctx, `SELECT MIN(started_at) FROM job_nodes WHERE job_id = ? AND status = ?`, jobID, workflow.NodeSuspended).Scan(&since); err != nil || !since.Valid {
-		return false
+	if err := o.db.QueryRowContext(ctx, `SELECT MIN(started_at) FROM job_nodes WHERE job_id = ? AND status = ?`, jobID, workflow.NodeSuspended).Scan(&since); err != nil {
+		return nil, fmt.Errorf("read gate start: %w", err)
 	}
-	return since.Time.Add(ttl).Before(now)
+	if !since.Valid {
+		return nil, nil
+	}
+	deadline := since.Time.Add(ttl)
+	return &deadline, nil
+}
+
+// ReviewDeadline is when a job waiting for a decision is cancelled
+// automatically; nil when no gate is waiting.
+func (o *Orchestrator) ReviewDeadline(ctx context.Context, jobID uint64) (*time.Time, error) {
+	var meta []byte
+	if err := o.db.QueryRowContext(ctx, `SELECT plan_meta FROM jobs WHERE id = ?`, jobID).Scan(&meta); err != nil {
+		return nil, fmt.Errorf("read plan meta: %w", err)
+	}
+	return o.gateDeadline(ctx, jobID, meta)
 }
 
 // sweepStuckJobs finalizes jobs whose nodes are all terminal but whose row

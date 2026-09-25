@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -161,10 +162,16 @@ func (s *Server) handleListJobs(c *gin.Context) {
 		}
 	}
 
+	credits, err := s.jobs.Credits(ctx, rows)
+	if err != nil {
+		writeError(c, err, http.StatusInternalServerError, "internal")
+		return
+	}
 	out := make([]gin.H, 0, len(rows))
 	for _, j := range rows {
 		row := gin.H{
-			"biz_id": j.BizID, "workflow_name": j.WorkflowName, "title": j.Title, "status": j.Status,
+			"credits": credits[j.ID],
+			"biz_id":  j.BizID, "workflow_name": j.WorkflowName, "title": j.Title, "status": j.Status,
 			"node_total": j.NodeTotal, "node_done": j.NodeDone, "node_failed": j.NodeFailed,
 			"credit_estimated": j.CreditEstimated, "credit_held": j.CreditHeld, "credit_settled": j.CreditSettled,
 			"error_code": j.ErrorCode, "error_msg": j.ErrorMsg,
@@ -207,7 +214,11 @@ func (s *Server) handleJobsSummary(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, errBody("internal", "summarize jobs"))
 		return
 	}
-	c.JSON(http.StatusOK, counts)
+	resp := gin.H{"statuses": counts.Statuses}
+	for bucket, n := range counts.Buckets {
+		resp[bucket] = n
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // handleUpdateJob is PATCH /api/v1/jobs/{bizID}: rename a job.
@@ -301,8 +312,17 @@ func (s *Server) handleGetJob(c *gin.Context) {
 	ctx := c.Request.Context()
 	job, run, err := s.jobs.Get(ctx, userID(c), c.Param("bizID"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, errBody("not_found", err.Error()))
+		writeError(c, err, http.StatusInternalServerError, "internal")
 		return
+	}
+	credits, err := s.jobs.Credits(ctx, []persistence.Job{*job})
+	if err != nil {
+		writeError(c, err, http.StatusInternalServerError, "internal")
+		return
+	}
+	var reviewDeadline *time.Time
+	if run != nil {
+		reviewDeadline = run.ReviewDeadline
 	}
 	nodes := make([]gin.H, 0)
 	if run != nil {
@@ -327,6 +347,7 @@ func (s *Server) handleGetJob(c *gin.Context) {
 		"biz_id": job.BizID, "workflow_name": job.WorkflowName, "title": job.Title, "status": job.Status,
 		"workflow_run_id": job.WorkflowRunID, "retry_of_job_id": retryOfBizID, "project_id": projectBizID,
 		"credit_estimated": job.CreditEstimated, "credit_held": job.CreditHeld, "credit_settled": job.CreditSettled,
+		"credits": credits[job.ID], "review_deadline": reviewDeadline,
 		"error_code": job.ErrorCode, "error_msg": job.ErrorMsg, "cover_asset_id": job.CoverAssetID,
 		"created_at": job.CreatedAt, "started_at": job.StartedAt, "finished_at": job.FinishedAt,
 		"nodes": nodes,

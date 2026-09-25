@@ -133,6 +133,16 @@ export interface JobNode {
   finished_at?: string | null
 }
 
+// A job's credits over its lifetime; null fields are unknown (jobs from the
+// previous engine kept no per-job reservation).
+export interface JobCredits {
+  reserved: number
+  settled: number
+  overage: number | null
+  released: number | null
+  frozen: number | null
+}
+
 export interface JobResponse {
   biz_id: string
   workflow_name: string
@@ -146,6 +156,9 @@ export interface JobResponse {
   credit_estimated: number
   credit_held: number
   credit_settled: number
+  credits: JobCredits
+  // When a job waiting for review is cancelled automatically; null otherwise.
+  review_deadline: string | null
 }
 
 export interface AssetResponse {
@@ -347,6 +360,7 @@ export interface JobSummary {
   credit_estimated: number
   credit_held: number
   credit_settled: number
+  credits: JobCredits
   created_at: string
   finished_at: string | null
   // "" when this job wasn't submitted by jobsvc.RetryNode — see that
