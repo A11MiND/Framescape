@@ -1,0 +1,60 @@
+{
+  "title": "Discover",
+  "description": "Browse published work, see the prompts behind it, and create something similar in one step.",
+  "streakEntry": "{{n}}-day publishing streak",
+  "tab": { "label": "Which works", "all": "All works", "mine": "My published" },
+  "type": { "label": "Type", "all": "All", "image": "Images", "video": "Videos" },
+  "sort": "Newest first",
+  "kind": { "image": "Image", "video": "Video" },
+  "open": "View work: {{title}}",
+  "untitled": "Untitled work",
+  "likes": "{{n}} likes",
+  "like": "Like",
+  "unlike": "Unlike",
+  "loadMore": "Load more",
+  "empty": {
+    "all": "Nothing has been published yet",
+    "allBody": "Choose \"Publish to the community\" on a work and it appears here.",
+    "mine": "You haven't published anything yet",
+    "mineBody": "Open a work in the library and choose \"Publish to the community\".",
+    "filtered": "No works of this type",
+    "openLibrary": "Open the library"
+  },
+  "guest": {
+    "mine": "Sign in to see what you have published.",
+    "like": "Sign in to like and publish work.",
+    "login": "Sign in"
+  },
+  "viewer": {
+    "label": "Work details",
+    "close": "Close",
+    "prompt": "Original prompt",
+    "noPrompt": "The author did not share a prompt",
+    "copy": "Copy prompt",
+    "copied": "Prompt copied",
+    "similar": "Create something similar",
+    "similarHint": "Only the public prompt is used, never the author's references or characters.",
+    "mine": "You published this work",
+    "unpublish": "Unpublish",
+    "unpublished": "Unpublished; the work is still in your library",
+    "openAsset": "Open in the library",
+    "published": "Published {{time}}"
+  },
+  "streak": {
+    "title": "Publishing streak",
+    "toggle": "Publishing streak",
+    "current": "{{n}} days in a row",
+    "rule": "Publishing at least one work a day keeps the streak; missing a day starts it again. Days are counted in UTC.",
+    "heatmap": "Publishing over the last 12 weeks",
+    "legendNone": "Not published",
+    "legendDone": "Published",
+    "day": "{{date}}: {{state}}",
+    "milestones": "Milestone rewards",
+    "milestone": "{{days}} days in a row",
+    "reward": "+{{n}} credits",
+    "cap": "Earned {{used}} of {{cap}} times this month",
+    "uncapped": "No monthly limit",
+    "reached": "Reached",
+    "capNote": "Rewards are limited by count: each milestone says how many times it can be earned per month."
+  }
+}

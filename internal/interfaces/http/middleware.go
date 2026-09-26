@@ -48,6 +48,24 @@ func (s *Server) requireAuth() gin.HandlerFunc {
 	}
 }
 
+// optionalAuth identifies the caller when a valid token for an active
+// account is sent, and otherwise lets the request through as a guest: an
+// expired token must not stop anyone browsing a public page.
+func (s *Server) optionalAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		h := c.GetHeader("Authorization")
+		if strings.HasPrefix(h, "Bearer ") {
+			if cl, err := parseToken(s.jwtSecret, strings.TrimPrefix(h, "Bearer "), tokenAccess); err == nil {
+				var isActive bool
+				if s.db.WithContext(c.Request.Context()).Model(&persistence.User{}).Select("is_active").Where("id = ?", cl.UserID).Scan(&isActive).Error == nil && isActive {
+					c.Set(ctxUserIDKey, cl.UserID)
+				}
+			}
+		}
+		c.Next()
+	}
+}
+
 // requireAdmin chains after requireAuth (needs userID(c) already set) and
 // rejects any caller whose users.is_admin isn't true. Deliberately a fresh
 // DB read on every request rather than something baked into the JWT at

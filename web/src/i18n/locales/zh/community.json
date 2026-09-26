@@ -1,0 +1,60 @@
+{
+  "title": "发现灵感",
+  "description": "浏览大家发布的作品，看看它们用的提示词，一键创作相似作品。",
+  "streakEntry": "连续发布 {{n}} 天",
+  "tab": { "label": "作品范围", "all": "全部作品", "mine": "我发布的" },
+  "type": { "label": "类型", "all": "全部", "image": "图片", "video": "视频" },
+  "sort": "按最新发布排序",
+  "kind": { "image": "图片", "video": "视频" },
+  "open": "查看作品：{{title}}",
+  "untitled": "未命名作品",
+  "likes": "{{n}} 人喜欢",
+  "like": "喜欢",
+  "unlike": "取消喜欢",
+  "loadMore": "加载更多",
+  "empty": {
+    "all": "还没有人发布作品",
+    "allBody": "在作品详情里选择「发布到社区」，作品就会出现在这里。",
+    "mine": "你还没有发布作品",
+    "mineBody": "在素材库打开一个作品，选择「发布到社区」。",
+    "filtered": "没有这个类型的作品",
+    "openLibrary": "打开素材库"
+  },
+  "guest": {
+    "mine": "登录后查看你发布的作品。",
+    "like": "登录后可以点赞和发布作品。",
+    "login": "登录"
+  },
+  "viewer": {
+    "label": "作品详情",
+    "close": "关闭",
+    "prompt": "原始提示词",
+    "noPrompt": "作者没有公开提示词",
+    "copy": "复制提示词",
+    "copied": "已复制提示词",
+    "similar": "创作相似作品",
+    "similarHint": "只带上公开的提示词，不会使用作者的参考图或角色。",
+    "mine": "这是你发布的作品",
+    "unpublish": "取消发布",
+    "unpublished": "已取消发布，作品仍在你的素材库",
+    "openAsset": "在素材库中查看",
+    "published": "发布于 {{time}}"
+  },
+  "streak": {
+    "title": "连续发布",
+    "toggle": "连续发布记录",
+    "current": "当前已连续发布 {{n}} 天",
+    "rule": "每天发布至少 1 个作品即算连续；中断一天后重新计算。日期按 UTC 计算，即北京时间每天 8:00 换日。",
+    "heatmap": "最近 12 周的发布记录",
+    "legendNone": "未发布",
+    "legendDone": "已发布",
+    "day": "{{date}}：{{state}}",
+    "milestones": "里程碑奖励",
+    "milestone": "连续 {{days}} 天",
+    "reward": "+{{n}} 积分",
+    "cap": "本月已获得 {{used}}/{{cap}} 次",
+    "uncapped": "不限次数",
+    "reached": "已达到",
+    "capNote": "奖励按次数计上限：同一里程碑每月最多获得的次数见各项说明。"
+  }
+}

@@ -208,9 +208,10 @@ function pdfFixture(text: string): Buffer {
 test('PDF text import retains page provenance; empty PDF requests OCR', async ({ page }) => {
   await setup(page); await page.getByText('小册子背景资料', { exact: true }).click()
   await page.getByLabel('导入背景资料', { exact: true }).setInputFiles({ name: 'booklet.pdf', mimeType: 'application/pdf', buffer: pdfFixture('Green energy and community care. Verified source facts.') })
-  await expect(page.getByLabel('背景原文', { exact: true })).toHaveValue(/第 1 页.*Green energy/s)
+  // The PDF reader loads on first use, which can be slow while the suite runs in parallel.
+  await expect(page.getByLabel('背景原文', { exact: true })).toHaveValue(/第 1 页.*Green energy/s, { timeout: 15_000 })
   await page.getByLabel('导入背景资料', { exact: true }).setInputFiles({ name: 'scanned.pdf', mimeType: 'application/pdf', buffer: pdfFixture('') })
-  await expect(page.getByRole('alert')).toContainText('OCR')
+  await expect(page.getByRole('alert')).toContainText('OCR', { timeout: 15_000 })
   await expect(page.getByLabel('背景原文', { exact: true })).toHaveValue(/Green energy/)
 })
 

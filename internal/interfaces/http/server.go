@@ -93,7 +93,7 @@ func (s *Server) Router() *gin.Engine {
 		// was never protecting anything; it only blocked the login page's
 		// "browse the community first" link from working for a visitor who
 		// hasn't signed up yet.
-		v1.GET("/community/feed", s.handleCommunityFeed)
+		v1.GET("/community/feed", s.optionalAuth(), s.handleCommunityFeed)
 
 		authed := v1.Group("")
 		authed.Use(s.requireAuth())

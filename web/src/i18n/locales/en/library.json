@@ -137,8 +137,8 @@
       "confirmTitle": "Publish to the community?",
       "confirmBody": "Once published, everyone can see in the community:",
       "what1": "This image or video itself",
-      "what2": "Its prompt and generation settings",
-      "notShared": "The references, character images and sources you used stay private.",
+      "what2": "Its prompt",
+      "notShared": "Its model, seed and other settings, and the references, character images and materials you used, stay private.",
       "confirm": "Publish",
       "published": "Published to the community",
       "unpublished": "Unpublished"

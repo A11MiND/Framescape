@@ -184,6 +184,14 @@ func (s *Server) handleCommunityFeed(c *gin.Context) {
 		limit = 60
 	}
 	q := s.db.WithContext(c.Request.Context()).Where("is_public = ? AND deleted_at IS NULL", true)
+	uid := userID(c)
+	if c.Query("mine") == "1" {
+		if uid == 0 {
+			c.JSON(http.StatusUnauthorized, errBody("unauthorized", "sign in to see your published work"))
+			return
+		}
+		q = q.Where("user_id = ?", uid)
+	}
 	switch t := c.Query("type"); t {
 	case "":
 	case "image", "video":
@@ -229,7 +237,7 @@ func (s *Server) handleCommunityFeed(c *gin.Context) {
 		for _, r := range counts {
 			likeCounts[r.AssetID] = r.Count
 		}
-		if uid := userID(c); uid != 0 {
+		if uid != 0 {
 			var likedIDs []uint64
 			_ = s.db.WithContext(c.Request.Context()).Model(&persistence.AssetLike{}).
 				Where("asset_id IN ? AND user_id = ?", assetIDs, uid).Pluck("asset_id", &likedIDs).Error
@@ -252,6 +260,9 @@ func (s *Server) handleCommunityFeed(c *gin.Context) {
 			"width":          a.Width,
 			"height":         a.Height,
 			"resolution_tag": a.ResolutionTag,
+			"thumb_url":      a.ThumbURL,
+			"duration_ms":    a.DurationMs,
+			"mine":           uid != 0 && a.UserID == uid,
 			"published_at":   a.PublishedAt,
 			// prompt only — meta can carry seed/model/minimax_task_id too,
 			// none of which mean anything to another viewer.

@@ -455,3 +455,69 @@ func TestCommunityFeedTypeAndCursor(t *testing.T) {
 		}
 	}
 }
+
+func TestCommunityFeedKnowsTheSignedInCaller(t *testing.T) {
+	s, _ := newFullTestServer(t)
+	r := s.Router()
+	tokenA, uidA := registerAndFund(t, s, 0)
+	_, uidB := registerAndFund(t, s, 0)
+	at := time.Date(2099, 2, 1, 0, 0, 0, 0, time.UTC)
+	publish := func(uid uint64, typ string, i int) persistence.Asset {
+		a := seedAsset(t, s, uid, typ, "")
+		if err := s.db.Model(&persistence.Asset{}).Where("id = ?", a.ID).
+			Updates(map[string]any{"is_public": true, "published_at": at.Add(time.Duration(i) * time.Second), "duration_ms": 3000}).Error; err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+	mineImg, mineVid, theirs := publish(uidA, "image", 1), publish(uidA, "video", 2), publish(uidB, "image", 3)
+	if rec := doJSON(t, r, http.MethodPost, "/api/v1/assets/"+theirs.BizID+"/like", nil, tokenA); rec.Code >= 300 {
+		t.Fatalf("like: %d %s", rec.Code, rec.Body.String())
+	}
+
+	type item struct {
+		BizID      string `json:"biz_id"`
+		Mine       bool   `json:"mine"`
+		Liked      bool   `json:"liked"`
+		DurationMs int    `json:"duration_ms"`
+	}
+	feed := func(url, token string) (int, map[string]item) {
+		t.Helper()
+		rec := doJSON(t, r, http.MethodGet, url, nil, token)
+		var body struct {
+			Assets []item `json:"assets"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &body)
+		out := map[string]item{}
+		for _, a := range body.Assets {
+			out[a.BizID] = a
+		}
+		return rec.Code, out
+	}
+
+	_, got := feed("/api/v1/community/feed?limit=200", tokenA)
+	if !got[mineImg.BizID].Mine || got[theirs.BizID].Mine {
+		t.Errorf("mine flags wrong: %+v %+v", got[mineImg.BizID], got[theirs.BizID])
+	}
+	if !got[theirs.BizID].Liked {
+		t.Error("a signed-in caller's like is not reported")
+	}
+	if got[mineVid.BizID].DurationMs != 3000 {
+		t.Errorf("duration_ms = %d, want 3000", got[mineVid.BizID].DurationMs)
+	}
+
+	_, got = feed("/api/v1/community/feed?mine=1&limit=200", tokenA)
+	if len(got) != 2 || got[theirs.BizID].BizID != "" {
+		t.Errorf("mine=1 returned %v, want only the caller's two works", got)
+	}
+
+	if code, _ := feed("/api/v1/community/feed?mine=1", ""); code != http.StatusUnauthorized {
+		t.Errorf("guest mine=1: %d, want 401", code)
+	}
+	for _, token := range []string{"", "not-a-token"} {
+		code, got := feed("/api/v1/community/feed?limit=200", token)
+		if code != http.StatusOK || got[theirs.BizID].Liked || got[mineImg.BizID].Mine {
+			t.Errorf("guest (token %q): %d, liked/mine must be false", token, code)
+		}
+	}
+}

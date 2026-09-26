@@ -175,6 +175,16 @@ export function createDemoApi(img: Img) {
   const assetProject = new Map<string, string>()
   const published = new Set<string>()
   const LIBRARY = [...CLIPS, ...IMAGES.filter((i) => i !== 'tram-hero')]
+  // Community: other people's published works (id, likes before the demo user's own like).
+  const COMMUNITY: [string, number][] = [['tram-hero', 246], ['portrait', 182], ['clip-2', 412], ['bay', 128], ['cat', 301], ['night', 96], ['alpine', 215], ['lemon', 178]]
+  const liked = new Set<string>(['night'])
+  const communityWork = (id: string, likes: number) => {
+    const a = assetBody(id)
+    return {
+      biz_id: id, type: a.type, public_url: a.public_url, thumb_url: a.thumb_url, width: a.width, height: a.height, duration_ms: a.duration_ms,
+      resolution_tag: a.resolution_tag, published_at: a.created_at, prompt: PROMPTS[id] ?? '', like_count: likes + (liked.has(id) ? 1 : 0), liked: liked.has(id), mine: false,
+    }
+  }
   const assetBody = (id: string) => {
     const video = CLIPS.includes(id)
     const at = LIBRARY.indexOf(id)
@@ -535,6 +545,35 @@ export function createDemoApi(img: Img) {
       x.reserved += total
       return { status: 204 }
     }
+    if (path === '/community/feed' && method === 'GET') {
+      const p = new URLSearchParams(search)
+      const own = [...published].map((id) => ({ ...communityWork(id, 0), mine: true }))
+      const rows = [...own, ...COMMUNITY.map(([id, likes]) => communityWork(id, likes))]
+        .filter((w) => (p.get('type') ? w.type === p.get('type') : true) && (p.get('mine') === '1' ? w.mine : true))
+      return { status: 200, body: { assets: rows } }
+    }
+    if (path === '/community/streak' && method === 'GET') {
+      const day = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10)
+      return {
+        status: 200,
+        body: {
+          current_streak: 3,
+          published_dates: [40, 39, 33, 20, 19, 18, 12, 5, 2, 1, 0].map(day),
+          milestones: [
+            { days: 3, credits: 10, monthly_cap: 4, used_this_month: 1 },
+            { days: 10, credits: 50, monthly_cap: 1, used_this_month: 0 },
+            { days: 30, credits: 100, monthly_cap: 0, used_this_month: 0 },
+          ],
+        },
+      }
+    }
+    const like = path.match(/^\/assets\/([^/]+)\/like$/)
+    if (like && (method === 'POST' || method === 'DELETE')) {
+      if (method === 'POST') liked.add(like[1])
+      else liked.delete(like[1])
+      const base = COMMUNITY.find(([id]) => id === like[1])?.[1] ?? 0
+      return { status: 200, body: { liked: liked.has(like[1]), like_count: base + (liked.has(like[1]) ? 1 : 0) } }
+    }
     const comic = path.match(/^\/comics\/([^/]+)$/)
     if (path === '/comics' && method === 'GET') {
       return { status: 200, body: { comics: [...comics.values()].map((c) => ({ biz_id: c.biz_id, title: c.document.title, version: c.version })) } }
@@ -581,7 +620,6 @@ export function createDemoApi(img: Img) {
       return { status: 204 }
     }
     const lists: Record<string, unknown> = {
-      '/community/feed': { assets: [] },
       '/credits/ledger': { entries: [] },
     }
     if (method === 'GET' && path in lists) return { status: 200, body: lists[path] }
