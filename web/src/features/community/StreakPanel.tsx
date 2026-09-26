@@ -59,9 +59,9 @@ export function StreakPanel({ id }: { id: string }) {
         <ChevronDown aria-hidden className={cn('size-4 text-fg-muted transition-transform', open && 'rotate-180')} />
       </button>
       {open && (
-        <div className="grid gap-6 border-t border-border p-4 lg:grid-cols-[auto_minmax(0,1fr)]">
+        <div className="grid gap-6 border-t border-border p-4 xl:grid-cols-[auto_minmax(0,1fr)]">
           {streak.isPending ? (
-            <Skeleton className="h-32 w-full lg:col-span-2" />
+            <Skeleton className="h-32 w-full xl:col-span-2" />
           ) : (
             <>
               <div className="flex flex-col gap-2">
