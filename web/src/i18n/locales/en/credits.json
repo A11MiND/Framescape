@@ -1,0 +1,59 @@
+{
+  "title": "Credits",
+  "description": "See your available and reserved credits and every change to them.",
+  "available": "Available",
+  "held": "Reserved",
+  "heldNote": "Reserved is not spent",
+  "heldHelp": "A task reserves its quote when it starts, is charged its actual usage as it completes, and releases what is left.",
+  "about": {
+    "title": "How credits work",
+    "reserve": "Reserve: submitting a task sets aside the quote you confirmed; nothing is spent yet.",
+    "settle": "Charge: each step is charged the usage the provider reports; without a report, the reserved amount is charged.",
+    "release": "Release: when the task ends, whatever was reserved and not charged returns to your available credits.",
+    "overage": "If usage exceeds the reservation, the difference comes from available credits and is listed separately."
+  },
+  "topup": {
+    "title": "Demo top-up",
+    "action": "+{{n}} demo top-up",
+    "note": "No payment: nothing is charged; this is for demos and testing only.",
+    "done": "Added {{n}} demo credits",
+    "unavailable": "Top-ups are not available yet; ask an administrator for credits."
+  },
+  "ledger": {
+    "title": "Credit history",
+    "time": "Time",
+    "type": "Type",
+    "related": "Task",
+    "remark": "Details",
+    "amount": "Amount",
+    "none": "—",
+    "empty": "No credit history yet",
+    "emptyBody": "Once you submit a task, its reservation, charges and release appear here.",
+    "loadMore": "Load more",
+    "notSum": "Reserve, charge and release are stages of the same task; do not add them up. What you spent is in \"Charge\"."
+  },
+  "type": {
+    "hold": "Reserve",
+    "commit": "Charge",
+    "refund": "Release",
+    "recharge": "Top-up",
+    "grant": "Grant",
+    "reward": "Reward"
+  },
+  "remark": {
+    "hold_job": "Reserved the quote when submitting",
+    "hold_retry": "Reserved the quote for a retry",
+    "hold_upgrade": "Reserved more after confirming the preview",
+    "hold": "Reserved the quote",
+    "commit": "Charged actual usage",
+    "commitShortfall": "Charged actual usage; {{n}} beyond the reservation came from available credits",
+    "refund": "Unused reservation returned",
+    "recharge_demo": "Demo top-up (no payment)",
+    "recharge_custom": "Granted by an administrator",
+    "streak": "{{days}}-day publishing streak reward"
+  },
+  "amount": {
+    "hold": "Reserve {{n}}",
+    "refund": "Release {{n}}"
+  }
+}

@@ -255,6 +255,26 @@ export function createDemoApi(img: Img) {
   }
   const me = { biz_id: 'demo-user', email: 'demo@example.com', phone: null, balance: 860, held: 350, is_admin: true, entitlements: ['openai_image'], comic_ai: true }
 
+  // Ledger: one classic comic's reserve, charges (one past its reservation) and release, plus top-ups and rewards.
+  const ledgerJob = (id: string, title: string, workflow: string, cover: string) => ({ biz_id: id, title, workflow_name: workflow, cover_url: img(`${cover}.jpg`) })
+  const comicJob = ledgerJob('J005', '柠檬汽水四格漫画', 'image.comic4', 'comic-page')
+  const tramJob = ledgerJob('J012', '海岸电车 · 5 秒镜头', 'video.single', 'tram-1')
+  let ledgerSeq = 0
+  const entry = (direction: string, amount: number, remark: Record<string, unknown>, job: unknown, minutesAgo: number) => ({
+    direction, amount, balance_after: me.balance, held_after: me.held, ref_type: job ? 'job' : '', ref_id: '', job,
+    remark: { kind: '', amount: 0, workflow: '', cost_yuan: 0, text: '', ...remark },
+    created_at: new Date(Date.parse('2026-09-24T06:30:00Z') - minutesAgo * 60_000 - ledgerSeq++).toISOString(),
+  })
+  const ledger = [
+    entry('refund', 0, { kind: 'refund', amount: 9 }, comicJob, 0),
+    entry('commit', -21, { kind: 'commit', amount: 21, shortfall: 1 }, comicJob, 2),
+    entry('commit', -10, { kind: 'commit', amount: 10 }, comicJob, 4),
+    entry('hold', 0, { kind: 'hold_job', amount: 40 }, comicJob, 6),
+    entry('recharge', 10, { kind: 'community_streak_3', amount: 10 }, null, 60),
+    entry('commit', -64, { kind: 'commit', amount: 64 }, tramJob, 120),
+    entry('hold', 0, { kind: 'hold_job', amount: 64 }, tramJob, 125),
+    entry('recharge', 500, { kind: 'recharge_custom', amount: 500, text: '内测赠送' }, null, 1440),
+  ]
   const view = (x: Job) => ({
     biz_id: x.biz_id,
     workflow_name: x.workflow_name,
@@ -574,6 +594,12 @@ export function createDemoApi(img: Img) {
       const base = COMMUNITY.find(([id]) => id === like[1])?.[1] ?? 0
       return { status: 200, body: { liked: liked.has(like[1]), like_count: base + (liked.has(like[1]) ? 1 : 0) } }
     }
+    if (path === '/credits/ledger' && method === 'GET') return { status: 200, body: { entries: ledger } }
+    if (path === '/credits/topup' && method === 'POST') {
+      me.balance += 200
+      ledger.unshift(entry('recharge', 200, { kind: 'recharge_demo', amount: 200 }, null, 0))
+      return { status: 200, body: { balance: me.balance, held: me.held, credited: 200 } }
+    }
     const comic = path.match(/^\/comics\/([^/]+)$/)
     if (path === '/comics' && method === 'GET') {
       return { status: 200, body: { comics: [...comics.values()].map((c) => ({ biz_id: c.biz_id, title: c.document.title, version: c.version })) } }
@@ -620,7 +646,6 @@ export function createDemoApi(img: Img) {
       return { status: 204 }
     }
     const lists: Record<string, unknown> = {
-      '/credits/ledger': { entries: [] },
     }
     if (method === 'GET' && path in lists) return { status: 200, body: lists[path] }
     return { status: 404, body: { code: 'not_found', message: `demo has no ${method} ${path}` } }
