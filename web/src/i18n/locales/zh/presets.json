@@ -1,0 +1,57 @@
+{
+  "title": "风格预设",
+  "description": "用风格、姿势、构图、灯光和镜头预设补充描述；可以多选后一起应用到创作。",
+  "create": "新建预设",
+  "search": "搜索预设名称或描述词",
+  "sourceLabel": "来源",
+  "source": { "system": "系统", "mine": "我的" },
+  "categoryLabel": "分类",
+  "select": "选择 {{name}}",
+  "open": "查看 {{name}}",
+  "noCover": "没有封面",
+  "empty": {
+    "mine": "还没有自己的预设",
+    "mineBody": "新建一个，或把系统预设另存为自己的再修改。",
+    "filtered": "没有符合搜索的预设"
+  },
+  "detail": {
+    "title": "预设详情",
+    "createTitle": "新建预设",
+    "close": "关闭详情",
+    "systemTag": "系统预设",
+    "mineTag": "我的预设",
+    "coverNote": "封面仅为示意，不代表实际生成效果。",
+    "fragment": "描述词片段",
+    "fragmentHelp": "应用后会拼接进提示词。",
+    "name": "预设名称",
+    "category": "所属分类",
+    "styleTag": "风格标签",
+    "styleTagHelp": "只用于整理和显示，不改变生成参数。",
+    "readOnly": "系统预设不能修改或删除；可以另存为我的预设后再改。",
+    "apply": "应用到创作",
+    "saveCopy": "另存为我的预设",
+    "copySuffix": "（副本）",
+    "save": "保存修改",
+    "createConfirm": "创建预设",
+    "delete": "删除预设",
+    "saved": "预设已保存",
+    "created": "预设已创建",
+    "copied": "已另存为我的预设",
+    "nameRequired": "请填写预设名称",
+    "fragmentRequired": "请填写描述词片段"
+  },
+  "tray": {
+    "label": "已选择的预设",
+    "count": "已选 {{n}} 个",
+    "clear": "清空",
+    "remove": "移除 {{name}}",
+    "apply": "应用到创作",
+    "applyHint": "打开上次使用的图片类创作模式并加入这些预设，已有草稿保留。"
+  },
+  "deleteDialog": {
+    "title": "删除预设「{{name}}」？",
+    "body": "已经生成的作品不受影响；删除后不能再选择这个预设。",
+    "confirm": "删除预设",
+    "done": "预设已删除"
+  }
+}

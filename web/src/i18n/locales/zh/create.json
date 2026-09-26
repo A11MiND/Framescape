@@ -86,7 +86,8 @@
       "camera": "镜头"
     },
     "done": "完成",
-    "clear": "清空"
+    "clear": "清空",
+    "added": "已加入风格预设：{{names}}"
   },
   "count": {
     "label": "数量"

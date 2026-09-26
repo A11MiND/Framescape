@@ -86,7 +86,8 @@
       "camera": "Camera"
     },
     "done": "Done",
-    "clear": "Clear"
+    "clear": "Clear",
+    "added": "Presets added: {{names}}"
   },
   "count": {
     "label": "Count"

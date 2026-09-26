@@ -115,3 +115,52 @@ func TestHandleDeletePreset(t *testing.T) {
 		t.Fatalf("repeat delete: status = %d, want %d, body = %s", rec.Code, http.StatusNotFound, rec.Body.String())
 	}
 }
+
+func TestHandleUpdatePreset(t *testing.T) {
+	s := newTestServer(t)
+	r := s.Router()
+	tokenA, _ := registerAndFund(t, s, 0)
+	tokenB, _ := registerAndFund(t, s, 0)
+	system := persistence.Preset{BizID: id.New(), Category: "style", Name: "httptest-system-preset-fixture", PromptFragment: "x"}
+	if err := s.db.Create(&system).Error; err != nil {
+		t.Fatalf("seed system preset: %v", err)
+	}
+	str := func(v string) *string { return &v }
+
+	rec := doJSON(t, r, http.MethodPost, "/api/v1/presets", createPresetRequest{Name: " Mine ", PromptFragment: "soft light", Category: "lighting"}, tokenA)
+	var created map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &created)
+	if created["name"] != "Mine" || created["category"] != "lighting" {
+		t.Fatalf("created %v, want trimmed name and lighting", created)
+	}
+	bizID := created["biz_id"].(string)
+
+	rec = doJSON(t, r, http.MethodPatch, "/api/v1/presets/"+bizID, updatePresetRequest{Name: str("Golden"), PromptFragment: str("golden hour light")}, tokenA)
+	var updated map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &updated)
+	if rec.Code != http.StatusOK || updated["name"] != "Golden" || updated["prompt_fragment"] != "golden hour light" || updated["category"] != "lighting" {
+		t.Fatalf("update: %d %v", rec.Code, updated)
+	}
+
+	cases := []struct {
+		name   string
+		id     string
+		body   updatePresetRequest
+		token  string
+		status int
+	}{
+		{"a system preset", system.BizID, updatePresetRequest{Name: str("x")}, tokenA, http.StatusNotFound},
+		{"another user's preset", bizID, updatePresetRequest{Name: str("x")}, tokenB, http.StatusNotFound},
+		{"an unknown category", bizID, updatePresetRequest{Category: str("mood")}, tokenA, http.StatusBadRequest},
+		{"a blank fragment", bizID, updatePresetRequest{PromptFragment: str("  ")}, tokenA, http.StatusUnprocessableEntity},
+		{"nothing to change", bizID, updatePresetRequest{}, tokenA, http.StatusBadRequest},
+	}
+	for _, c := range cases {
+		if rec := doJSON(t, r, http.MethodPatch, "/api/v1/presets/"+c.id, c.body, c.token); rec.Code != c.status {
+			t.Errorf("%s: status %d, want %d (%s)", c.name, rec.Code, c.status, rec.Body.String())
+		}
+	}
+	if rec := doJSON(t, r, http.MethodPost, "/api/v1/presets", createPresetRequest{Name: "x", PromptFragment: "y", Category: "mood"}, tokenA); rec.Code != http.StatusBadRequest {
+		t.Errorf("create with an unknown category: %d, want 400", rec.Code)
+	}
+}

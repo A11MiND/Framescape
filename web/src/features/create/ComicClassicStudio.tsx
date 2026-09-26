@@ -19,6 +19,7 @@ import { useDraft } from './drafts'
 import { useSubmit } from './useSubmit'
 import { characterSlots, readPrefill } from './prefill'
 import { useCharacterPrefill } from './useCharacterPrefill'
+import { usePresetPrefill } from './usePresetPrefill'
 
 type Source = 'panels' | 'story'
 type Provider = 'minimax' | 'gemini'
@@ -51,6 +52,7 @@ export default function ComicClassicStudio() {
   const [currentProject] = useCurrentProject(me.data?.biz_id)
   const [draft, update] = useDraft<ClassicDraft>(me.data?.biz_id, 'comic-classic', INITIAL)
   useCharacterPrefill(draft.characters, (characters) => update({ characters }))
+  usePresetPrefill(draft.presets, (presets) => update({ presets }))
   const caps = useQuery({ queryKey: keys.capabilities, queryFn: createApi.capabilities, staleTime: 60_000 })
   const characters = useQuery({ queryKey: keys.characters, queryFn: createApi.characters })
   const presets = useQuery({ queryKey: keys.presets, queryFn: createApi.presets })

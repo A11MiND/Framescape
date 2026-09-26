@@ -76,6 +76,9 @@ function useField() {
 
 // Width is left to the caller for selects (inline filters are content
 // width); inputs and textareas fill their container.
+// Only text controls: a <select> always matches :read-only.
+const readOnlyText = 'read-only:bg-surface-2 read-only:text-fg-muted read-only:focus-visible:ring-0'
+
 const controlBase =
   'rounded-card border bg-surface text-body text-fg placeholder:text-fg-muted transition-colors ' +
   'hover:border-fg-muted focus-visible:border-primary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-primary/20 ' +
@@ -97,7 +100,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
       ref={ref}
       {...rest}
       {...controlProps(field, rest)}
-      className={cn(controlBase, 'h-10 w-full px-3', field?.invalid ? 'border-danger' : 'border-border-control', className)}
+      className={cn(controlBase, readOnlyText, 'h-10 w-full px-3', field?.invalid ? 'border-danger' : 'border-border-control', className)}
     />
   )
 })
@@ -153,6 +156,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
         {...controlProps(field, rest)}
         className={cn(
           controlBase,
+          readOnlyText,
           'min-h-24 w-full resize-y px-3 py-2',
           maxChars !== undefined && 'pb-7',
           field?.invalid || over ? 'border-danger' : 'border-border-control',

@@ -141,6 +141,7 @@ func (s *Server) Router() *gin.Engine {
 		authed.DELETE("/characters/:bizID", s.handleDeleteCharacter)
 		authed.GET("/presets", s.handleListPresets)
 		authed.POST("/presets", s.handleCreatePreset)
+		authed.PATCH("/presets/:bizID", s.handleUpdatePreset)
 		authed.DELETE("/presets/:bizID", s.handleDeletePreset)
 		authed.GET("/credits/balance", s.handleCreditsBalance)
 		authed.GET("/credits/ledger", s.handleCreditsLedger)

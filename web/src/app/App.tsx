@@ -8,7 +8,7 @@ import { lastCreateMode, prefillTarget } from './routing'
 
 const Login = lazy(() => import('../pages/Login'))
 const Characters = lazy(() => import('../features/characters/CharactersPage'))
-const Presets = lazy(() => import('../pages/Presets'))
+const Presets = lazy(() => import('../features/presets/PresetsPage'))
 const Assets = lazy(() => import('../features/library/LibraryPage'))
 const AssetDetail = lazy(() => import('../features/library/AssetDetailPage'))
 const Community = lazy(() => import('../pages/Community'))

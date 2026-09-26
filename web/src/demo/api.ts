@@ -150,10 +150,17 @@ export function createDemoApi(img: Img) {
     { biz_id: 'C2', name: '阿橘', description: '一只橘色的猫，喜欢晒太阳', ref_asset_ids: ['cat', 'sunset'], seed: 1024, project_id: 'P1' },
   ]
   const presets = [
-    { biz_id: 'S1', category: 'style', name: '水彩', name_en: 'Watercolor', cover_url: '/preset-covers/style-watercolor.jpg', prompt_fragment: '水彩质感，手绘笔触，柔和的色彩过渡', priority: 1, style_type: 'watercolor', mine: false },
-    { biz_id: 'S2', category: 'style', name: '漫画', name_en: 'Manga', cover_url: '/preset-covers/style-manga.jpg', prompt_fragment: '日系漫画风格，干净的线条', priority: 2, style_type: 'manga', mine: false },
+    { biz_id: 'S1', category: 'style', name: '水彩', name_en: 'Watercolor', cover_url: '/preset-covers/style-watercolor.jpg', prompt_fragment: '水彩质感，手绘笔触，柔和的色彩过渡，纸张纹理', priority: 1, style_type: '水彩', mine: false },
+    { biz_id: 'S2', category: 'style', name: '漫画', name_en: 'Manga', cover_url: '/preset-covers/style-manga.jpg', prompt_fragment: '日系漫画风格，干净的线条', priority: 2, style_type: '漫画', mine: false },
+    { biz_id: 'S5', category: 'style', name: '元气', name_en: 'Genki', cover_url: '/preset-covers/style-genki.jpg', prompt_fragment: '明亮饱和的色彩，活泼的氛围', priority: 3, style_type: '元气', mine: false },
+    { biz_id: 'S6', category: 'style', name: '中世纪', name_en: 'Medieval', cover_url: '/preset-covers/style-medieval.jpg', prompt_fragment: '中世纪油画质感，厚重的笔触与暖色调', priority: 4, style_type: '中世纪', mine: false },
     { biz_id: 'S3', category: 'lighting', name: '黄金时刻', name_en: 'Golden hour', cover_url: '/preset-covers/lighting-golden.jpg', prompt_fragment: '黄金时刻的暖色光线', priority: 3, style_type: '', mine: false },
+    { biz_id: 'S7', category: 'lighting', name: '轮廓光', name_en: 'Rim light', cover_url: '/preset-covers/lighting-rim.jpg', prompt_fragment: '逆光勾勒出人物轮廓', priority: 2, style_type: '', mine: false },
     { biz_id: 'S4', category: 'camera', name: '特写', name_en: 'Close-up', cover_url: '/preset-covers/camera-closeup.jpg', prompt_fragment: '特写镜头，浅景深', priority: 4, style_type: '', mine: false },
+    { biz_id: 'S8', category: 'camera', name: '广角', name_en: 'Wide shot', cover_url: '/preset-covers/camera-wide.jpg', prompt_fragment: '广角镜头，开阔的视野', priority: 2, style_type: '', mine: false },
+    { biz_id: 'S9', category: 'composition', name: '三分法', name_en: 'Rule of thirds', cover_url: '/preset-covers/composition-thirds.jpg', prompt_fragment: '三分法构图，主体位于交点', priority: 2, style_type: '', mine: false },
+    { biz_id: 'S10', category: 'pose', name: '低角度', name_en: 'Low angle', cover_url: '/preset-covers/pose-lowangle.jpg', prompt_fragment: '低角度仰拍，人物显得高大', priority: 2, style_type: '', mine: false },
+    { biz_id: 'M1', category: 'style', name: '海岸清新风', name_en: '', cover_url: '', prompt_fragment: '清新明亮的海岸色调，蓝白配色，轻柔的阳光', priority: 0, style_type: '', mine: true },
   ]
   // Library state: which assets are in the trash, and each one's project.
   const PROMPTS: Record<string, string> = {
@@ -354,6 +361,23 @@ export function createDemoApi(img: Img) {
       return { status: 204 }
     }
     if (path === '/presets' && method === 'GET') return { status: 200, body: { presets } }
+    const preset = path.match(/^\/presets\/([^/]+)$/)
+    if (path === '/presets' && method === 'POST') {
+      const b = body as { name: string; prompt_fragment: string; category?: string; style_type?: string }
+      const p = { biz_id: `M${nextId++}`, category: b.category || 'style', name: b.name, name_en: '', cover_url: '', prompt_fragment: b.prompt_fragment, priority: 0, style_type: b.style_type ?? '', mine: true }
+      presets.push(p)
+      return { status: 200, body: p }
+    }
+    if (preset && (method === 'PATCH' || method === 'DELETE')) {
+      const at = presets.findIndex((x) => x.biz_id === preset[1] && x.mine)
+      if (at < 0) return { status: 404, body: { code: 'not_found', message: 'preset' } }
+      if (method === 'DELETE') {
+        presets.splice(at, 1)
+        return { status: 204 }
+      }
+      Object.assign(presets[at], body as object)
+      return { status: 200, body: presets[at] }
+    }
     if (path === '/assets' && method === 'GET') {
       const p = new URLSearchParams(search)
       const type = p.get('type')

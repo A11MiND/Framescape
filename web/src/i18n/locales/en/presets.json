@@ -1,0 +1,57 @@
+{
+  "title": "Presets",
+  "description": "Add style, pose, composition, lighting and camera presets to a description; select several and apply them together.",
+  "create": "New preset",
+  "search": "Search names or fragments",
+  "sourceLabel": "Source",
+  "source": { "system": "System", "mine": "Mine" },
+  "categoryLabel": "Category",
+  "select": "Select {{name}}",
+  "open": "View {{name}}",
+  "noCover": "No cover",
+  "empty": {
+    "mine": "No presets of your own yet",
+    "mineBody": "Create one, or save a system preset as your own and change it.",
+    "filtered": "No presets match your search"
+  },
+  "detail": {
+    "title": "Preset details",
+    "createTitle": "New preset",
+    "close": "Close details",
+    "systemTag": "System preset",
+    "mineTag": "My preset",
+    "coverNote": "The cover is an illustration, not a promise of the generated result.",
+    "fragment": "Prompt fragment",
+    "fragmentHelp": "Added to the prompt when applied.",
+    "name": "Name",
+    "category": "Category",
+    "styleTag": "Style tag",
+    "styleTagHelp": "For organising and display only; it does not change generation settings.",
+    "readOnly": "System presets cannot be changed or deleted; save one as your own to change it.",
+    "apply": "Apply to creation",
+    "saveCopy": "Save as my preset",
+    "copySuffix": " (copy)",
+    "save": "Save changes",
+    "createConfirm": "Create preset",
+    "delete": "Delete preset",
+    "saved": "Preset saved",
+    "created": "Preset created",
+    "copied": "Saved as your preset",
+    "nameRequired": "Enter a name",
+    "fragmentRequired": "Enter a prompt fragment"
+  },
+  "tray": {
+    "label": "Selected presets",
+    "count": "{{n}} selected",
+    "clear": "Clear",
+    "remove": "Remove {{name}}",
+    "apply": "Apply to creation",
+    "applyHint": "Opens the image creation mode you used last with these presets added; your draft is kept."
+  },
+  "deleteDialog": {
+    "title": "Delete \"{{name}}\"?",
+    "body": "Work already generated is not affected; you can no longer choose this preset.",
+    "confirm": "Delete preset",
+    "done": "Preset deleted"
+  }
+}
