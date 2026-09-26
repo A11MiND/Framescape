@@ -84,7 +84,7 @@ func (s *Service) prepareImageComic4(ctx context.Context, userID uint64, spec Sp
 	if err != nil {
 		return nil, "", err
 	}
-	presets, err := s.resolvePresets(ctx, spec.PresetIDs)
+	presets, err := s.resolvePresets(ctx, userID, spec.PresetIDs)
 	if err != nil {
 		return nil, "", err
 	}
@@ -135,7 +135,7 @@ func (s *Service) prepareImageComic4(ctx context.Context, userID uint64, spec Sp
 	// which MiniMax tunes for human portraits rather than animals or objects.
 	subject := ""
 	if anchor != "" && s.minimax != nil {
-		if url, err := s.resolveAssetPublicURL(ctx, anchor); err == nil && url != "" {
+		if url, err := s.resolveAssetPublicURL(ctx, userID, anchor); err == nil && url != "" {
 			subject, _ = minimax.DescribeReferenceSubject(ctx, s.minimax, url)
 		}
 	}

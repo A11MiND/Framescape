@@ -2,24 +2,70 @@ package httpapi
 
 import (
 	"aigc-platform/internal/domain/capability"
+	"context"
 	"encoding/json"
+	"math/rand/v2"
 	"net/http"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 
 	"aigc-platform/internal/infra/persistence"
+	"aigc-platform/internal/pkg/apperr"
 	"aigc-platform/internal/pkg/id"
 )
 
 // createCharacterRequest is F3.1: name + description + 1-3 reference images
-// + a fixed seed (the actual consistency lever, PRD §3.1).
+// + a fixed seed (the consistency lever, PRD §3.1). An omitted seed is chosen
+// once here and stored, so the character still reuses one fixed seed.
 type createCharacterRequest struct {
 	Name        string   `json:"name" binding:"required"`
 	Description string   `json:"description"`
 	RefAssetIDs []string `json:"ref_asset_ids" binding:"required,min=1,max=3"`
-	Seed        int64    `json:"seed" binding:"required"`
+	Seed        *int64   `json:"seed,omitempty"`
 	ProjectID   string   `json:"project_id,omitempty"`
+}
+
+const (
+	characterNameMax        = 64
+	characterDescriptionMax = 1024
+)
+
+// checkCharacterFields rejects a name or description the table cannot hold.
+func checkCharacterFields(name, description *string) error {
+	if name != nil {
+		*name = strings.TrimSpace(*name)
+		if *name == "" || utf8.RuneCountInString(*name) > characterNameMax {
+			return apperr.New("text_length", "character name must be 1-64 characters", "field", "name", "max", characterNameMax)
+		}
+	}
+	if description != nil && utf8.RuneCountInString(*description) > characterDescriptionMax {
+		return apperr.New("text_length", "character description is too long", "field", "description", "max", characterDescriptionMax)
+	}
+	return nil
+}
+
+// checkCharacterRefs requires every reference to be one of the caller's own
+// live images: generation later loads them without a user filter.
+func (s *Server) checkCharacterRefs(ctx context.Context, uid uint64, ids []string) error {
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if seen[id] {
+			return apperr.New("bad_request", "duplicate reference image")
+		}
+		seen[id] = true
+	}
+	var n int64
+	if err := s.db.WithContext(ctx).Model(&persistence.Asset{}).
+		Where("biz_id IN ? AND user_id = ? AND deleted_at IS NULL AND type = ?", ids, uid, "image").Count(&n).Error; err != nil {
+		return err
+	}
+	if int(n) != len(ids) {
+		return apperr.New("reference_unavailable", "a reference image is missing, deleted or not yours")
+	}
+	return nil
 }
 
 func (s *Server) handleCreateCharacter(c *gin.Context) {
@@ -27,6 +73,18 @@ func (s *Server) handleCreateCharacter(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
 		return
+	}
+	if err := checkCharacterFields(&req.Name, &req.Description); err != nil {
+		writeError(c, err, http.StatusBadRequest, "bad_request")
+		return
+	}
+	if err := s.checkCharacterRefs(c.Request.Context(), userID(c), req.RefAssetIDs); err != nil {
+		writeError(c, err, http.StatusInternalServerError, "internal")
+		return
+	}
+	seed := rand.Int64N(1 << 31)
+	if req.Seed != nil {
+		seed = *req.Seed
 	}
 	refJSON, err := json.Marshal(req.RefAssetIDs)
 	if err != nil {
@@ -49,7 +107,7 @@ func (s *Server) handleCreateCharacter(c *gin.Context) {
 		Name:        req.Name,
 		Description: req.Description,
 		RefAssetIDs: refJSON,
-		Seed:        req.Seed,
+		Seed:        seed,
 	}
 	if err := s.db.WithContext(c.Request.Context()).Create(&row).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, errBody("internal", "insert character"))
@@ -128,6 +186,16 @@ func (s *Server) handleUpdateCharacter(c *gin.Context) {
 	if req.RefAssetIDs != nil && (len(*req.RefAssetIDs) < 1 || len(*req.RefAssetIDs) > capability.CharacterMaxRefImages) {
 		c.JSON(http.StatusBadRequest, errBody("bad_request", "ref_asset_ids must have 1-3 entries"))
 		return
+	}
+	if err := checkCharacterFields(req.Name, req.Description); err != nil {
+		writeError(c, err, http.StatusBadRequest, "bad_request")
+		return
+	}
+	if req.RefAssetIDs != nil {
+		if err := s.checkCharacterRefs(c.Request.Context(), userID(c), *req.RefAssetIDs); err != nil {
+			writeError(c, err, http.StatusInternalServerError, "internal")
+			return
+		}
 	}
 
 	updates := map[string]any{}

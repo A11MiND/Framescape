@@ -36,6 +36,7 @@ func TestVideoRefsRejectedBeforeReserving(t *testing.T) {
 	short, long := seedVideo(t, s, uid, 6), seedVideo(t, s, uid, 10)
 	image := seedAsset(t, s, uid, "image", "")
 	foreign := seedVideo(t, s, other, 4)
+	audio := seedAsset(t, s, uid, "audio", "")
 
 	balance := func() int {
 		var a persistence.CreditAccount
@@ -54,7 +55,7 @@ func TestVideoRefsRejectedBeforeReserving(t *testing.T) {
 		{"another user's video", jobsvc.Spec{Text: "x", ReferenceVideoAssetIDs: []string{foreign.BizID}}, "reference_unavailable"},
 		{"an image as a video", jobsvc.Spec{Text: "x", ReferenceVideoAssetIDs: []string{image.BizID}}, "reference_unavailable"},
 		{"ten reference images", jobsvc.Spec{Text: "x", ReferenceImageAssetIDs: repeat(image.BizID, 10)}, "references_too_many"},
-		{"four reference audio files", jobsvc.Spec{Text: "x", ReferenceAudioAssetIDs: repeat("audio", 4)}, "reference_audios_too_many"},
+		{"four reference audio files", jobsvc.Spec{Text: "x", ReferenceAudioAssetIDs: repeat(audio.BizID, 4)}, "reference_audios_too_many"},
 	}
 	for _, c := range cases {
 		if status, code := submitVideo(t, s, token, c.spec); status != http.StatusUnprocessableEntity || code != c.code {
@@ -83,7 +84,7 @@ func TestVideoCharacterRefLimit(t *testing.T) {
 	var slots []jobsvc.CharacterSlot
 	for i := 0; i < 4; i++ {
 		refs := []string{seedAsset(t, s, uid, "image", "").BizID, seedAsset(t, s, uid, "image", "").BizID, seedAsset(t, s, uid, "image", "").BizID}
-		rec := doJSON(t, s.Router(), http.MethodPost, "/api/v1/characters", createCharacterRequest{Name: fmt.Sprintf("C%d", i), RefAssetIDs: refs, Seed: 1}, token)
+		rec := doJSON(t, s.Router(), http.MethodPost, "/api/v1/characters", createCharacterRequest{Name: fmt.Sprintf("C%d", i), RefAssetIDs: refs, Seed: seedOf(1)}, token)
 		var c struct {
 			BizID string `json:"biz_id"`
 		}

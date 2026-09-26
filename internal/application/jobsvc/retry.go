@@ -61,7 +61,7 @@ func (s *Service) RetryNode(ctx context.Context, userID uint64, bizID, nodeName 
 	if err != nil {
 		return nil, err
 	}
-	presets, err := s.resolvePresets(ctx, spec.PresetIDs)
+	presets, err := s.resolvePresets(ctx, userID, spec.PresetIDs)
 	if err != nil {
 		return nil, err
 	}

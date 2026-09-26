@@ -162,7 +162,7 @@ func (s *Service) RetryComicPanels(ctx context.Context, userID uint64, bizID str
 	if err != nil {
 		return nil, err
 	}
-	presets, err := s.resolvePresets(ctx, src.spec.PresetIDs)
+	presets, err := s.resolvePresets(ctx, userID, src.spec.PresetIDs)
 	if err != nil {
 		return nil, err
 	}

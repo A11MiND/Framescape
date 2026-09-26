@@ -184,6 +184,9 @@ func (s *Service) Create(ctx context.Context, userID uint64, workflowName string
 	if err := checkProvider(workflowName, spec); err != nil {
 		return nil, err
 	}
+	if err := s.checkAssetsOwned(ctx, userID, specAssetIDs(spec)); err != nil {
+		return nil, err
+	}
 	// Planning calls made before the plan exists are recorded against the user.
 	ctx = executor.WithAttribution(ctx, executor.Attribution{UserID: userID})
 	if idemKey != "" {
@@ -297,7 +300,7 @@ func (s *Service) prepareImageSingle(ctx context.Context, userID uint64, spec Sp
 	if err != nil {
 		return nil, "", err
 	}
-	presets, err := s.resolvePresets(ctx, spec.PresetIDs)
+	presets, err := s.resolvePresets(ctx, userID, spec.PresetIDs)
 	if err != nil {
 		return nil, "", err
 	}
@@ -334,7 +337,7 @@ func (s *Service) prepareVideoSingle(ctx context.Context, userID uint64, spec Sp
 	if err != nil {
 		return nil, "", err
 	}
-	presets, err := s.resolvePresets(ctx, spec.PresetIDs)
+	presets, err := s.resolvePresets(ctx, userID, spec.PresetIDs)
 	if err != nil {
 		return nil, "", err
 	}
@@ -890,18 +893,20 @@ func (s *Service) resolveCharacterPlanInfo(ctx context.Context, userID uint64, s
 	return infos, slotRef, nil
 }
 
-func (s *Service) resolveAssetPublicURL(ctx context.Context, assetBizID string) (string, error) {
+func (s *Service) resolveAssetPublicURL(ctx context.Context, userID uint64, assetBizID string) (string, error) {
 	var url string
-	err := s.db.WithContext(ctx).Model(&persistence.Asset{}).Where("biz_id = ?", assetBizID).Limit(1).Pluck("public_url", &url).Error
+	err := s.db.WithContext(ctx).Model(&persistence.Asset{}).Where("biz_id = ? AND user_id = ? AND deleted_at IS NULL", assetBizID, userID).Limit(1).Pluck("public_url", &url).Error
 	return url, err
 }
 
-func (s *Service) resolvePresets(ctx context.Context, presetIDs []string) ([]prompt.Preset, error) {
+// resolvePresets loads system presets and the caller's own; another user's
+// preset is skipped like an unknown id.
+func (s *Service) resolvePresets(ctx context.Context, userID uint64, presetIDs []string) ([]prompt.Preset, error) {
 	if len(presetIDs) == 0 {
 		return nil, nil
 	}
 	var rows []persistence.Preset
-	if err := s.db.WithContext(ctx).Where("biz_id IN ?", presetIDs).Find(&rows).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("biz_id IN ? AND (owner_user_id IS NULL OR owner_user_id = ?)", presetIDs, userID).Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("load presets: %w", err)
 	}
 	out := make([]prompt.Preset, 0, len(rows))

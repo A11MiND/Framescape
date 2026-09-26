@@ -51,7 +51,7 @@ func (s *Service) prepareImageSequence(ctx context.Context, userID uint64, spec 
 	if err != nil {
 		return nil, "", err
 	}
-	presets, err := s.resolvePresets(ctx, spec.PresetIDs)
+	presets, err := s.resolvePresets(ctx, userID, spec.PresetIDs)
 	if err != nil {
 		return nil, "", err
 	}

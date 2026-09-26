@@ -9,58 +9,77 @@ import (
 	"aigc-platform/internal/pkg/id"
 )
 
-func TestHandleCreateCharacter(t *testing.T) {
-	s := newTestServer(t)
-	r := s.Router()
-	token, _ := registerAndFund(t, s, 0)
+func seedOf(n int64) *int64 { return &n }
 
-	rec := doJSON(t, r, http.MethodPost, "/api/v1/characters",
-		createCharacterRequest{Name: "Alice", RefAssetIDs: []string{"asset-1"}, Seed: 42}, token)
+func createCharacter(t *testing.T, s *Server, token string, req createCharacterRequest) map[string]any {
+	t.Helper()
+	rec := doJSON(t, s.Router(), http.MethodPost, "/api/v1/characters", req, token)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		t.Fatalf("create character: status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 	var got map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got["name"] != "Alice" {
-		t.Errorf("name = %v, want Alice", got["name"])
-	}
-	if got["seed"] != float64(42) {
-		t.Errorf("seed = %v, want 42", got["seed"])
+	return got
+}
+
+func TestHandleCreateCharacter(t *testing.T) {
+	s := newTestServer(t)
+	r := s.Router()
+	token, uid := registerAndFund(t, s, 0)
+	_, other := registerAndFund(t, s, 0)
+	img := seedAsset(t, s, uid, "image", "").BizID
+
+	got := createCharacter(t, s, token, createCharacterRequest{Name: "  Alice  ", RefAssetIDs: []string{img}, Seed: seedOf(42)})
+	if got["name"] != "Alice" || got["seed"] != float64(42) {
+		t.Errorf("got name %v seed %v, want trimmed Alice and 42", got["name"], got["seed"])
 	}
 
-	// ref_asset_ids is bounded 1-3 (F3.1).
-	rec = doJSON(t, r, http.MethodPost, "/api/v1/characters",
-		createCharacterRequest{Name: "Bob", RefAssetIDs: []string{}, Seed: 1}, token)
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("0 ref_asset_ids: status = %d, want %d", rec.Code, http.StatusBadRequest)
-	}
-	rec = doJSON(t, r, http.MethodPost, "/api/v1/characters",
-		createCharacterRequest{Name: "Bob", RefAssetIDs: []string{"a", "b", "c", "d"}, Seed: 1}, token)
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("4 ref_asset_ids: status = %d, want %d", rec.Code, http.StatusBadRequest)
+	// Without a seed the server picks one and keeps it fixed for the character.
+	got = createCharacter(t, s, token, createCharacterRequest{Name: "Bob", RefAssetIDs: []string{img}})
+	if seed, _ := got["seed"].(float64); seed <= 0 {
+		t.Errorf("seed = %v, want a stored positive seed", got["seed"])
 	}
 
-	// Seed is `binding:"required"` — a request that omits it (zero value)
-	// must be rejected rather than silently creating an unseeded character,
-	// since an unfixed seed defeats F3.1's whole consistency guarantee.
-	rec = doJSON(t, r, http.MethodPost, "/api/v1/characters",
-		createCharacterRequest{Name: "Bob", RefAssetIDs: []string{"a"}}, token)
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("missing seed: status = %d, want %d", rec.Code, http.StatusBadRequest)
+	foreign := seedAsset(t, s, other, "image", "").BizID
+	video := seedAsset(t, s, uid, "video", "").BizID
+	cases := []struct {
+		name   string
+		req    createCharacterRequest
+		status int
+		code   string
+	}{
+		{"no references", createCharacterRequest{Name: "C", RefAssetIDs: []string{}}, http.StatusBadRequest, "bad_request"},
+		{"four references", createCharacterRequest{Name: "C", RefAssetIDs: []string{img, img, img, img}}, http.StatusBadRequest, "bad_request"},
+		{"blank name", createCharacterRequest{Name: "   ", RefAssetIDs: []string{img}}, http.StatusUnprocessableEntity, "text_length"},
+		{"another user's image", createCharacterRequest{Name: "C", RefAssetIDs: []string{foreign}}, http.StatusUnprocessableEntity, "reference_unavailable"},
+		{"a video as a reference", createCharacterRequest{Name: "C", RefAssetIDs: []string{video}}, http.StatusUnprocessableEntity, "reference_unavailable"},
+		{"an unknown id", createCharacterRequest{Name: "C", RefAssetIDs: []string{id.New()}}, http.StatusUnprocessableEntity, "reference_unavailable"},
+		{"the same image twice", createCharacterRequest{Name: "C", RefAssetIDs: []string{img, img}}, http.StatusBadRequest, "bad_request"},
+	}
+	for _, c := range cases {
+		rec := doJSON(t, r, http.MethodPost, "/api/v1/characters", c.req, token)
+		var body struct {
+			Code string `json:"code"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &body)
+		if rec.Code != c.status || body.Code != c.code {
+			t.Errorf("%s: %d %s, want %d %s", c.name, rec.Code, body.Code, c.status, c.code)
+		}
 	}
 }
 
 func TestHandleListCharacters(t *testing.T) {
 	s := newTestServer(t)
 	r := s.Router()
-	tokenA, _ := registerAndFund(t, s, 0)
-	tokenB, _ := registerAndFund(t, s, 0)
+	tokenA, uidA := registerAndFund(t, s, 0)
+	tokenB, uidB := registerAndFund(t, s, 0)
+	a, b := seedAsset(t, s, uidA, "image", "").BizID, seedAsset(t, s, uidB, "image", "").BizID
 
-	doJSON(t, r, http.MethodPost, "/api/v1/characters", createCharacterRequest{Name: "A1", RefAssetIDs: []string{"x"}, Seed: 1}, tokenA)
-	doJSON(t, r, http.MethodPost, "/api/v1/characters", createCharacterRequest{Name: "A2", RefAssetIDs: []string{"x"}, Seed: 2}, tokenA)
-	doJSON(t, r, http.MethodPost, "/api/v1/characters", createCharacterRequest{Name: "B1", RefAssetIDs: []string{"x"}, Seed: 3}, tokenB)
+	createCharacter(t, s, tokenA, createCharacterRequest{Name: "A1", RefAssetIDs: []string{a}, Seed: seedOf(1)})
+	createCharacter(t, s, tokenA, createCharacterRequest{Name: "A2", RefAssetIDs: []string{a}, Seed: seedOf(2)})
+	createCharacter(t, s, tokenB, createCharacterRequest{Name: "B1", RefAssetIDs: []string{b}, Seed: seedOf(3)})
 
 	rec := doJSON(t, r, http.MethodGet, "/api/v1/characters", nil, tokenA)
 	if rec.Code != http.StatusOK {
@@ -79,17 +98,14 @@ func TestHandleUpdateCharacter(t *testing.T) {
 	s := newTestServer(t)
 	r := s.Router()
 	tokenA, uidA := registerAndFund(t, s, 0)
-	tokenB, _ := registerAndFund(t, s, 0)
+	tokenB, uidB := registerAndFund(t, s, 0)
+	img := seedAsset(t, s, uidA, "image", "").BizID
 
-	rec := doJSON(t, r, http.MethodPost, "/api/v1/characters",
-		createCharacterRequest{Name: "Alice", RefAssetIDs: []string{"asset-1"}, Seed: 42}, tokenA)
-	var created map[string]any
-	_ = json.Unmarshal(rec.Body.Bytes(), &created)
-	bizID := created["biz_id"].(string)
+	bizID := createCharacter(t, s, tokenA, createCharacterRequest{Name: "Alice", RefAssetIDs: []string{img}, Seed: seedOf(42)})["biz_id"].(string)
 
 	// Partial update: only name changes, seed stays untouched.
 	newName := "Alicia"
-	rec = doJSON(t, r, http.MethodPatch, "/api/v1/characters/"+bizID, updateCharacterRequest{Name: &newName}, tokenA)
+	rec := doJSON(t, r, http.MethodPatch, "/api/v1/characters/"+bizID, updateCharacterRequest{Name: &newName}, tokenA)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("rename: status = %d, body = %s", rec.Code, rec.Body.String())
 	}
@@ -102,18 +118,21 @@ func TestHandleUpdateCharacter(t *testing.T) {
 		t.Errorf("seed changed to %v after a name-only PATCH, want unchanged 42", updated["seed"])
 	}
 
-	// A no-op resave (identical name) must not false-404 — MySQL reports 0
-	// rows *changed*, not rows *matched*, which handleUpdateCharacter's own
-	// doc explicitly guards against.
+	// A no-op resave must not false-404: MySQL reports rows changed, not matched.
 	rec = doJSON(t, r, http.MethodPatch, "/api/v1/characters/"+bizID, updateCharacterRequest{Name: &newName}, tokenA)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("no-op resave: status = %d, want %d, body = %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 
-	badRefs := []string{"a", "b", "c", "d"}
+	badRefs := []string{img, img, img, img}
 	rec = doJSON(t, r, http.MethodPatch, "/api/v1/characters/"+bizID, updateCharacterRequest{RefAssetIDs: &badRefs}, tokenA)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("4 ref_asset_ids: status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	foreign := []string{seedAsset(t, s, uidB, "image", "").BizID}
+	rec = doJSON(t, r, http.MethodPatch, "/api/v1/characters/"+bizID, updateCharacterRequest{RefAssetIDs: &foreign}, tokenA)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("another user's image: status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
 
 	rec = doJSON(t, r, http.MethodPatch, "/api/v1/characters/"+bizID, updateCharacterRequest{}, tokenA)
@@ -127,7 +146,6 @@ func TestHandleUpdateCharacter(t *testing.T) {
 		t.Errorf("other user's update: status = %d, want %d, body = %s", rec.Code, http.StatusNotFound, rec.Body.String())
 	}
 
-	// project_id reassignment.
 	project := persistence.Project{BizID: id.New(), UserID: uidA, Name: "p"}
 	if err := s.db.Create(&project).Error; err != nil {
 		t.Fatalf("seed project: %v", err)
@@ -145,20 +163,16 @@ func TestHandleUpdateCharacter(t *testing.T) {
 func TestHandleDeleteCharacter(t *testing.T) {
 	s := newTestServer(t)
 	r := s.Router()
-	tokenA, _ := registerAndFund(t, s, 0)
+	tokenA, uidA := registerAndFund(t, s, 0)
 	tokenB, _ := registerAndFund(t, s, 0)
+	img := seedAsset(t, s, uidA, "image", "").BizID
 
-	rec := doJSON(t, r, http.MethodPost, "/api/v1/characters",
-		createCharacterRequest{Name: "Alice", RefAssetIDs: []string{"asset-1"}, Seed: 42}, tokenA)
-	var created map[string]any
-	_ = json.Unmarshal(rec.Body.Bytes(), &created)
-	bizID := created["biz_id"].(string)
+	bizID := createCharacter(t, s, tokenA, createCharacterRequest{Name: "Alice", RefAssetIDs: []string{img}, Seed: seedOf(42)})["biz_id"].(string)
 
-	rec = doJSON(t, r, http.MethodDelete, "/api/v1/characters/"+bizID, nil, tokenB)
+	rec := doJSON(t, r, http.MethodDelete, "/api/v1/characters/"+bizID, nil, tokenB)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("other user's delete: status = %d, want %d, body = %s", rec.Code, http.StatusNotFound, rec.Body.String())
 	}
-
 	rec = doJSON(t, r, http.MethodDelete, "/api/v1/characters/"+bizID, nil, tokenA)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("delete: status = %d, want %d, body = %s", rec.Code, http.StatusNoContent, rec.Body.String())
