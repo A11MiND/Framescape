@@ -1,0 +1,51 @@
+{
+  "title": "Characters",
+  "description": "Keep a person's or figure's reference images and look, and bind them when creating to keep them consistent.",
+  "search": "Search names or descriptions",
+  "create": "New character",
+  "createTile": "Create a character",
+  "createTileHint": "1–{{max}} reference images",
+  "use": "Use in creation",
+  "useHint": "Opens the creation mode you used last with \"{{name}}\" bound; your draft is kept.",
+  "more": "More actions for {{name}}",
+  "edit": "Edit",
+  "delete": "Delete",
+  "noDescription": "No description",
+  "noProject": "No project",
+  "refs": "{{n}} reference images",
+  "empty": {
+    "title": "No characters yet",
+    "body": "Upload 1–{{max}} reference images of a person to create your first character.",
+    "upload": "Upload reference images",
+    "uploading": "Uploading…",
+    "filtered": "No characters match your search"
+  },
+  "form": {
+    "createTitle": "New character",
+    "editTitle": "Edit character",
+    "name": "Name",
+    "namePlaceholder": "For example: Yu",
+    "description": "Appearance",
+    "descriptionPlaceholder": "Age, hair, clothes, manner; added to the prompt.",
+    "descriptionHelp": "The description is added to the prompt with the character and is not translated.",
+    "refs": "Reference images",
+    "refsHelp": "1–{{max}} images; a clear front view works best.",
+    "project": "Project",
+    "advanced": "Advanced settings",
+    "seed": "Seed",
+    "seedPlaceholder": "Leave empty to pick a fixed seed automatically",
+    "seedHelp": "The character uses the same seed every time, which helps keep it consistent. Applies to MiniMax generation only; GPT Image does not use seeds.",
+    "seedInvalid": "The seed must be a whole number from 0 to 2147483647",
+    "nameRequired": "Enter a name",
+    "refsRequired": "Add at least 1 reference image",
+    "save": "Save character",
+    "saved": "Character saved",
+    "created": "Character created"
+  },
+  "deleteDialog": {
+    "title": "Delete \"{{name}}\"?",
+    "body": "Work already generated is not affected; you can no longer bind this character, and its reference images stay in the library.",
+    "confirm": "Delete character",
+    "done": "Character deleted"
+  }
+}

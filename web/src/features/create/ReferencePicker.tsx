@@ -118,7 +118,13 @@ export function ReferencePicker({
     <fieldset className="flex flex-col gap-2">
       <legend className="mb-1.5 text-label font-medium text-fg">
         {label}
-        {!required && <span className="ml-1 font-normal text-fg-muted">{t('ui:field.optional')}</span>}
+        {required ? (
+          <span aria-hidden className="ml-0.5 text-danger-fg">
+            *
+          </span>
+        ) : (
+          <span className="ml-1 font-normal text-fg-muted">{t('ui:field.optional')}</span>
+        )}
       </legend>
       <div className="flex flex-wrap items-start gap-2">
         {value.length > 0 && (

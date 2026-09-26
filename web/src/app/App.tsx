@@ -7,7 +7,7 @@ import { RedirectKeeping, RequireAdmin, RequireAuth } from './guards'
 import { lastCreateMode, prefillTarget } from './routing'
 
 const Login = lazy(() => import('../pages/Login'))
-const Characters = lazy(() => import('../pages/Characters'))
+const Characters = lazy(() => import('../features/characters/CharactersPage'))
 const Presets = lazy(() => import('../pages/Presets'))
 const Assets = lazy(() => import('../features/library/LibraryPage'))
 const AssetDetail = lazy(() => import('../features/library/AssetDetailPage'))

@@ -333,6 +333,26 @@ export function createDemoApi(img: Img) {
       return list(q)
     }
     if (path === '/characters' && method === 'GET') return { status: 200, body: { characters } }
+    const character = path.match(/^\/characters\/([^/]+)$/)
+    if (path === '/characters' && method === 'POST') {
+      const b = body as { name: string; description?: string; ref_asset_ids: string[]; project_id?: string; seed?: number }
+      const c = { biz_id: `CH${nextId++}`, name: b.name, description: b.description ?? '', ref_asset_ids: b.ref_asset_ids, seed: b.seed ?? 20260926, project_id: b.project_id ?? '' }
+      characters.unshift(c)
+      return { status: 200, body: c }
+    }
+    if (character && method === 'PATCH') {
+      const c = characters.find((x) => x.biz_id === character[1])
+      if (!c) return { status: 404, body: { code: 'not_found', message: 'character' } }
+      const b = body as Partial<typeof c> & { clear_project?: boolean }
+      Object.assign(c, { ...b, ...(b.clear_project ? { project_id: '' } : {}) })
+      return { status: 200, body: c }
+    }
+    if (character && method === 'DELETE') {
+      const at = characters.findIndex((x) => x.biz_id === character[1])
+      if (at < 0) return { status: 404, body: { code: 'not_found', message: 'character' } }
+      characters.splice(at, 1)
+      return { status: 204 }
+    }
     if (path === '/presets' && method === 'GET') return { status: 200, body: { presets } }
     if (path === '/assets' && method === 'GET') {
       const p = new URLSearchParams(search)

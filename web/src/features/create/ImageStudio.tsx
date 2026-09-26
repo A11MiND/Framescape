@@ -23,6 +23,7 @@ import { ResultPane } from './ResultPane'
 import { useDraft } from './drafts'
 import { useSubmit } from './useSubmit'
 import { characterSlots, readPrefill } from './prefill'
+import { useCharacterPrefill } from './useCharacterPrefill'
 
 const COUNTS = [1, 2, 4, 6, 9]
 
@@ -83,6 +84,7 @@ export default function ImageStudio() {
   const me = useMe()
   const [currentProject] = useCurrentProject(me.data?.biz_id)
   const [draft, update] = useDraft<ImageDraft>(me.data?.biz_id, 'image', INITIAL)
+  useCharacterPrefill(draft.characters, (characters) => update({ characters }))
   const caps = useQuery({ queryKey: keys.capabilities, queryFn: createApi.capabilities, staleTime: 60_000 })
   const characters = useQuery({ queryKey: keys.characters, queryFn: createApi.characters, enabled: signedIn })
   const presets = useQuery({ queryKey: keys.presets, queryFn: createApi.presets, enabled: signedIn })

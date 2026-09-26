@@ -22,6 +22,7 @@ import { useSubmit } from './useSubmit'
 import { characterSlots, readPrefill } from './prefill'
 import { useShotResults, type ShotResult } from './shotResults'
 import { duplicateShot, isAnchorShot, moveShot, newShot, removeShot, videoSequenceShots, type RefReset, type SequenceShot } from './sequence'
+import { useCharacterPrefill } from './useCharacterPrefill'
 
 type Flow = 'preview' | 'direct'
 type Strategy = 'window' | 'manual' | 'smart'
@@ -206,6 +207,7 @@ export default function VideoSequenceStudio() {
   const me = useMe()
   const [currentProject] = useCurrentProject(me.data?.biz_id)
   const [draft, update] = useDraft<VideoSequenceDraft>(me.data?.biz_id, 'video-sequence', INITIAL)
+  useCharacterPrefill(draft.characters, (characters) => update({ characters }))
   const caps = useQuery({ queryKey: keys.capabilities, queryFn: createApi.capabilities, staleTime: 60_000 })
   const characters = useQuery({ queryKey: keys.characters, queryFn: createApi.characters })
   const projects = useQuery({ queryKey: keys.projects.list(), queryFn: projectsApi.list })

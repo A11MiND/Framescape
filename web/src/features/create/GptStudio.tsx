@@ -22,6 +22,7 @@ import { useSubmit } from './useSubmit'
 import { characterSlots, readPrefill } from './prefill'
 import { GptAccess, GptConfirm, GptSizeControl } from './gptOptions'
 import { useGptChoices, useSizeLabel } from './gptSizes'
+import { useCharacterPrefill } from './useCharacterPrefill'
 
 type Mode = 'general' | 'direct'
 
@@ -81,6 +82,7 @@ export default function GptStudio() {
   const me = useMe()
   const [currentProject] = useCurrentProject(me.data?.biz_id)
   const [draft, update] = useDraft<GptDraft>(me.data?.biz_id, 'gpt', INITIAL)
+  useCharacterPrefill(draft.characters, (characters) => update({ mode: 'general', characters }))
   const caps = useQuery({ queryKey: keys.capabilities, queryFn: createApi.capabilities, staleTime: 60_000 })
   const openai = caps.data?.providers?.openai
   const entitled = hasOpenAIImage(me.data)

@@ -21,6 +21,7 @@ import { useDraft } from './drafts'
 import { useSubmit } from './useSubmit'
 import { characterSlots, readPrefill } from './prefill'
 import { clearedBySwitch, mediaForMode, missingInput, modeOfSpec, videoSpec, type VideoMedia, type VideoMode } from './video'
+import { useCharacterPrefill } from './useCharacterPrefill'
 
 type RefTab = 'images' | 'videos' | 'audios'
 
@@ -83,6 +84,7 @@ export default function VideoStudio() {
   const me = useMe()
   const [currentProject] = useCurrentProject(me.data?.biz_id)
   const [draft, update] = useDraft<VideoDraft>(me.data?.biz_id, 'video', INITIAL)
+  useCharacterPrefill(draft.characters, (characters) => update({ characters }))
   const caps = useQuery({ queryKey: keys.capabilities, queryFn: createApi.capabilities, staleTime: 60_000 })
   const characters = useQuery({ queryKey: keys.characters, queryFn: createApi.characters })
   const projects = useQuery({ queryKey: keys.projects.list(), queryFn: projectsApi.list })

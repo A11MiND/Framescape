@@ -1,0 +1,51 @@
+{
+  "title": "角色库",
+  "description": "保存人物或形象的参考图与外观描述，创作时绑定角色，保持同一形象。",
+  "search": "搜索角色名称或描述",
+  "create": "新建角色",
+  "createTile": "创建新角色",
+  "createTileHint": "支持 1–{{max}} 张参考图",
+  "use": "创作时使用",
+  "useHint": "打开上次使用的创作模式并绑定「{{name}}」，已有草稿保留。",
+  "more": "{{name}} 的更多操作",
+  "edit": "编辑",
+  "delete": "删除",
+  "noDescription": "没有外观描述",
+  "noProject": "未归属项目",
+  "refs": "{{n}} 张参考图",
+  "empty": {
+    "title": "还没有角色",
+    "body": "上传 1–{{max}} 张人物参考图，快速创建你的第一个角色。",
+    "upload": "上传参考图",
+    "uploading": "正在上传…",
+    "filtered": "没有符合搜索的角色"
+  },
+  "form": {
+    "createTitle": "新建角色",
+    "editTitle": "编辑角色",
+    "name": "角色名称",
+    "namePlaceholder": "例如：小悠",
+    "description": "外观描述",
+    "descriptionPlaceholder": "年龄、发型、服装、气质等；会拼接进提示词。",
+    "descriptionHelp": "描述会随角色一起拼接进提示词；不会翻译。",
+    "refs": "参考图片",
+    "refsHelp": "1–{{max}} 张，建议正面清晰的人物图。",
+    "project": "所属项目",
+    "advanced": "高级设置",
+    "seed": "随机种子",
+    "seedPlaceholder": "留空则自动生成一个固定种子",
+    "seedHelp": "同一角色每次使用同一个种子，帮助保持形象一致。只对 MiniMax 生成生效，GPT 生图不使用种子。",
+    "seedInvalid": "种子必须是 0 到 2147483647 之间的整数",
+    "nameRequired": "请填写角色名称",
+    "refsRequired": "请至少添加 1 张参考图片",
+    "save": "保存角色",
+    "saved": "角色已保存",
+    "created": "角色已创建"
+  },
+  "deleteDialog": {
+    "title": "删除角色「{{name}}」？",
+    "body": "已经生成的作品不受影响；删除后创作时不能再选择这个角色，参考图仍保留在素材库。",
+    "confirm": "删除角色",
+    "done": "角色已删除"
+  }
+}

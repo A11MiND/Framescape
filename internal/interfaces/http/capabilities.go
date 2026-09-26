@@ -32,6 +32,7 @@ func (s *Server) handleGetCapabilities(c *gin.Context) {
 		},
 		// Deleted assets stay restorable in the trash this long.
 		"assets": gin.H{"trash_retention_days": upkeep.TrashRetentionDays},
+		"characters": gin.H{"max_references": capability.CharacterMaxRefImages, "name_max_chars": characterNameMax, "description_max_chars": characterDescriptionMax},
 		// Direct uploads: the size each asset type may have once stored.
 		"uploads": gin.H{
 			"image": gin.H{"max_bytes": maxUploadBytesByType["image"]},

@@ -1,5 +1,6 @@
 // Seeds a creation draft from navigation state: "create again" from a task
-// (prefillJob) or "use this character" from the character library.
+// (prefillJob) or "create from this image" (prefillReferenceId). A character
+// from the library is added by useCharacterPrefill instead.
 
 const SLOT_LETTERS = 'ABCDEF'
 
@@ -65,8 +66,7 @@ interface PrefillSpec {
 }
 
 export function readPrefill(state: unknown, workflow: string): PrefillFields | null {
-  const s = (state ?? {}) as { prefillJob?: { workflowName?: string; spec?: PrefillSpec }; prefillCharacterId?: string; prefillReferenceId?: string }
-  if (s.prefillCharacterId) return { characters: [s.prefillCharacterId] }
+  const s = (state ?? {}) as { prefillJob?: { workflowName?: string; spec?: PrefillSpec }; prefillReferenceId?: string }
   if (s.prefillReferenceId) return { reference: [s.prefillReferenceId], references: [s.prefillReferenceId] }
   const job = s.prefillJob
   if (!job?.spec) return null

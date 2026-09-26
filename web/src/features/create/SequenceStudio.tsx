@@ -24,6 +24,7 @@ import { useDraft } from './drafts'
 import { useSubmit } from './useSubmit'
 import { characterSlots, readPrefill } from './prefill'
 import { duplicateShot, moveShot, newShot, removeShot, sequenceSpec, type RefReset, type SequenceMode, type SequenceShot } from './sequence'
+import { useCharacterPrefill } from './useCharacterPrefill'
 
 type Provider = 'minimax' | 'openai'
 
@@ -65,6 +66,7 @@ export default function SequenceStudio() {
   const me = useMe()
   const [currentProject] = useCurrentProject(me.data?.biz_id)
   const [draft, update] = useDraft<SequenceDraft>(me.data?.biz_id, 'image-sequence', INITIAL)
+  useCharacterPrefill(draft.characters, (characters) => update({ characters }))
   const caps = useQuery({ queryKey: keys.capabilities, queryFn: createApi.capabilities, staleTime: 60_000 })
   const characters = useQuery({ queryKey: keys.characters, queryFn: createApi.characters })
   const presets = useQuery({ queryKey: keys.presets, queryFn: createApi.presets })
