@@ -17,6 +17,7 @@ export interface OpenAICapabilities {
 
 export interface Capabilities {
   assets?: { trash_retention_days: number }
+  password?: { min_chars: number; max_bytes: number }
   characters?: { max_references: number; name_max_chars: number; description_max_chars: number }
   uploads?: Record<'image' | 'video' | 'audio', { max_bytes: number }>
   image: { max_n: number; max_prompt_chars: number; sequence_max_shots?: number }

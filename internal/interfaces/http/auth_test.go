@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"aigc-platform/internal/infra/persistence"
@@ -208,6 +209,22 @@ func TestHandleChangePassword(t *testing.T) {
 		t.Fatalf("change password: status = %d, want %d, body = %s", rec.Code, http.StatusNoContent, rec.Body.String())
 	}
 
+	var me struct {
+		HasPassword bool `json:"has_password"`
+	}
+	_ = json.Unmarshal(doJSON(t, r, http.MethodGet, "/api/v1/me", nil, tp.AccessToken).Body.Bytes(), &me)
+	if !me.HasPassword {
+		t.Error("has_password = false for an email account")
+	}
+	for _, c := range []struct {
+		pw     string
+		status int
+	}{{"short7!", http.StatusBadRequest}, {strings.Repeat("a", 73), http.StatusUnprocessableEntity}, {strings.Repeat("密", 25), http.StatusUnprocessableEntity}} {
+		if rec := doJSON(t, r, http.MethodPatch, "/api/v1/me/password", changePasswordRequest{CurrentPassword: "new-password-123", NewPassword: c.pw}, tp.AccessToken); rec.Code != c.status {
+			t.Errorf("new password of %d bytes: status %d, want %d", len(c.pw), rec.Code, c.status)
+		}
+	}
+
 	rec = doJSON(t, r, http.MethodPost, "/api/v1/auth/login", loginRequest{Email: email, Password: "old-password"}, "")
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("login with old password after change: status = %d, want %d", rec.Code, http.StatusUnauthorized)
@@ -240,5 +257,12 @@ func TestHandleChangePasswordNilPasswordHashAccount(t *testing.T) {
 		changePasswordRequest{CurrentPassword: "anything", NewPassword: "new-password-123"}, access)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d, body = %s", rec.Code, http.StatusUnauthorized, rec.Body.String())
+	}
+	var me struct {
+		HasPassword bool `json:"has_password"`
+	}
+	_ = json.Unmarshal(doJSON(t, r, http.MethodGet, "/api/v1/me", nil, access).Body.Bytes(), &me)
+	if me.HasPassword {
+		t.Error("has_password = true for a Google-only account")
 	}
 }

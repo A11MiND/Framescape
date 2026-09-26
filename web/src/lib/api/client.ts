@@ -57,7 +57,10 @@ export interface RequestOptions {
   _retried?: boolean
 }
 
-/** A JSON request; a 401 refreshes the token once and replays. */
+/**
+ * A JSON request. A 401 about the session itself refreshes the token once
+ * and replays; other 401s (a wrong current password) are ordinary errors.
+ */
 export async function request<T>(method: string, path: string, body?: unknown, opts: RequestOptions = {}): Promise<T> {
   const { auth = true, idempotencyKey, signal, _retried = false } = opts
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -73,7 +76,12 @@ export async function request<T>(method: string, path: string, body?: unknown, o
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
   if (resp.status === 401 && auth && !_retried && path !== '/auth/refresh') {
-    if (await ensureFreshToken()) return request<T>(method, path, body, { ...opts, _retried: true })
+    const code = await resp
+      .clone()
+      .json()
+      .then((d: { code?: string }) => d.code)
+      .catch(() => undefined)
+    if ((code === undefined || code === 'unauthorized') && (await ensureFreshToken())) return request<T>(method, path, body, { ...opts, _retried: true })
   }
   if (!resp.ok) {
     const data = await resp.json().catch(() => ({ code: 'unknown', message: resp.statusText }))

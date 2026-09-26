@@ -18,7 +18,7 @@ const JobDetailPage = lazy(() => import('../features/tasks/detail/JobDetailPage'
 const Credits = lazy(() => import('../features/credits/CreditsPage'))
 const Projects = lazy(() => import('../features/projects/ProjectsPage'))
 const ProjectDetail = lazy(() => import('../features/projects/ProjectDetailPage'))
-const Settings = lazy(() => import('../pages/Settings'))
+const Settings = lazy(() => import('../features/settings/SettingsPage'))
 const AdminSpend = lazy(() => import('../pages/AdminSpend'))
 const AdminUsers = lazy(() => import('../pages/AdminUsers'))
 

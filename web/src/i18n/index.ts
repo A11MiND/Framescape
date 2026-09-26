@@ -28,6 +28,8 @@ import zhCommunity from './locales/zh/community.json'
 import enCommunity from './locales/en/community.json'
 import zhCredits from './locales/zh/credits.json'
 import enCredits from './locales/en/credits.json'
+import zhSettings from './locales/zh/settings.json'
+import enSettings from './locales/en/settings.json'
 
 // The flat "translation" namespace belongs to pages not yet rebuilt; new
 // code uses one namespace per area (ui, codes, shell, and one per feature).
@@ -53,8 +55,8 @@ export function setStoredLang(lang: Lang) {
 }
 
 export const resources = {
-  zh: { translation: zh, ui: zhUi, codes: zhCodes, shell: zhShell, tasks: zhTasks, job: zhJob, create: zhCreate, comic: zhComic, library: zhLibrary, projects: zhProjects, characters: zhCharacters, presets: zhPresets, community: zhCommunity, credits: zhCredits },
-  en: { translation: en, ui: enUi, codes: enCodes, shell: enShell, tasks: enTasks, job: enJob, create: enCreate, comic: enComic, library: enLibrary, projects: enProjects, characters: enCharacters, presets: enPresets, community: enCommunity, credits: enCredits },
+  zh: { translation: zh, ui: zhUi, codes: zhCodes, shell: zhShell, tasks: zhTasks, job: zhJob, create: zhCreate, comic: zhComic, library: zhLibrary, projects: zhProjects, characters: zhCharacters, presets: zhPresets, community: zhCommunity, credits: zhCredits, settings: zhSettings },
+  en: { translation: en, ui: enUi, codes: enCodes, shell: enShell, tasks: enTasks, job: enJob, create: enCreate, comic: enComic, library: enLibrary, projects: enProjects, characters: enCharacters, presets: enPresets, community: enCommunity, credits: enCredits, settings: enSettings },
 } as const
 
 i18n.use(initReactI18next).init({

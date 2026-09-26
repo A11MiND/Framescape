@@ -44,5 +44,9 @@
     "minutes": "{{n}}m",
     "seconds": "{{n}}s"
   },
-  "listSeparator": ", "
+  "listSeparator": ", ",
+  "password": {
+    "show": "Show password",
+    "hide": "Hide password"
+  }
 }

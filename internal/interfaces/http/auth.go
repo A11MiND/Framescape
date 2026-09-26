@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"aigc-platform/internal/pkg/apperr"
 	"errors"
 	"net/http"
 	"slices"
@@ -31,6 +32,13 @@ type loginRequest struct {
 type refreshRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }
+
+// Password limits: bcrypt reads at most 72 bytes, so longer ones are refused
+// rather than silently cut.
+const (
+	PasswordMinChars = 8
+	PasswordMaxBytes = 72
+)
 
 type changePasswordRequest struct {
 	CurrentPassword string `json:"current_password" binding:"required"`
@@ -78,6 +86,10 @@ func (s *Server) handleRegister(c *gin.Context) {
 	var req registerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
+		return
+	}
+	if len(req.Password) > PasswordMaxBytes {
+		writeError(c, apperr.New("text_length", "password is too long", "field", "password", "max", PasswordMaxBytes), http.StatusBadRequest, "bad_request")
 		return
 	}
 
@@ -203,6 +215,9 @@ func (s *Server) handleMe(c *gin.Context) {
 		"balance":  acct.Balance,
 		"held":     acct.Held,
 		"is_admin": user.IsAdmin,
+		// has_password tells the settings page whether a password can be changed:
+		// phone- and Google-only accounts have none.
+		"has_password": user.PasswordHash != nil,
 		// Mirrors what job creation enforces (jobsvc.OpenAIAllowed).
 		"comic_ai":     openAI,
 		"entitlements": entitlements,
@@ -217,6 +232,10 @@ func (s *Server) handleChangePassword(c *gin.Context) {
 	var req changePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, errBody("bad_request", err.Error()))
+		return
+	}
+	if len(req.NewPassword) > PasswordMaxBytes {
+		writeError(c, apperr.New("text_length", "password is too long", "field", "password", "max", PasswordMaxBytes), http.StatusBadRequest, "bad_request")
 		return
 	}
 

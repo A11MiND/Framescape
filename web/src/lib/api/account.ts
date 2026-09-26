@@ -9,10 +9,13 @@ export interface Me {
   held: number
   is_admin: boolean
   entitlements: string[]
+  /** False for phone- and Google-only accounts. */
+  has_password?: boolean
 }
 
 export const accountApi = {
   me: () => request<Me>('GET', '/me'),
+  changePassword: (current: string, next: string) => request<void>('PATCH', '/me/password', { current_password: current, new_password: next }),
 }
 
 export function hasOpenAIImage(me: Me | undefined): boolean {

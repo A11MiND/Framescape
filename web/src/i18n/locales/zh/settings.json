@@ -1,0 +1,55 @@
+{
+  "title": "设置",
+  "description": "账户、密码、外观和语言。",
+  "account": {
+    "title": "账户",
+    "email": "邮箱",
+    "phone": "手机号",
+    "emailHelp": "用于登录，不能在这里修改。",
+    "signOut": "退出登录"
+  },
+  "security": {
+    "title": "密码",
+    "current": "当前密码",
+    "new": "新密码",
+    "confirm": "确认新密码",
+    "rules": "至少 {{min}} 个字符；过长的密码（超过 {{max}} 字节）无法保存。建议混合字母、数字和符号。",
+    "strength": {
+      "label": "强度参考",
+      "weak": "较弱",
+      "fair": "一般",
+      "good": "良好"
+    },
+    "strengthNote": "强度只作参考，能否保存以上面的规则为准。",
+    "tooShort": "新密码至少 {{min}} 个字符",
+    "tooLong": "新密码过长，请缩短",
+    "mismatch": "两次输入的新密码不一致",
+    "currentRequired": "请输入当前密码",
+    "wrongCurrent": "当前密码不正确",
+    "save": "保存密码",
+    "saved": "密码已更新",
+    "noPassword": "这个账户用手机验证码或 Google 登录，没有密码可以修改。"
+  },
+  "appearance": {
+    "title": "外观",
+    "label": "界面主题",
+    "light": "浅色",
+    "dark": "深色",
+    "system": "跟随系统",
+    "systemNow": "当前为{{theme}}",
+    "help": "只影响这台设备。切换不会丢失正在编辑的内容。"
+  },
+  "language": {
+    "title": "语言",
+    "label": "界面语言",
+    "examples": "格式示例",
+    "date": "日期",
+    "time": "时间",
+    "number": "数字",
+    "note": "只改变界面文字，不会翻译你输入的提示词、角色名和项目名。",
+    "names": {
+      "zh": "中文",
+      "en": "English"
+    }
+  }
+}

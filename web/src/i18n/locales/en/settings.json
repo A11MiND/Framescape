@@ -1,0 +1,55 @@
+{
+  "title": "Settings",
+  "description": "Account, password, appearance and language.",
+  "account": {
+    "title": "Account",
+    "email": "Email",
+    "phone": "Phone",
+    "emailHelp": "Used to sign in; it cannot be changed here.",
+    "signOut": "Sign out"
+  },
+  "security": {
+    "title": "Password",
+    "current": "Current password",
+    "new": "New password",
+    "confirm": "Confirm new password",
+    "rules": "At least {{min}} characters; passwords longer than {{max}} bytes cannot be saved. Mixing letters, numbers and symbols is recommended.",
+    "strength": {
+      "label": "Strength",
+      "weak": "Weak",
+      "fair": "Fair",
+      "good": "Good"
+    },
+    "strengthNote": "Strength is only a guide; the rules above decide whether it can be saved.",
+    "tooShort": "The new password needs at least {{min}} characters",
+    "tooLong": "The new password is too long",
+    "mismatch": "The new passwords do not match",
+    "currentRequired": "Enter your current password",
+    "wrongCurrent": "The current password is incorrect",
+    "save": "Save password",
+    "saved": "Password updated",
+    "noPassword": "This account signs in with a phone code or Google and has no password to change."
+  },
+  "appearance": {
+    "title": "Appearance",
+    "label": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "Match system",
+    "systemNow": "Currently {{theme}}",
+    "help": "Applies to this device only. Switching keeps whatever you are editing."
+  },
+  "language": {
+    "title": "Language",
+    "label": "Interface language",
+    "examples": "Format examples",
+    "date": "Date",
+    "time": "Time",
+    "number": "Number",
+    "note": "Changes the interface only; your prompts, character names and project names are not translated.",
+    "names": {
+      "zh": "中文",
+      "en": "English"
+    }
+  }
+}

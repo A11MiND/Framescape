@@ -253,7 +253,7 @@ export function createDemoApi(img: Img) {
     }
     return { credits_total: n * 10, items: [{ kind: 'image_single', count: n, credits: n * 10 }] }
   }
-  const me = { biz_id: 'demo-user', email: 'demo@example.com', phone: null, balance: 860, held: 350, is_admin: true, entitlements: ['openai_image'], comic_ai: true }
+  const me = { biz_id: 'demo-user', email: 'demo@example.com', phone: null, balance: 860, held: 350, is_admin: true, entitlements: ['openai_image'], comic_ai: true, has_password: true }
 
   // Ledger: one classic comic's reserve, charges (one past its reservation) and release, plus top-ups and rewards.
   const ledgerJob = (id: string, title: string, workflow: string, cover: string) => ({ biz_id: id, title, workflow_name: workflow, cover_url: img(`${cover}.jpg`) })
@@ -599,6 +599,11 @@ export function createDemoApi(img: Img) {
       me.balance += 200
       ledger.unshift(entry('recharge', 200, { kind: 'recharge_demo', amount: 200 }, null, 0))
       return { status: 200, body: { balance: me.balance, held: me.held, credited: 200 } }
+    }
+    if (path === '/me/password' && method === 'PATCH') {
+      const b = body as { current_password: string }
+      if (b.current_password !== 'demo-password') return { status: 401, body: { code: 'invalid_credentials', message: 'current password incorrect' } }
+      return { status: 204 }
     }
     const comic = path.match(/^\/comics\/([^/]+)$/)
     if (path === '/comics' && method === 'GET') {
