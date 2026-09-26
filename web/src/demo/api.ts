@@ -2,6 +2,8 @@
 // acceptance (demo mode, VITE_DEMO=1) and Playwright tests. Pure: images
 // are resolved by the caller; state lives in the returned instance.
 
+import type { ComicDocument } from '../lib/comicDocument'
+
 export interface DemoResponse {
   status: number
   body?: unknown
@@ -78,7 +80,7 @@ const BUCKET: Record<string, string[]> = {
 }
 const STATUSES = ['queued', 'running', 'awaiting_review', 'succeeded', 'partial', 'failed', 'cancelling', 'cancelled']
 
-const IMAGES = ['tram-1', 'tram-2', 'tram-3', 'tram-4', 'tram-hero', 'cat', 'sunset', 'lemon', 'bay', 'night', 'alpine', 'portrait']
+const IMAGES = ['tram-1', 'tram-2', 'tram-3', 'tram-4', 'tram-hero', 'cat', 'sunset', 'lemon', 'bay', 'night', 'alpine', 'portrait', 'comic-page']
 const CLIPS = ['clip-1', 'clip-2', 'clip-3']
 
 const SPECS: Record<string, Record<string, unknown>> = {
@@ -155,6 +157,8 @@ export function createDemoApi(img: Img) {
   ]
   // Library state: which assets are in the trash, and each one's project.
   const PROMPTS: Record<string, string> = {
+    'comic-page': '柠檬汽水四格漫画',
+    'tram-hero': '在阳光明媚的海滨城市，一辆红色的有轨电车行驶在靠海的街道上，远处是蓝色的海水和山城。',
     'tram-1': '海边小镇的有轨电车', 'tram-2': '街道上的复古电车', 'tram-3': '山坡上驶过的电车', 'tram-4': '盛开的花与海边电车',
     cat: '午后阳光下的猫咪', sunset: '日落时分的海面', lemon: '柠檬树的特写', bay: '海湾帆船', night: '霓虹城市夜景', alpine: '雪山湖泊全景', portrait: '人物写真',
     'clip-1': '电车缓缓驶入画面', 'clip-2': '海边咖啡馆的露台', 'clip-3': '日落时分的海岸小镇',
@@ -174,6 +178,28 @@ export function createDemoApi(img: Img) {
       project_id: assetProject.get(id) ?? (at % 3 === 2 ? '' : 'P1'), is_public: published.has(id), prompt: id === 'portrait' ? '' : (PROMPTS[id] ?? ''),
     }
   }
+  // Comic drafts: a four-panel page with dialogue, and a direct full page.
+  const bubble = (id: string, x: number, y: number, text: string, tail: 'left' | 'right' | 'none' = 'left', w = 0.2) => ({
+    id, kind: 'bubble' as const, x, y, w, h: tail === 'none' ? 0.07 : 0.1, text, font_size: 26, color: '#172033', fill: tail === 'none' ? '#fef3c7' : '#ffffff', tail, locked: false,
+  })
+  const comics = new Map<string, { biz_id: string; version: number; document: ComicDocument }>([
+    ['C1', {
+      biz_id: 'C1', version: 3,
+      document: {
+        schema_version: 1, title: '海岸电车的一天', mode: 'editable', brief: '清晨，红色电车从海边小站出发，载着乘客穿过开满鲜花的街道；午后停靠在山坡小站，傍晚回到海边。',
+        background: '', context: '', references: [{ asset_id: 'tram-hero', label: '画风' }], page_asset_id: 'tram-hero', page_source: 'generated',
+        panel_asset_ids: ['tram-1', 'tram-2', 'tram-3', 'tram-4'],
+        layers: [bubble('L1', 0.03, 0.03, '早上好，出发啦！'), bubble('L2', 0.77, 0.06, '今天花开得真好。', 'right'), bubble('L3', 0.03, 0.54, '下一站，山坡小站。'), bubble('L4', 0.37, 0.45, '海岸电车 · 第 1 话', 'none', 0.26)],
+      },
+    }],
+    ['C2', {
+      biz_id: 'C2', version: 1,
+      document: {
+        schema_version: 1, title: '日落海岸', mode: 'direct', brief: '日落时分的海岸小镇，整页一幅画面。', background: '', context: '', references: [],
+        page_asset_id: 'sunset', page_source: 'generated', panel_asset_ids: ['', '', '', ''], layers: [],
+      },
+    }],
+  ])
   let nextId = 100
   const estimateOf = (r: { workflow_name?: string; spec?: Record<string, unknown> }) => {
     const spec = r.spec ?? {}
@@ -365,7 +391,7 @@ export function createDemoApi(img: Img) {
       jobs.unshift({
         biz_id: `N${id}`, id: 1000 + id, workflow_name: r.workflow_name ?? 'image.single', title: text.slice(0, 20), status: 'running',
         node_total: 1, node_done: 0, node_failed: 0, reserved: est.credits_total, settled: 0, error_code: '', created_at: new Date().toISOString(),
-        project_id: r.project_id ?? '', cover: 'tram-1', createdMs: Date.now(), assets: r.workflow_name === 'image.comic4' ? ['lemon'] : r.workflow_name === 'video.sequence' ? Array.from({ length: n }, (_, i) => CLIPS[i % CLIPS.length]) : r.workflow_name === 'video.single' ? ['clip-1'] : ['tram-1', 'tram-2', 'tram-3', 'tram-4', 'bay', 'sunset', 'cat', 'lemon', 'night'].slice(0, n), spec: r.spec,
+        project_id: r.project_id ?? '', cover: 'tram-1', createdMs: Date.now(), assets: r.workflow_name === 'image.comic4' ? ['comic-page'] : r.workflow_name === 'video.sequence' ? Array.from({ length: n }, (_, i) => CLIPS[i % CLIPS.length]) : r.workflow_name === 'video.single' ? ['clip-1'] : ['tram-1', 'tram-2', 'tram-3', 'tram-4', 'bay', 'sunset', 'cat', 'lemon', 'night'].slice(0, n), spec: r.spec,
       })
       return { status: 200, body: { biz_id: `N${id}`, status: 'running', workflow_run_id: '' } }
     }
@@ -463,6 +489,27 @@ export function createDemoApi(img: Img) {
       if (d.quote_total !== total) return { status: 409, body: { code: 'price_changed', message: 'changed', params: { credits_total: total } } }
       x.status = 'running'
       x.reserved += total
+      return { status: 204 }
+    }
+    const comic = path.match(/^\/comics\/([^/]+)$/)
+    if (path === '/comics' && method === 'GET') {
+      return { status: 200, body: { comics: [...comics.values()].map((c) => ({ biz_id: c.biz_id, title: c.document.title, version: c.version })) } }
+    }
+    if ((path === '/comics' && method === 'POST') || (comic && method === 'PATCH')) {
+      const b = body as { version: number; document: ComicDocument }
+      const id = comic?.[1] ?? `C${nextId++}`
+      const cur = comics.get(id)
+      if (cur && cur.version !== b.version) return { status: 409, body: { code: 'version_conflict', message: 'conflict' } }
+      const saved = { biz_id: id, version: (cur?.version ?? 0) + 1, document: b.document }
+      comics.set(id, saved)
+      return { status: 200, body: saved }
+    }
+    if (comic && method === 'GET') {
+      const c = comics.get(comic[1])
+      return c ? { status: 200, body: c } : { status: 404, body: { code: 'not_found', message: 'comic' } }
+    }
+    if (comic && method === 'DELETE') {
+      comics.delete(comic[1])
       return { status: 204 }
     }
     const asset = path.match(/^\/assets\/([^/]+)$/)

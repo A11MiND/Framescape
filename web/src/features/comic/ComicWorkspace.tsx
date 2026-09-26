@@ -369,16 +369,16 @@ export default function ComicWorkspace() {
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <nav aria-label={t('steps.label')}>
-            <ol className="flex flex-wrap items-center gap-1">
+          <nav aria-label={t('steps.label')} className="w-full sm:w-auto">
+            <ol className="grid grid-cols-4 gap-1 sm:flex sm:flex-wrap sm:items-center">
               {STEPS.map((s, i) => (
-                <li key={s} className="flex items-center gap-1">
-                  {i > 0 && <span aria-hidden className="text-fg-muted">→</span>}
+                <li key={s} className="flex min-w-0 items-center gap-1">
+                  {i > 0 && <span aria-hidden className="hidden text-fg-muted sm:inline">→</span>}
                   <button
                     type="button"
                     aria-current={step === s ? 'step' : undefined}
                     onClick={() => setStep(s)}
-                    className={cn('inline-flex h-9 items-center gap-2 rounded-full px-3 text-body font-medium', step === s ? 'bg-primary-soft text-primary-text' : 'text-fg-muted hover:bg-surface-2 hover:text-fg')}
+                    className={cn('inline-flex h-9 w-full min-w-0 items-center justify-center gap-1 rounded-full px-1.5 text-caption font-medium sm:w-auto sm:gap-2 sm:px-3 sm:text-body', step === s ? 'bg-primary-soft text-primary-text' : 'text-fg-muted hover:bg-surface-2 hover:text-fg')}
                   >
                     <span className={cn('inline-flex size-5 items-center justify-center rounded-full text-badge tabular-nums', step === s ? 'bg-primary text-white' : 'bg-surface-2')}>{i + 1}</span>
                     {t(`steps.${s}`)}
