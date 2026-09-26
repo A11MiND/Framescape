@@ -16,6 +16,8 @@ export interface OpenAICapabilities {
 }
 
 export interface Capabilities {
+  assets?: { trash_retention_days: number }
+  uploads?: Record<'image' | 'video' | 'audio', { max_bytes: number }>
   image: { max_n: number; max_prompt_chars: number; sequence_max_shots?: number }
   video: { duration_min: number; duration_max: number; max_prompt_chars: number; resolutions: string[]; ratios: string[]; max_reference_videos?: number; reference_video_max_seconds?: number; sequence_max_shots?: number; max_reference_images?: number; max_reference_audios?: number }
   comic?: {

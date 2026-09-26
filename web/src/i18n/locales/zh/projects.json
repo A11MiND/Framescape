@@ -1,0 +1,53 @@
+{
+  "title": "项目",
+  "description": "按项目整理素材、任务和角色。",
+  "create": "新建项目",
+  "search": "搜索项目名称或描述",
+  "stats": "{{assets}} 素材 · {{jobs}} 任务 · {{characters}} 角色",
+  "updated": "最近更新 {{time}}",
+  "created": "创建于 {{time}}",
+  "noDescription": "没有描述",
+  "noCover": "还没有素材",
+  "more": "{{name}} 的更多操作",
+  "edit": "编辑",
+  "delete": "删除项目",
+  "form": {
+    "createTitle": "新建项目",
+    "editTitle": "编辑项目",
+    "name": "名称",
+    "description": "描述（可选）",
+    "save": "保存",
+    "createConfirm": "创建"
+  },
+  "deleteDialog": {
+    "title": "删除项目「{{name}}」？",
+    "body": "项目会被删除，但其中的内容都会保留，变为「未归属项目」：",
+    "assets": "{{n}} 个素材",
+    "jobs": "{{n}} 个任务",
+    "characters": "{{n}} 个角色",
+    "confirm": "删除项目",
+    "done": "项目已删除，{{assets}} 个素材、{{jobs}} 个任务、{{characters}} 个角色已变为未归属。"
+  },
+  "empty": {
+    "title": "还没有项目",
+    "body": "新建一个项目，把相关的素材、任务和角色放在一起。",
+    "filtered": "没有符合搜索的项目"
+  },
+  "saved": "项目已保存",
+  "createdDone": "项目已创建",
+  "detail": {
+    "back": "返回项目",
+    "tabs": "项目内容",
+    "assets": "素材",
+    "tasks": "任务",
+    "characters": "角色",
+    "emptyAssets": "这个项目还没有素材",
+    "emptyTasks": "这个项目还没有任务",
+    "emptyCharacters": "这个项目还没有角色",
+    "openLibrary": "在素材库中查看",
+    "openTasks": "在任务中心查看",
+    "refs": "{{n}} 张参考图",
+    "notFound": "找不到这个项目",
+    "notFoundBody": "它可能已被删除，或者不属于你的账号。"
+  }
+}

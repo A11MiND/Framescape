@@ -1,0 +1,166 @@
+{
+  "title": "Library",
+  "description": "Your generated and uploaded images and videos; deleted items go to the trash first.",
+  "upload": "Upload",
+  "tab": {
+    "label": "Library sections",
+    "mine": "My assets",
+    "trash": "Trash"
+  },
+  "filter": {
+    "search": "Search prompts",
+    "type": "Type",
+    "allTypes": "All types",
+    "image": "Images",
+    "video": "Videos",
+    "project": "Project",
+    "allProjects": "All projects"
+  },
+  "select": {
+    "start": "Select",
+    "done": "Done",
+    "item": "Select {{name}}",
+    "count": "{{n}} selected",
+    "hidden": "{{n}} more selected items are outside the current filter",
+    "clearHidden": "Clear those",
+    "clear": "Clear selection",
+    "download": "Download",
+    "move": "Move to project",
+    "delete": "Delete"
+  },
+  "kind": {
+    "image": "Image",
+    "video": "Video",
+    "audio": "Audio"
+  },
+  "untitled": {
+    "image": "Uploaded image",
+    "video": "Uploaded video",
+    "audio": "Uploaded audio"
+  },
+  "card": {
+    "open": "Open",
+    "download": "Download",
+    "move": "Move to project…",
+    "delete": "Delete",
+    "more": "More actions for {{name}}",
+    "noProject": "No project"
+  },
+  "empty": {
+    "title": "No assets yet",
+    "body": "Generated work appears here automatically, and you can upload files too.",
+    "filtered": "Nothing matches these filters",
+    "clear": "Clear filters"
+  },
+  "loadMore": "Load more",
+  "move": {
+    "title": "Move to project",
+    "body": "Move {{n}} items to:",
+    "hidden": "{{n}} of them are outside the current filter.",
+    "target": "Project",
+    "none": "No project",
+    "confirm": "Move"
+  },
+  "delete": {
+    "title": "Delete {{n}} items?",
+    "body": "They move to the trash and can be restored within {{days}} days.",
+    "hidden": "{{n}} of them are outside the current filter.",
+    "confirm": "Move to trash"
+  },
+  "done": {
+    "deleted": "{{n}} items moved to the trash.",
+    "undo": "Undo",
+    "restored": "{{n}} items restored.",
+    "moved": "{{n}} items moved to the project.",
+    "downloading": "Packing {{n}} items…"
+  },
+  "trash": {
+    "hint": "Items in the trash are deleted for good {{days}} days after deletion.",
+    "empty": "The trash is empty",
+    "daysLeft": "Deleted for good in {{n}} days",
+    "restore": "Restore",
+    "emptyAll": "Empty trash ({{n}})",
+    "emptyTitle": "Empty the trash?",
+    "emptyBody": "This permanently deletes the {{n}} items in the trash. It cannot be undone.",
+    "emptyConfirm": "Delete permanently",
+    "emptied": "{{n}} items deleted permanently."
+  },
+  "uploads": {
+    "title": "Upload",
+    "drop": "Drop files here, or click to choose",
+    "choose": "Choose files",
+    "limits": "Images up to {{image}}, videos up to {{video}}, audio up to {{audio}}.",
+    "queue": "Upload queue",
+    "uploading": "Uploading {{pct}}%",
+    "done": "Done",
+    "failed": "Upload failed",
+    "tooLarge": "Larger than {{max}}",
+    "unsupported": "Only images, videos or audio",
+    "retry": "Retry",
+    "cancel": "Cancel upload",
+    "remove": "Remove",
+    "clearDone": "Clear finished",
+    "failedReason": "Upload failed: {{reason}}"
+  },
+  "detail": {
+    "back": "Back to library",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "zoomReset": "Reset to 100%",
+    "fullscreen": "Full screen",
+    "prev": "Previous item",
+    "next": "Next item",
+    "more": "More actions",
+    "delete": "Delete item",
+    "deleteTitle": "Delete this item?",
+    "deleteBody": "It moves to the trash and can be restored within {{days}} days.",
+    "deleteConfirm": "Move to trash",
+    "size": "Size and format",
+    "created": "Created",
+    "prompt": "Prompt",
+    "copy": "Copy prompt",
+    "copied": "Prompt copied",
+    "uploaded": "Uploaded file, no generation settings",
+    "params": "Model and settings",
+    "sourceTask": "Source task",
+    "openTask": "Open task",
+    "noTask": "No linked task",
+    "project": "Project",
+    "noProject": "No project",
+    "projectSaved": "Project updated",
+    "publish": {
+      "title": "Community",
+      "public": "Published to the community",
+      "private": "Not published",
+      "publish": "Publish to community",
+      "unpublish": "Unpublish",
+      "confirmTitle": "Publish to the community?",
+      "confirmBody": "Once published, everyone can see in the community:",
+      "what1": "This image or video itself",
+      "what2": "Its prompt and generation settings",
+      "notShared": "The references, character images and sources you used stay private.",
+      "confirm": "Publish",
+      "published": "Published to the community",
+      "unpublished": "Unpublished"
+    },
+    "action": {
+      "download": "Download",
+      "createFrom": "Create from this image",
+      "toVideo": "Make a video",
+      "saveCharacter": "Save as character",
+      "saveFrame": "Save this frame as a character",
+      "again": "Generate again"
+    },
+    "frameFailed": "This frame could not be captured (blocked by cross-origin settings); the video's first frame is used instead.",
+    "frameUnavailable": "The frame could not be captured; check the storage service's cross-origin settings.",
+    "missing": {
+      "title": "File unavailable",
+      "body": "This item was deleted or its file cannot be read.",
+      "back": "Back to library"
+    },
+    "notFound": {
+      "title": "Item not found",
+      "body": "It may have been deleted, or it belongs to another account."
+    }
+  }
+}

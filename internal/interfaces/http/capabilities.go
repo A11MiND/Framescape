@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"aigc-platform/internal/application/upkeep"
 	"aigc-platform/internal/application/workflows"
 	"net/http"
 
@@ -29,6 +30,8 @@ func (s *Server) handleGetCapabilities(c *gin.Context) {
 			"max_references": comic.MaxReferences, "max_layers": comic.MaxLayers,
 			"output": gin.H{"width": 1536, "height": 1024, "format": "png", "quality": "high"},
 		},
+		// Deleted assets stay restorable in the trash this long.
+		"assets": gin.H{"trash_retention_days": upkeep.TrashRetentionDays},
 		// Direct uploads: the size each asset type may have once stored.
 		"uploads": gin.H{
 			"image": gin.H{"max_bytes": maxUploadBytesByType["image"]},

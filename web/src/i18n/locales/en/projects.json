@@ -1,0 +1,53 @@
+{
+  "title": "Projects",
+  "description": "Keep related assets, tasks and characters together.",
+  "create": "New project",
+  "search": "Search project names or descriptions",
+  "stats": "{{assets}} assets · {{jobs}} tasks · {{characters}} characters",
+  "updated": "Updated {{time}}",
+  "created": "Created {{time}}",
+  "noDescription": "No description",
+  "noCover": "No assets yet",
+  "more": "More actions for {{name}}",
+  "edit": "Edit",
+  "delete": "Delete project",
+  "form": {
+    "createTitle": "New project",
+    "editTitle": "Edit project",
+    "name": "Name",
+    "description": "Description (optional)",
+    "save": "Save",
+    "createConfirm": "Create"
+  },
+  "deleteDialog": {
+    "title": "Delete project \"{{name}}\"?",
+    "body": "The project is deleted, but everything in it is kept and becomes unassigned:",
+    "assets": "{{n}} assets",
+    "jobs": "{{n}} tasks",
+    "characters": "{{n}} characters",
+    "confirm": "Delete project",
+    "done": "Project deleted; {{assets}} assets, {{jobs}} tasks and {{characters}} characters are now unassigned."
+  },
+  "empty": {
+    "title": "No projects yet",
+    "body": "Create a project to keep related assets, tasks and characters together.",
+    "filtered": "No projects match your search"
+  },
+  "saved": "Project saved",
+  "createdDone": "Project created",
+  "detail": {
+    "back": "Back to projects",
+    "tabs": "Project content",
+    "assets": "Assets",
+    "tasks": "Tasks",
+    "characters": "Characters",
+    "emptyAssets": "No assets in this project yet",
+    "emptyTasks": "No tasks in this project yet",
+    "emptyCharacters": "No characters in this project yet",
+    "openLibrary": "Open in the library",
+    "openTasks": "Open in tasks",
+    "refs": "{{n}} reference images",
+    "notFound": "Project not found",
+    "notFoundBody": "It may have been deleted, or it belongs to another account."
+  }
+}

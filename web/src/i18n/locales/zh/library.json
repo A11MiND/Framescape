@@ -1,0 +1,166 @@
+{
+  "title": "素材库",
+  "description": "生成和上传的图片、视频都在这里；删除的素材先进入回收站。",
+  "upload": "上传素材",
+  "tab": {
+    "label": "素材分类",
+    "mine": "我的素材",
+    "trash": "回收站"
+  },
+  "filter": {
+    "search": "搜索提示词",
+    "type": "类型",
+    "allTypes": "全部类型",
+    "image": "图片",
+    "video": "视频",
+    "project": "项目",
+    "allProjects": "全部项目"
+  },
+  "select": {
+    "start": "选择",
+    "done": "完成选择",
+    "item": "选择 {{name}}",
+    "count": "已选 {{n}} 个",
+    "hidden": "另有 {{n}} 个已选素材不在当前筛选中",
+    "clearHidden": "清除这些",
+    "clear": "清除选择",
+    "download": "下载所选",
+    "move": "归入项目",
+    "delete": "删除"
+  },
+  "kind": {
+    "image": "图片",
+    "video": "视频",
+    "audio": "音频"
+  },
+  "untitled": {
+    "image": "上传的图片",
+    "video": "上传的视频",
+    "audio": "上传的音频"
+  },
+  "card": {
+    "open": "打开",
+    "download": "下载",
+    "move": "归入项目…",
+    "delete": "删除",
+    "more": "{{name}} 的更多操作",
+    "noProject": "未归属项目"
+  },
+  "empty": {
+    "title": "还没有素材",
+    "body": "生成的作品会自动出现在这里，也可以直接上传。",
+    "filtered": "没有符合筛选的素材",
+    "clear": "清除筛选"
+  },
+  "loadMore": "加载更多",
+  "move": {
+    "title": "归入项目",
+    "body": "把 {{n}} 个素材归入：",
+    "hidden": "其中 {{n}} 个不在当前筛选中。",
+    "target": "目标项目",
+    "none": "未归属项目",
+    "confirm": "归入"
+  },
+  "delete": {
+    "title": "删除 {{n}} 个素材？",
+    "body": "素材会移到回收站，{{days}} 天内可以恢复。",
+    "hidden": "其中 {{n}} 个不在当前筛选中。",
+    "confirm": "移到回收站"
+  },
+  "done": {
+    "deleted": "已删除 {{n}} 个素材，已移到回收站。",
+    "undo": "撤销",
+    "restored": "已恢复 {{n}} 个素材。",
+    "moved": "已把 {{n}} 个素材归入项目。",
+    "downloading": "正在打包 {{n}} 个素材…"
+  },
+  "trash": {
+    "hint": "回收站里的素材在删除 {{days}} 天后永久删除。",
+    "empty": "回收站是空的",
+    "daysLeft": "{{n}} 天后永久删除",
+    "restore": "恢复",
+    "emptyAll": "清空回收站（{{n}}）",
+    "emptyTitle": "清空回收站？",
+    "emptyBody": "将永久删除回收站里的 {{n}} 个素材，删除后无法恢复。",
+    "emptyConfirm": "永久删除",
+    "emptied": "已永久删除 {{n}} 个素材。"
+  },
+  "uploads": {
+    "title": "上传素材",
+    "drop": "拖放文件到这里，或点击选择",
+    "choose": "选择文件",
+    "limits": "图片不超过 {{image}}，视频不超过 {{video}}，音频不超过 {{audio}}。",
+    "queue": "上传队列",
+    "uploading": "上传中 {{pct}}%",
+    "done": "已完成",
+    "failed": "上传失败",
+    "tooLarge": "超过 {{max}}",
+    "unsupported": "只能上传图片、视频或音频",
+    "retry": "重试",
+    "cancel": "取消上传",
+    "remove": "移除",
+    "clearDone": "清除已完成",
+    "failedReason": "上传失败：{{reason}}"
+  },
+  "detail": {
+    "back": "返回素材库",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "zoomReset": "恢复 100%",
+    "fullscreen": "全屏查看",
+    "prev": "上一个素材",
+    "next": "下一个素材",
+    "more": "更多操作",
+    "delete": "删除素材",
+    "deleteTitle": "删除这个素材？",
+    "deleteBody": "素材会移到回收站，{{days}} 天内可以恢复。",
+    "deleteConfirm": "移到回收站",
+    "size": "尺寸与格式",
+    "created": "创建时间",
+    "prompt": "提示词",
+    "copy": "复制提示词",
+    "copied": "已复制提示词",
+    "uploaded": "上传素材，无生成参数",
+    "params": "模型与参数",
+    "sourceTask": "来源任务",
+    "openTask": "查看任务",
+    "noTask": "没有关联的任务",
+    "project": "所属项目",
+    "noProject": "未归属项目",
+    "projectSaved": "已更新所属项目",
+    "publish": {
+      "title": "社区发布",
+      "public": "已发布到社区",
+      "private": "未发布",
+      "publish": "发布到社区",
+      "unpublish": "取消发布",
+      "confirmTitle": "发布到社区？",
+      "confirmBody": "发布后所有人都能在社区看到：",
+      "what1": "这张图片或视频本身",
+      "what2": "它的提示词和生成参数",
+      "notShared": "你用到的参考图、角色图和资料不会公开。",
+      "confirm": "发布",
+      "published": "已发布到社区",
+      "unpublished": "已取消发布"
+    },
+    "action": {
+      "download": "下载",
+      "createFrom": "基于此图创作",
+      "toVideo": "生成视频",
+      "saveCharacter": "保存为角色",
+      "saveFrame": "提取此帧保存角色",
+      "again": "以此再生成"
+    },
+    "frameFailed": "无法从视频截取画面（跨域设置阻止），已改用视频首帧。",
+    "frameUnavailable": "无法从视频截取画面，请检查存储服务的跨域设置。",
+    "missing": {
+      "title": "文件已失效",
+      "body": "这个素材已被删除，或者文件无法读取。",
+      "back": "返回素材库"
+    },
+    "notFound": {
+      "title": "找不到这个素材",
+      "body": "它可能已被删除，或者不属于你的账号。"
+    }
+  }
+}

@@ -107,6 +107,9 @@ func TestCapabilitiesPublishUploadLimits(t *testing.T) {
 	s := newTestServer(t)
 	rec := doJSON(t, s.Router(), http.MethodGet, "/api/v1/capabilities", nil, "")
 	var caps struct {
+		Assets struct {
+			TrashRetentionDays int `json:"trash_retention_days"`
+		} `json:"assets"`
 		Uploads map[string]struct {
 			MaxBytes int64 `json:"max_bytes"`
 		} `json:"uploads"`
@@ -114,5 +117,8 @@ func TestCapabilitiesPublishUploadLimits(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &caps)
 	if caps.Uploads["image"].MaxBytes != 20<<20 || caps.Uploads["video"].MaxBytes != 512<<20 || caps.Uploads["audio"].MaxBytes != 50<<20 {
 		t.Fatalf("uploads = %+v", caps.Uploads)
+	}
+	if caps.Assets.TrashRetentionDays != 30 {
+		t.Fatalf("trash retention = %d", caps.Assets.TrashRetentionDays)
 	}
 }

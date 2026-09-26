@@ -153,12 +153,25 @@ export function createDemoApi(img: Img) {
     { biz_id: 'S3', category: 'lighting', name: '黄金时刻', name_en: 'Golden hour', cover_url: '/preset-covers/lighting-golden.jpg', prompt_fragment: '黄金时刻的暖色光线', priority: 3, style_type: '', mine: false },
     { biz_id: 'S4', category: 'camera', name: '特写', name_en: 'Close-up', cover_url: '/preset-covers/camera-closeup.jpg', prompt_fragment: '特写镜头，浅景深', priority: 4, style_type: '', mine: false },
   ]
+  // Library state: which assets are in the trash, and each one's project.
+  const PROMPTS: Record<string, string> = {
+    'tram-1': '海边小镇的有轨电车', 'tram-2': '街道上的复古电车', 'tram-3': '山坡上驶过的电车', 'tram-4': '盛开的花与海边电车',
+    cat: '午后阳光下的猫咪', sunset: '日落时分的海面', lemon: '柠檬树的特写', bay: '海湾帆船', night: '霓虹城市夜景', alpine: '雪山湖泊全景', portrait: '人物写真',
+    'clip-1': '电车缓缓驶入画面', 'clip-2': '海边咖啡馆的露台', 'clip-3': '日落时分的海岸小镇',
+  }
+  const deletedAt = new Map<string, number>()
+  const purged = new Set<string>()
+  const assetProject = new Map<string, string>()
+  const published = new Set<string>()
+  const LIBRARY = [...CLIPS, ...IMAGES.filter((i) => i !== 'tram-hero')]
   const assetBody = (id: string) => {
     const video = CLIPS.includes(id)
+    const at = LIBRARY.indexOf(id)
     return {
       biz_id: id, type: video ? 'video' : 'image', public_url: img(`${id}.${video ? 'mp4' : 'jpg'}`), thumb_url: video ? '' : img(`${id}.jpg`),
       mime: video ? 'video/mp4' : 'image/jpeg', duration_ms: video ? 2000 : 0, width: video ? 640 : 1536, height: video ? 360 : 1024,
-      resolution_tag: video ? '768P' : '', created_at: T('24T06:20'), project_id: 'P1', is_public: false, prompt: '',
+      resolution_tag: video ? '768P' : '', created_at: `2026-09-${String(24 - Math.max(0, at)).padStart(2, '0')}T06:20:00Z`,
+      project_id: assetProject.get(id) ?? (at % 3 === 2 ? '' : 'P1'), is_public: published.has(id), prompt: id === 'portrait' ? '' : (PROMPTS[id] ?? ''),
     }
   }
   let nextId = 100
@@ -263,7 +276,31 @@ export function createDemoApi(img: Img) {
     const find = (id: string) => jobs.find((x) => x.biz_id === id)
     if (path === '/stream') return { status: 200, hang: true }
     if (path === '/me') return { status: 200, body: me }
-    if (path === '/projects') return { status: 200, body: { projects } }
+    if (path === '/projects' && method === 'GET') {
+      const term = new URLSearchParams(search).get('q') ?? ''
+      return { status: 200, body: { projects: projects.filter((p) => !term || p.name.includes(term) || p.description.includes(term)) } }
+    }
+    if (path === '/projects' && method === 'POST') {
+      const b = body as { name: string; description: string }
+      const p = { biz_id: `P${nextId++}`, name: b.name, description: b.description ?? '', created_at: new Date().toISOString(), asset_count: 0, job_count: 0, character_count: 0, last_activity_at: new Date().toISOString(), cover_urls: [] as string[] }
+      projects.unshift(p)
+      return { status: 200, body: p }
+    }
+    const projectPath = path.match(/^\/projects\/([^/]+)$/)
+    if (projectPath) {
+      const p = projects.find((x) => x.biz_id === projectPath[1])
+      if (!p) return { status: 404, body: { code: 'not_found', message: 'project not found' } }
+      if (method === 'GET') return { status: 200, body: p }
+      if (method === 'PATCH') {
+        const b = body as { name?: string; description?: string }
+        Object.assign(p, { name: b.name ?? p.name, description: b.description ?? p.description })
+        return { status: 200, body: p }
+      }
+      if (method === 'DELETE') {
+        projects.splice(projects.indexOf(p), 1)
+        return { status: 200, body: { detached: { assets: p.asset_count, jobs: p.job_count, characters: p.character_count } } }
+      }
+    }
     if (path === '/jobs/summary') return { status: 200, body: summary(q) }
     if (path === '/jobs' && method === 'GET') {
       jobs.forEach(liveStatus)
@@ -272,10 +309,40 @@ export function createDemoApi(img: Img) {
     if (path === '/characters' && method === 'GET') return { status: 200, body: { characters } }
     if (path === '/presets' && method === 'GET') return { status: 200, body: { presets } }
     if (path === '/assets' && method === 'GET') {
-      const type = new URLSearchParams(search).get('type')
-      const ids = type === 'video' ? CLIPS : type === 'audio' ? [] : IMAGES.filter((i) => i !== 'tram-hero')
-      return { status: 200, body: { assets: ids.map(assetBody) } }
+      const p = new URLSearchParams(search)
+      const type = p.get('type')
+      const limit = Number(p.get('limit') ?? 60)
+      const start = Number(p.get('cursor') ?? 0)
+      const rows = LIBRARY.filter((id) => !deletedAt.has(id) && !purged.has(id))
+        .map(assetBody)
+        .filter((a) => (type ? a.type === type : true) && (p.get('project_id') ? a.project_id === p.get('project_id') : true) && (p.get('q') ? a.prompt.includes(p.get('q')!) : true))
+      const page = rows.slice(start, start + limit)
+      return { status: 200, body: { assets: page, ...(start + limit < rows.length ? { next_cursor: String(start + limit) } : {}) } }
     }
+    if (path === '/assets/trash' && method === 'GET') {
+      const rows = [...deletedAt].filter(([id]) => !purged.has(id)).map(([id, at]) => ({ ...assetBody(id), deleted_at: new Date(at).toISOString(), days_until_purge: 30 }))
+      return { status: 200, body: { assets: rows, total: rows.length } }
+    }
+    if (path === '/assets/trash/empty' && method === 'POST') {
+      const n = [...deletedAt.keys()].filter((id) => !purged.has(id))
+      n.forEach((id) => purged.add(id))
+      deletedAt.clear()
+      return { status: 200, body: { purged: n.length } }
+    }
+    if (path === '/assets/batch' && method === 'POST') {
+      const b = body as { op: string; ids: string[]; project_id?: string }
+      let affected = 0
+      for (const id of b.ids) {
+        if (!LIBRARY.includes(id) || purged.has(id)) continue
+        if (b.op === 'delete' && !deletedAt.has(id)) deletedAt.set(id, Date.now())
+        else if (b.op === 'restore' && deletedAt.has(id)) deletedAt.delete(id)
+        else if (b.op === 'move' && !deletedAt.has(id)) assetProject.set(id, b.project_id ?? '')
+        else continue
+        affected++
+      }
+      return { status: 200, body: { affected } }
+    }
+    if (path === '/assets/batch-download' && method === 'POST') return { status: 200, body: {} }
     const r = (body ?? {}) as { workflow_name?: string; spec?: Record<string, unknown>; quote_total?: number; project_id?: string }
     if (path === '/jobs/estimate' && method === 'POST') {
       if (!r.workflow_name?.endsWith('.sequence') && !(r.workflow_name === 'image.comic4' && !r.spec?.comic_mode) && !String(r.spec?.text ?? '').trim()) return { status: 422, body: { code: 'text_length', message: 'empty', params: { field: 'text', max: 1500 } } }
@@ -402,9 +469,26 @@ export function createDemoApi(img: Img) {
     if (asset && method === 'GET') {
       const id = asset[1]
       if (!CLIPS.includes(id) && !IMAGES.includes(id)) return { status: 404, body: { code: 'not_found', message: 'asset' } }
-      return { status: 200, body: assetBody(id) }
+      if (deletedAt.has(id) || purged.has(id)) return { status: 404, body: { code: 'not_found', message: 'asset' } }
+      const upload = id === 'portrait'
+      return {
+        status: 200,
+        body: {
+          ...assetBody(id),
+          source: upload ? 'upload' : 'generated',
+          meta: upload ? null : { prompt: PROMPTS[id] ?? '', model: CLIPS.includes(id) ? 'MiniMax-H3' : 'image-01', seed: 362418 },
+          job_biz_id: upload ? '' : CLIPS.includes(id) ? 'J012' : 'J013',
+        },
+      }
     }
-    if (asset && method === 'PATCH') return { status: 204 }
+    if (asset && method === 'PATCH') {
+      const b = body as { is_public?: boolean; project_id?: string; clear_project?: boolean }
+      if (b.is_public === true) published.add(asset[1])
+      if (b.is_public === false) published.delete(asset[1])
+      if (b.project_id !== undefined) assetProject.set(asset[1], b.project_id)
+      if (b.clear_project) assetProject.set(asset[1], '')
+      return { status: 204 }
+    }
     const lists: Record<string, unknown> = {
       '/community/feed': { assets: [] },
       '/credits/ledger': { entries: [] },

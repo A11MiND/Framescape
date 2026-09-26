@@ -65,8 +65,9 @@ interface PrefillSpec {
 }
 
 export function readPrefill(state: unknown, workflow: string): PrefillFields | null {
-  const s = (state ?? {}) as { prefillJob?: { workflowName?: string; spec?: PrefillSpec }; prefillCharacterId?: string }
+  const s = (state ?? {}) as { prefillJob?: { workflowName?: string; spec?: PrefillSpec }; prefillCharacterId?: string; prefillReferenceId?: string }
   if (s.prefillCharacterId) return { characters: [s.prefillCharacterId] }
+  if (s.prefillReferenceId) return { reference: [s.prefillReferenceId], references: [s.prefillReferenceId] }
   const job = s.prefillJob
   if (!job?.spec) return null
   const spec = job.spec

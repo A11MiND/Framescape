@@ -1,19 +1,25 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { X } from 'lucide-react'
 
-// §19.5.3's Toast scope is deliberately narrow — only "提交后网络错误"
-// (retryable). Insufficient-balance and content-moderation blocks are
-// inline/blocking by the same table, and partial single-node failures don't
-// interrupt at all: none of those call useToast(). Toasts auto-dismiss after
-// 6s unless they carry a retry action, since a retryable toast that vanishes
-// before the user can click it defeats the point.
+// Short confirmations and recoverable failures. A toast with a retry stays
+// until acted on or dismissed; one with another action (such as undo) stays
+// long enough to use it; plain ones leave after 6 seconds.
+export interface ToastAction {
+  label: string
+  onClick: () => void
+}
+
 interface Toast {
   id: number
   message: string
-  onRetry?: () => void
+  action?: ToastAction
+  sticky: boolean
 }
 
-const ToastContext = createContext<((message: string, onRetry?: () => void) => void) | null>(null)
+type Push = (message: string, action?: (() => void) | ToastAction) => void
+
+const ToastContext = createContext<Push | null>(null)
 
 export function useToast() {
   const push = useContext(ToastContext)
@@ -22,43 +28,44 @@ export function useToast() {
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const { t } = useTranslation()
+  const { t } = useTranslation('ui')
   const [toasts, setToasts] = useState<Toast[]>([])
   const nextId = useRef(0)
 
-  const push = useCallback((message: string, onRetry?: () => void) => {
-    const id = nextId.current++
-    setToasts((cur) => [...cur, { id, message, onRetry }])
-    if (!onRetry) {
-      setTimeout(() => setToasts((cur) => cur.filter((t) => t.id !== id)), 6000)
-    }
-  }, [])
+  const push = useCallback<Push>(
+    (message, action) => {
+      const id = nextId.current++
+      const retry = typeof action === 'function'
+      const toast: Toast = { id, message, sticky: retry, action: retry ? { label: t('action.retry'), onClick: action } : action }
+      setToasts((cur) => [...cur, toast])
+      if (!retry) setTimeout(() => setToasts((cur) => cur.filter((x) => x.id !== id)), action ? 10000 : 6000)
+    },
+    [t],
+  )
 
-  const dismiss = (id: number) => setToasts((cur) => cur.filter((t) => t.id !== id))
+  const dismiss = (id: number) => setToasts((cur) => cur.filter((x) => x.id !== id))
 
   return (
     <ToastContext.Provider value={push}>
       {children}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+      <div aria-live="polite" className="fixed right-4 bottom-[calc(72px+env(safe-area-inset-bottom))] z-50 flex max-w-[calc(100vw-2rem)] flex-col gap-2 lg:bottom-4">
         {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className="flex items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-zinc-200 shadow-lg"
-          >
-            <span>{toast.message}</span>
-            {toast.onRetry && (
+          <div key={toast.id} role="status" className="flex items-center gap-3 rounded-card border border-border bg-surface px-4 py-3 text-body text-fg shadow-overlay">
+            <span className="min-w-0 flex-1">{toast.message}</span>
+            {toast.action && (
               <button
+                type="button"
                 onClick={() => {
-                  toast.onRetry?.()
+                  toast.action?.onClick()
                   dismiss(toast.id)
                 }}
-                className="rounded-md bg-violet-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-violet-400"
+                className="shrink-0 rounded-[8px] px-2.5 py-1 text-body font-medium text-primary-text hover:bg-primary-soft"
               >
-                {t('common.retry')}
+                {toast.action.label}
               </button>
             )}
-            <button onClick={() => dismiss(toast.id)} className="text-zinc-500 hover:text-zinc-300">
-              ×
+            <button type="button" aria-label={t('action.close')} onClick={() => dismiss(toast.id)} className="shrink-0 rounded-[8px] p-1 text-fg-muted hover:bg-surface-2 hover:text-fg">
+              <X aria-hidden className="size-4" />
             </button>
           </div>
         ))}

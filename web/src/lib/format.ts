@@ -36,3 +36,26 @@ export function formatDateTime(d: Date | string, lang: string): string {
 export function formatNumber(n: number, lang: string): string {
   return n.toLocaleString(lang.startsWith('zh') ? 'zh-CN' : 'en-US')
 }
+
+/** A file size such as 3.2 MB. */
+export function formatBytes(bytes: number, lang: string): string {
+  const units = ['B', 'KB', 'MB', 'GB']
+  let v = bytes
+  let i = 0
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i++
+  }
+  return `${new Intl.NumberFormat(lang, { maximumFractionDigits: i === 0 ? 0 : 1 }).format(v)} ${units[i]}`
+}
+
+/** A clip length as m:ss. */
+export function formatClipLength(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+/** A calendar date without time. */
+export function formatDate(d: Date | string, lang: string): string {
+  return new Intl.DateTimeFormat(lang, { year: 'numeric', month: 'short', day: 'numeric' }).format(typeof d === 'string' ? new Date(d) : d)
+}

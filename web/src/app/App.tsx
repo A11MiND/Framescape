@@ -9,14 +9,15 @@ import { lastCreateMode, prefillTarget } from './routing'
 const Login = lazy(() => import('../pages/Login'))
 const Characters = lazy(() => import('../pages/Characters'))
 const Presets = lazy(() => import('../pages/Presets'))
-const Assets = lazy(() => import('../pages/Assets'))
-const AssetDetail = lazy(() => import('../pages/AssetDetail'))
+const Assets = lazy(() => import('../features/library/LibraryPage'))
+const AssetDetail = lazy(() => import('../features/library/AssetDetailPage'))
 const Community = lazy(() => import('../pages/Community'))
 const TaskCenter = lazy(() => import('../features/tasks/TaskCenter'))
 const ComicWorkspace = lazy(() => import('../features/comic/ComicWorkspace'))
 const JobDetailPage = lazy(() => import('../features/tasks/detail/JobDetailPage'))
 const Credits = lazy(() => import('../pages/Credits'))
-const Projects = lazy(() => import('../pages/Projects'))
+const Projects = lazy(() => import('../features/projects/ProjectsPage'))
+const ProjectDetail = lazy(() => import('../features/projects/ProjectDetailPage'))
 const Settings = lazy(() => import('../pages/Settings'))
 const AdminSpend = lazy(() => import('../pages/AdminSpend'))
 const AdminUsers = lazy(() => import('../pages/AdminUsers'))
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="/assets" element={<Authed><Assets /></Authed>} />
         <Route path="/assets/:assetId" element={<Authed><AssetDetail /></Authed>} />
         <Route path="/projects" element={<Authed><Projects /></Authed>} />
+        <Route path="/projects/:projectId" element={<Authed><ProjectDetail /></Authed>} />
         <Route path="/characters" element={<Authed><Characters /></Authed>} />
         <Route path="/presets" element={<Authed><Presets /></Authed>} />
         <Route path="/credits" element={<Authed><Credits /></Authed>} />
