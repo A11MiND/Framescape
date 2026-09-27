@@ -1,0 +1,62 @@
+{
+  "account" : {
+    "avatarHelp" : "PNG、JPEG 或 WebP，最大 5 MB。居中裁切顯示，不會公開到社區。",
+    "avatarInvalid" : "請選擇 5 MB 以內的 PNG、JPEG 或 WebP 圖片。",
+    "avatarProgress" : "正在保存頭像：{{n}}%",
+    "avatarRemove" : "移除頭像",
+    "avatarSaved" : "頭像已保存。",
+    "avatarUpload" : "上傳頭像",
+    "email" : "郵箱",
+    "emailHelp" : "用於登錄，不能在這裡修改。",
+    "phone" : "手機號",
+    "signOut" : "退出登錄",
+    "title" : "賬戶"
+  },
+  "appearance" : {
+    "dark" : "深色",
+    "help" : "只影響這台設備。切換不會丟失正在編輯的內容。",
+    "label" : "界面主題",
+    "light" : "淺色",
+    "system" : "跟隨系統",
+    "systemNow" : "當前為{{theme}}",
+    "title" : "外觀"
+  },
+  "description" : "賬戶、密碼、外觀和語言。",
+  "language" : {
+    "date" : "日期",
+    "examples" : "格式示例",
+    "label" : "界面語言",
+    "names" : {
+      "en" : "English",
+      "zh" : "簡體中文",
+      "zh-TW" : "繁體中文"
+    },
+    "note" : "只改變界面文字，不會翻譯你輸入的提示詞、角色名和項目名。",
+    "number" : "數字",
+    "time" : "時間",
+    "title" : "語言"
+  },
+  "security" : {
+    "confirm" : "確認新密碼",
+    "current" : "當前密碼",
+    "currentRequired" : "請輸入當前密碼",
+    "mismatch" : "兩次輸入的新密碼不一致",
+    "new" : "新密碼",
+    "noPassword" : "這個賬戶用手機驗證碼或 Google 登錄，沒有密碼可以修改。",
+    "rules" : "至少 {{min}} 個字符；過長的密碼（超過 {{max}} 字節）無法保存。建議混合字母、數字和符號。",
+    "save" : "保存密碼",
+    "saved" : "密碼已更新",
+    "strength" : {
+      "fair" : "一般",
+      "good" : "良好",
+      "label" : "強度參考",
+      "weak" : "較弱"
+    },
+    "strengthNote" : "強度只作參考，能否保存以上面的規則為準。",
+    "title" : "密碼",
+    "tooLong" : "新密碼過長，請縮短",
+    "tooShort" : "新密碼至少 {{min}} 個字符",
+    "wrongCurrent" : "當前密碼不正確"
+  },
+  "title" : "設置"
+}

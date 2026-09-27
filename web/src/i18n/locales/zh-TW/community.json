@@ -1,0 +1,72 @@
+{
+  "description" : "瀏覽大家發佈的作品，看看它們用的提示詞，一鍵創作相似作品。",
+  "empty" : {
+    "all" : "還沒有人發佈作品",
+    "allBody" : "在作品詳情里選擇「發佈到社區」，作品就會出現在這裡。",
+    "filtered" : "沒有這個類型的作品",
+    "mine" : "你還沒有發佈作品",
+    "mineBody" : "在素材庫打開一個作品，選擇「發佈到社區」。",
+    "openLibrary" : "打開素材庫"
+  },
+  "guest" : {
+    "like" : "登錄後可以點贊和發佈作品。",
+    "login" : "登錄",
+    "mine" : "登錄後查看你發佈的作品。"
+  },
+  "kind" : {
+    "image" : "圖片",
+    "video" : "視頻"
+  },
+  "like" : "喜歡",
+  "likes" : "{{n}} 人喜歡",
+  "loadMore" : "加載更多",
+  "open" : "查看作品：{{title}}",
+  "sort" : "按最新發佈排序",
+  "streak" : {
+    "cap" : "本月已獲得 {{used}}/{{cap}} 次",
+    "capNote" : "獎勵按次數計上限：同一里程碑每月最多獲得的次數見各項說明。",
+    "current" : "當前已連續發佈 {{n}} 天",
+    "day" : "{{date}}：{{state}}",
+    "heatmap" : "最近 12 周的發佈記錄",
+    "legendDone" : "已發佈",
+    "legendNone" : "未發佈",
+    "milestone" : "連續 {{days}} 天",
+    "milestones" : "里程碑獎勵",
+    "reached" : "已達到",
+    "reward" : "+{{n}} 積分",
+    "rule" : "每天發佈至少 1 個作品即算連續；中斷一天後重新計算。日期按 UTC 計算，即北京時間每天 8:00 換日。",
+    "title" : "連續發佈",
+    "toggle" : "連續發佈記錄",
+    "uncapped" : "不限次數"
+  },
+  "streakEntry" : "連續發佈 {{n}} 天",
+  "tab" : {
+    "all" : "全部作品",
+    "label" : "作品範圍",
+    "mine" : "我發佈的"
+  },
+  "title" : "發現靈感",
+  "type" : {
+    "all" : "全部",
+    "image" : "圖片",
+    "label" : "類型",
+    "video" : "視頻"
+  },
+  "unlike" : "取消喜歡",
+  "untitled" : "未命名作品",
+  "viewer" : {
+    "close" : "關閉",
+    "copied" : "已複製提示詞",
+    "copy" : "複製提示詞",
+    "label" : "作品詳情",
+    "mine" : "這是你發佈的作品",
+    "noPrompt" : "作者沒有公開提示詞",
+    "openAsset" : "在素材庫中查看",
+    "prompt" : "原始提示詞",
+    "published" : "發佈於 {{time}}",
+    "similar" : "創作相似作品",
+    "similarHint" : "只帶上公開的提示詞，不會使用作者的參考圖或角色。",
+    "unpublish" : "取消發佈",
+    "unpublished" : "已取消發佈，作品仍在你的素材庫"
+  }
+}

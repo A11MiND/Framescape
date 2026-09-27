@@ -1,0 +1,53 @@
+{
+  "create" : "新建項目",
+  "created" : "創建於 {{time}}",
+  "createdDone" : "項目已創建",
+  "delete" : "刪除項目",
+  "deleteDialog" : {
+    "assets" : "{{n}} 個素材",
+    "body" : "項目會被刪除，但其中的內容都會保留，變為「未歸屬項目」：",
+    "characters" : "{{n}} 個角色",
+    "confirm" : "刪除項目",
+    "done" : "項目已刪除，{{assets}} 個素材、{{jobs}} 個任務、{{characters}} 個角色已變為未歸屬。",
+    "jobs" : "{{n}} 個任務",
+    "title" : "刪除項目「{{name}}」？"
+  },
+  "description" : "按項目整理素材、任務和角色。",
+  "detail" : {
+    "assets" : "素材",
+    "back" : "返回項目",
+    "characters" : "角色",
+    "emptyAssets" : "這個項目還沒有素材",
+    "emptyCharacters" : "這個項目還沒有角色",
+    "emptyTasks" : "這個項目還沒有任務",
+    "notFound" : "找不到這個項目",
+    "notFoundBody" : "它可能已被刪除，或者不屬於你的賬號。",
+    "openLibrary" : "在素材庫中查看",
+    "openTasks" : "在任務中心查看",
+    "refs" : "{{n}} 張參考圖",
+    "tabs" : "項目內容",
+    "tasks" : "任務"
+  },
+  "edit" : "編輯",
+  "empty" : {
+    "body" : "新建一個項目，把相關的素材、任務和角色放在一起。",
+    "filtered" : "沒有符合搜索的項目",
+    "title" : "還沒有項目"
+  },
+  "form" : {
+    "createConfirm" : "創建",
+    "createTitle" : "新建項目",
+    "description" : "描述（可選）",
+    "editTitle" : "編輯項目",
+    "name" : "名稱",
+    "save" : "保存"
+  },
+  "more" : "{{name}} 的更多操作",
+  "noCover" : "還沒有素材",
+  "noDescription" : "沒有描述",
+  "saved" : "項目已保存",
+  "search" : "搜索項目名稱或描述",
+  "stats" : "{{assets}} 素材 · {{jobs}} 任務 · {{characters}} 角色",
+  "title" : "項目",
+  "updated" : "最近更新 {{time}}"
+}

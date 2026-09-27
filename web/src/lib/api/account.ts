@@ -1,6 +1,7 @@
 import { request } from './client'
 
 export interface Me {
+  avatar_url?: string
   biz_id: string
   email: string | null
   phone: string | null
@@ -14,6 +15,7 @@ export interface Me {
 }
 
 export const accountApi = {
+  setAvatar: (asset_id: string | null) => request<Me>('PATCH', '/me/avatar', { asset_id }),
   me: () => request<Me>('GET', '/me'),
   changePassword: (current: string, next: string) => request<void>('PATCH', '/me/password', { current_password: current, new_password: next }),
 }

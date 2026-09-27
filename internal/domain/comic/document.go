@@ -15,19 +15,20 @@ type Reference struct {
 	Label   string `json:"label"`
 }
 type Layer struct {
-	ID       string  `json:"id"`
-	Kind     string  `json:"kind"` // bubble | text | logo
-	X        float64 `json:"x"`
-	Y        float64 `json:"y"`
-	W        float64 `json:"w"`
-	H        float64 `json:"h"`
-	Text     string  `json:"text"`
-	AssetID  string  `json:"asset_id,omitempty"`
-	FontSize int     `json:"font_size"` // pixels in the canonical 1536x1024 canvas
-	Color    string  `json:"color"`
-	Fill     string  `json:"fill"`
-	Tail     string  `json:"tail"` // none | left | right
-	Locked   bool    `json:"locked"`
+	FillOpacity *float64 `json:"fill_opacity,omitempty"` // nil preserves opaque legacy documents
+	ID          string   `json:"id"`
+	Kind        string   `json:"kind"` // bubble | text | logo
+	X           float64  `json:"x"`
+	Y           float64  `json:"y"`
+	W           float64  `json:"w"`
+	H           float64  `json:"h"`
+	Text        string   `json:"text"`
+	AssetID     string   `json:"asset_id,omitempty"`
+	FontSize    int      `json:"font_size"` // pixels in the canonical 1536x1024 canvas
+	Color       string   `json:"color"`
+	Fill        string   `json:"fill"`
+	Tail        string   `json:"tail"` // none | left | right
+	Locked      bool     `json:"locked"`
 	// Hidden layers stay in the document but are neither shown nor exported.
 	Hidden bool `json:"hidden,omitempty"`
 }
@@ -126,6 +127,9 @@ func (d Document) Validate() error {
 		}
 		if l.FontSize < 12 || l.FontSize > 96 || !hexColor.MatchString(l.Color) || !hexColor.MatchString(l.Fill) || utf8.RuneCountInString(l.Text) > 2000 {
 			return fmt.Errorf("invalid layer text/style")
+		}
+		if l.FillOpacity != nil && (math.IsNaN(*l.FillOpacity) || math.IsInf(*l.FillOpacity, 0) || *l.FillOpacity < 0 || *l.FillOpacity > 1) {
+			return fmt.Errorf("invalid bubble opacity")
 		}
 		if l.Tail != "none" && l.Tail != "left" && l.Tail != "right" {
 			return fmt.Errorf("invalid bubble tail")

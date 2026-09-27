@@ -1,0 +1,187 @@
+{
+  "action" : {
+    "cancel" : "取消任務",
+    "createAgain" : "以此再生成",
+    "delete" : "刪除記錄",
+    "download" : "下載",
+    "editAndRetry" : "修改並重新生成",
+    "openAsset" : "在素材庫打開",
+    "publish" : "發佈到社區",
+    "retryStep" : "重試此步（新建任務）",
+    "saveCharacter" : "保存為角色",
+    "toVideo" : "圖生視頻",
+    "unpublish" : "取消發佈"
+  },
+  "back" : "返回任務列表",
+  "cancelled" : {
+    "hint" : "已產生的費用已結算，剩餘預留已退回。",
+    "title" : "任務已取消"
+  },
+  "confirmCancel" : {
+    "effect1" : "未開始的步驟不再執行",
+    "effect2" : "已產生的費用照常結算，剩餘預留退回",
+    "title" : "取消這個任務？"
+  },
+  "confirmDelete" : {
+    "effect1" : "記錄從任務列表中移除",
+    "effect2" : "已生成的作品仍保留在素材庫",
+    "title" : "刪除這條任務記錄？"
+  },
+  "copyId" : "複製任務編號",
+  "createdAt" : "創建於 {{time}}",
+  "credits" : {
+    "frozen" : "當前凍結",
+    "note" : "按實際用量結算；預留是提交時確認的金額，不是費用上限，超出部分從餘額扣除。",
+    "overage" : "超出預留補扣",
+    "released" : "已釋放",
+    "reserved" : "累計預留",
+    "settled" : "累計結算",
+    "title" : "積分"
+  },
+  "done" : {
+    "cancelling" : "已請求取消，等待服務端確認",
+    "copied" : "已複製",
+    "deleted" : "已刪除記錄",
+    "retried" : "已創建重試任務"
+  },
+  "duration" : "用時 {{duration}}",
+  "exec" : {
+    "attempt" : "第 {{n}} 次嘗試",
+    "note" : "只顯示服務端返回的步驟。",
+    "title" : "執行詳情"
+  },
+  "failed" : {
+    "hint" : "修改描述或參數後重新生成，會創建一個新任務。",
+    "partial" : "部分步驟失敗",
+    "title" : "生成失敗"
+  },
+  "id" : "任務編號",
+  "info" : {
+    "count" : "數量",
+    "durationSec" : "時長",
+    "mode" : "模式",
+    "noProject" : "未歸屬項目",
+    "params" : "模型與參數",
+    "project" : "項目",
+    "prompt" : "原始描述",
+    "provider" : "服務商",
+    "quality" : "質量",
+    "ratio" : "比例",
+    "resolution" : "分辨率",
+    "seconds" : "{{n}} 秒",
+    "shotN" : "鏡頭 {{n}}",
+    "shots" : "鏡頭描述",
+    "size" : "尺寸",
+    "type" : "類型"
+  },
+  "next" : {
+    "title" : "下一步"
+  },
+  "node" : {
+    "compose" : "合成",
+    "concat" : "合成視頻",
+    "enhance" : "提示詞增強",
+    "extract" : "截取尾幀",
+    "gate" : "預覽審核",
+    "gen" : "生成",
+    "panel" : "第 {{n}} 格",
+    "panelEnhance" : "第 {{n}} 格 · 提示詞增強",
+    "shot" : "鏡頭 {{n}}",
+    "shotDraft" : "鏡頭 {{n}} · 預覽",
+    "shotEnhance" : "鏡頭 {{n}} · 提示詞增強",
+    "shotRedo" : "鏡頭 {{n}} · 重做",
+    "shotUpgrade" : "鏡頭 {{n}} · 升級 2K",
+    "split" : "故事拆分",
+    "step" : "處理步驟",
+    "stylize" : "參考風格化"
+  },
+  "notFound" : "任務不存在或已刪除。",
+  "panelRetry" : {
+    "action" : "修改並重繪未完成的格",
+    "body" : "已完成的格會保留，下面這些格會重新生成，並重新拼成整頁。",
+    "confirm" : "新建任務並重繪",
+    "cost" : "預計 {{n}} 積分",
+    "costPending" : "正在計算費用",
+    "done" : "已新建重繪任務",
+    "failed" : "無法重繪：{{reason}}",
+    "newTask" : "這會新建一個任務，與本任務關聯；本任務保持不變。",
+    "panel" : "第 {{n}} 格",
+    "title" : "重繪未完成的格"
+  },
+  "progress" : {
+    "cancelling" : "正在取消，等待服務端確認",
+    "note" : "生成時間取決於服務商，不顯示估算進度。",
+    "offline" : "連接中斷 · 上次更新 {{time}}",
+    "offlineNoSync" : "連接中斷，正在重新連接",
+    "queued" : "排隊中",
+    "reason" : {
+      "backoff" : "稍後自動重試",
+      "capacity" : "等待服務商配額",
+      "user_limit" : "你已有多個任務在運行，稍後自動開始"
+    },
+    "reconnect" : "重試連接",
+    "steps" : "已完成 {{done}} / {{total}} 步",
+    "title" : "正在生成"
+  },
+  "publish" : {
+    "confirm" : "發佈",
+    "effect1" : "所有人都能在社區看到這個作品",
+    "effect2" : "它的生成描述會一同公開；參考圖等私有素材不會公開",
+    "title" : "發佈到社區？"
+  },
+  "rename" : "重命名",
+  "results" : {
+    "count" : "{{n}} 個結果",
+    "count_one" : "{{n}} 個結果",
+    "count_other" : "{{n}} 個結果",
+    "missing" : "文件已失效",
+    "next" : "下一張",
+    "pick" : "查看第 {{n}} 個結果",
+    "prev" : "上一張",
+    "published" : "已發佈到社區",
+    "title" : "生成結果",
+    "unpublished" : "已取消發佈"
+  },
+  "review" : {
+    "choice" : {
+      "keep" : "保留",
+      "label" : "片段 {{n}} 的處理",
+      "redo" : "重做",
+      "upgrade" : "升級 2K"
+    },
+    "clip" : "片段 {{n}}",
+    "confirm" : "確認並合成",
+    "deadline" : "請在 {{time}} 前確認。",
+    "deadlineSoon" : "還剩約 {{hours}} 小時，請在 {{time}} 前確認。",
+    "expiry" : "到期後自動取消：已產生的費用照常結算，剩餘預留退回。",
+    "insufficient" : "積分不足以支付新增費用。",
+    "intro" : "請預覽每個片段，選擇保留、重做或升級到 2K。",
+    "priceChanged" : "費用已變化，請確認新的報價。",
+    "prompt" : "原始描述",
+    "quote" : {
+      "allUpgrade" : "全部升級 2K",
+      "balance" : "可用積分",
+      "compare" : "費用對比",
+      "composeFree" : "本地合成，不收費",
+      "credits" : "{{n}} 積分",
+      "current" : "當前選擇",
+      "item" : {
+        "other" : "其他費用",
+        "prompt_enhance" : "提示詞增強",
+        "video_compose" : "合成視頻",
+        "video_redo" : "重做 {{n}} 個片段（768P）",
+        "video_upgrade" : "升級 {{n}} 個片段到 2K"
+      },
+      "note" : "確認時以服務端報價為準；價格變化會先提示你重新確認。",
+      "reserved" : "本任務當前凍結",
+      "title" : "報價",
+      "total" : "預計新增",
+      "unknown" : "暫時無法報價",
+      "updating" : "正在更新報價…"
+    },
+    "redoPrompt" : "重做時使用的描述（可修改）",
+    "submitted" : "已提交，正在處理你的選擇",
+    "title" : "待你確認",
+    "topUp" : "前往積分頁"
+  }
+}

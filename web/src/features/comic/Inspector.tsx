@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Copy, Eye, EyeOff, Image as ImageIcon, Lock, LockOpen, Trash2, ArrowUpToLine } from 'lucide-react'
 import { Button, Field, IconButton, Input, Select, TabList, TabPanel, Tabs, Textarea, cn } from '../../ui'
@@ -19,6 +20,23 @@ interface Props {
 function layerName(t: (k: string) => string, l: ComicLayer) {
   if (l.kind === 'logo') return t('art.logo')
   return l.text.trim().slice(0, 24) || t('art.emptyText')
+}
+
+/** Keep partial input local; commit only when the user finishes typing. */
+function NumericProperty({ value, min, max, disabled, onCommit }: { value: number; min: number; max: number; disabled?: boolean; onCommit: (value: number) => void }) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const commit = () => {
+    const parsed = draft === null || draft.trim() === '' ? value : Number(draft)
+    const next = Number.isFinite(parsed) ? Math.max(min, Math.min(max, Math.round(parsed))) : value
+    setDraft(null)
+    if (next !== value) onCommit(next)
+  }
+  return <Input type="number" min={min} max={max} step={1} disabled={disabled} value={draft ?? value}
+    onChange={(e) => setDraft(e.target.value)} onBlur={commit}
+    onKeyDown={(e) => {
+      if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() }
+      if (e.key === 'Escape') { e.preventDefault(); setDraft(null) }
+    }} />
 }
 
 /** Layers (visibility, lock, order) and the selected layer's properties. */
@@ -86,14 +104,9 @@ export function Inspector({ doc, selected, tab, onTab, onSelect, onLayer, onDocu
                 )}
                 <div className="grid grid-cols-3 gap-2 [&>*]:min-w-0">
                   <Field label={t('art.fontSize')}>
-                    <Input
-                      type="number"
-                      min={12}
-                      max={96}
-                      disabled={layer.locked || disabled}
-                      value={layer.font_size}
-                      onChange={(e) => onLayer({ ...layer, font_size: Math.max(12, Math.min(96, Number(e.target.value) || 12)) })}
-                    />
+                    <NumericProperty key={`${layer.id}-font`} min={12} max={96}
+                      disabled={layer.locked || disabled} value={layer.font_size}
+                      onCommit={(font_size) => onLayer({ ...layer, font_size })} />
                   </Field>
                   <Field label={t('art.color')}>
                     <input type="color" disabled={layer.locked || disabled} value={layer.color} onChange={(e) => onLayer({ ...layer, color: e.target.value })} className="h-10 w-full rounded-card border border-border-control bg-surface p-1" />
@@ -102,6 +115,11 @@ export function Inspector({ doc, selected, tab, onTab, onSelect, onLayer, onDocu
                     <input type="color" disabled={layer.locked || disabled} value={layer.fill} onChange={(e) => onLayer({ ...layer, fill: e.target.value })} className="h-10 w-full rounded-card border border-border-control bg-surface p-1" />
                   </Field>
                 </div>
+                {layer.kind === 'bubble' && <Field label={t('art.opacity')} help={t('art.opacityHelp')}>
+                  <NumericProperty key={`${layer.id}-opacity`} min={0} max={100}
+                    value={Math.round((layer.fill_opacity ?? 1) * 100)} disabled={layer.locked || disabled}
+                    onCommit={(value) => onLayer({ ...layer, fill_opacity: value / 100 })} />
+                </Field>}
                 {layer.kind === 'bubble' && (
                   <Field label={t('art.tail')}>
                     <Select disabled={layer.locked || disabled} value={layer.tail} onChange={(e) => onLayer({ ...layer, tail: e.target.value as ComicLayer['tail'] })}>
@@ -116,15 +134,9 @@ export function Inspector({ doc, selected, tab, onTab, onSelect, onLayer, onDocu
             <div className="grid grid-cols-2 gap-2 [&>*]:min-w-0">
               {(['x', 'y', 'w', 'h'] as const).map((key, i) => (
                 <Field key={key} label={[t('art.left'), t('art.top'), t('art.width'), t('art.height')][i]}>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={Math.round(layer[key] * 100)}
-                    disabled={layer.locked || disabled}
-                    onChange={(e) => onLayer(constrainLayer({ ...layer, [key]: (Number(e.target.value) || 0) / 100 }))}
-                  />
+                  <NumericProperty key={`${layer.id}-${key}`} min={0} max={100}
+                    value={Math.round(layer[key] * 100)} disabled={layer.locked || disabled}
+                    onCommit={(value) => onLayer(constrainLayer({ ...layer, [key]: value / 100 }))} />
                 </Field>
               ))}
             </div>

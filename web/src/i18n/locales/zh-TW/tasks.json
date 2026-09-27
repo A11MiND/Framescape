@@ -1,0 +1,90 @@
+{
+  "action" : {
+    "cancel" : "取消任務",
+    "delete" : "刪除記錄",
+    "loadMore" : "加載更多",
+    "more" : "更多操作",
+    "reason" : "查看原因",
+    "rename" : "重命名",
+    "review" : "去確認",
+    "view" : "查看"
+  },
+  "cancelConfirm" : {
+    "confirm" : "取消任務",
+    "effect1" : "未開始的步驟不再執行",
+    "effect2" : "已產生的費用照常結算，剩餘預留退回",
+    "title" : "取消這個任務？"
+  },
+  "cards" : {
+    "active" : "進行中",
+    "failed" : "失敗",
+    "needs_review" : "待確認",
+    "succeeded" : "已完成"
+  },
+  "column" : {
+    "actions" : "操作",
+    "created" : "創建時間",
+    "credits" : "積分",
+    "progress" : "進度",
+    "status" : "狀態",
+    "task" : "作品 / 任務",
+    "type" : "類型"
+  },
+  "credits" : "預留 {{reserved}} · 已結算 {{settled}}",
+  "deleteConfirm" : {
+    "confirm" : "刪除記錄",
+    "effect1" : "記錄從任務列表中移除",
+    "effect2" : "已生成的作品仍保留在素材庫",
+    "title" : "刪除這條任務記錄？"
+  },
+  "description" : "管理你的圖片、視頻與漫畫生成任務。",
+  "done" : {
+    "cancelling" : "已請求取消，等待服務端確認",
+    "deleted" : "已刪除記錄",
+    "renamed" : "已重命名"
+  },
+  "empty" : {
+    "action" : "去創作",
+    "body" : "從一句描述開始你的第一次創作。",
+    "clear" : "清除篩選",
+    "filtered" : "沒有符合條件的任務",
+    "title" : "還沒有任務"
+  },
+  "filter" : {
+    "all" : "全部",
+    "allProjects" : "全部項目",
+    "allTypes" : "全部類型",
+    "button" : "篩選",
+    "buttonCount" : "篩選（{{n}}）",
+    "failedHint" : "失敗（含部分完成）",
+    "groups" : "分組",
+    "label" : "狀態",
+    "newest" : "創建時間：新→舊",
+    "oldest" : "創建時間：舊→新",
+    "order" : "排序",
+    "other" : "其他狀態",
+    "project" : "項目",
+    "search" : "搜索任務標題",
+    "sheetTitle" : "篩選任務",
+    "type" : "類型",
+    "withCount" : "{{label}}（{{n}}）"
+  },
+  "pinned" : "待你確認",
+  "pinnedHint" : "這些視頻預覽需要你選擇保留、重做或升級。",
+  "progress" : "{{done}} / {{total}} 步",
+  "rename" : {
+    "label" : "標題",
+    "title" : "重命名任務"
+  },
+  "retryOf" : "重試自另一任務",
+  "title" : "任務",
+  "type" : {
+    "image.comic4" : "漫畫",
+    "image.sequence" : "連續圖片",
+    "image.single" : "圖片",
+    "unknown" : "其他",
+    "video.sequence" : "連續視頻",
+    "video.single" : "視頻"
+  },
+  "untitled" : "未命名任務"
+}

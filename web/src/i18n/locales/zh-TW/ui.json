@@ -1,0 +1,52 @@
+{
+  "action" : {
+    "cancel" : "取消",
+    "clearSelection" : "清除選擇",
+    "close" : "關閉",
+    "confirm" : "確認",
+    "copied" : "已複製",
+    "copy" : "複製",
+    "more" : "更多",
+    "retry" : "重試",
+    "save" : "保存",
+    "select" : "選擇"
+  },
+  "confirm" : {
+    "effects" : "生效後",
+    "target" : "目標"
+  },
+  "field" : {
+    "optional" : "（可選）"
+  },
+  "listSeparator" : "、",
+  "password" : {
+    "hide" : "隱藏密碼",
+    "show" : "顯示密碼"
+  },
+  "state" : {
+    "empty" : "暫無內容",
+    "loadFailed" : "加載失敗",
+    "loading" : "正在加載"
+  },
+  "status" : {
+    "awaiting_review" : "待確認",
+    "cancelled" : "已取消",
+    "cancelling" : "取消中",
+    "failed" : "失敗",
+    "partial" : "部分完成",
+    "queued" : "排隊中",
+    "running" : "進行中",
+    "succeeded" : "已完成",
+    "unknown" : "未知狀態"
+  },
+  "time" : {
+    "elapsed" : "已用時 {{duration}}",
+    "lastSync" : "上次更新 {{time}}"
+  },
+  "unit" : {
+    "hours" : "{{n}} 小時",
+    "minutes" : "{{n}} 分",
+    "seconds" : "{{n}} 秒"
+  },
+  "unknownValue" : "--"
+}

@@ -57,12 +57,19 @@ function drawTextLayer(ctx: CanvasRenderingContext2D, l: ComicLayer): boolean {
   const bodyH = h - tail, pad = 18
   ctx.save(); ctx.fillStyle = l.fill; ctx.strokeStyle = l.color; ctx.lineWidth = 3
   if (l.kind === 'bubble') {
-    ctx.beginPath(); ctx.roundRect(x, y, w, bodyH, Math.min(22, bodyH / 3)); ctx.fill(); ctx.stroke()
+    // One outline avoids double-alpha seams where the tail joins the body.
+    const r = Math.min(22, bodyH / 3), bottom = y + bodyH
+    const tx = x + w * (l.tail === 'left' ? .25 : .75)
+    ctx.globalAlpha = l.fill_opacity ?? 1
+    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y)
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r); ctx.lineTo(x + w, bottom - r)
+    ctx.quadraticCurveTo(x + w, bottom, x + w - r, bottom)
     if (tail) {
-      const tx = x + w * (l.tail === 'left' ? .25 : .75)
-      ctx.beginPath(); ctx.moveTo(tx - 14, y + bodyH - 2); ctx.lineTo(tx + (l.tail === 'left' ? -22 : 22), y + h); ctx.lineTo(tx + 14, y + bodyH - 2); ctx.fill(); ctx.stroke()
-      ctx.fillRect(tx - 12, y + bodyH - 4, 24, 6)
+      ctx.lineTo(tx + 14, bottom); ctx.lineTo(tx + (l.tail === 'left' ? -22 : 22), y + h); ctx.lineTo(tx - 14, bottom)
     }
+    ctx.lineTo(x + r, bottom); ctx.quadraticCurveTo(x, bottom, x, bottom - r)
+    ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath(); ctx.fill(); ctx.stroke()
+    ctx.globalAlpha = 1
   }
   ctx.fillStyle = l.color; ctx.font = `${l.font_size}px "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif`
   ctx.textAlign = 'left'; ctx.textBaseline = 'top'

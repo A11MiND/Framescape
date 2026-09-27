@@ -209,12 +209,13 @@ func (s *Server) handleMe(c *gin.Context) {
 	}
 	openAI := user.IsAdmin || slices.Contains(entitlements, persistence.EntitlementOpenAIImage)
 	c.JSON(http.StatusOK, gin.H{
-		"biz_id":   user.BizID,
-		"email":    user.Email,
-		"phone":    user.Phone,
-		"balance":  acct.Balance,
-		"held":     acct.Held,
-		"is_admin": user.IsAdmin,
+		"avatar_url": s.avatarURL(c, user),
+		"biz_id":     user.BizID,
+		"email":      user.Email,
+		"phone":      user.Phone,
+		"balance":    acct.Balance,
+		"held":       acct.Held,
+		"is_admin":   user.IsAdmin,
 		// has_password tells the settings page whether a password can be changed:
 		// phone- and Google-only accounts have none.
 		"has_password": user.PasswordHash != nil,

@@ -17,6 +17,7 @@ export interface ComicLayer {
   font_size: number
   color: string
   fill: string
+  fill_opacity?: number
   tail: 'none' | 'left' | 'right'
   locked: boolean
   /** Kept in the document but neither shown nor exported. */
@@ -48,6 +49,7 @@ const layerSchema = z.object({
   x: fraction, y: fraction, w: fraction.min(.02), h: fraction.min(.02),
   text: textLimit(2000), asset_id: z.string().optional(), font_size: z.number().int().min(12).max(96),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/), fill: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  fill_opacity: fraction.optional(),
   tail: z.enum(['none', 'left', 'right']), locked: z.boolean(), hidden: z.boolean().optional(),
 }).refine(l => l.x + l.w <= 1.000001 && l.y + l.h <= 1.000001 && (l.kind !== 'logo' || !!l.asset_id))
 const documentSchema = z.object({

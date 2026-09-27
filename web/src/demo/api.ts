@@ -254,7 +254,7 @@ export function createDemoApi(img: Img) {
     }
     return { credits_total: n * 10, items: [{ kind: 'image_single', count: n, credits: n * 10 }] }
   }
-  const me = { biz_id: 'demo-user', email: 'demo@example.com', phone: null, balance: 860, held: 350, is_admin: true, entitlements: ['openai_image'], comic_ai: true, has_password: true }
+  const me = { biz_id: 'demo-user', email: 'demo@example.com', phone: null, avatar_url: '', balance: 860, held: 350, is_admin: true, entitlements: ['openai_image'], comic_ai: true, has_password: true }
 
   // Ledger: separate under-budget and over-budget tasks, plus top-ups and rewards.
   const ledgerJob = (id: string, title: string, workflow: string, cover: string) => ({ biz_id: id, title, workflow_name: workflow, cover_url: img(`${cover}.jpg`) })
@@ -348,6 +348,11 @@ export function createDemoApi(img: Img) {
     const find = (id: string) => jobs.find((x) => x.biz_id === id)
     if (path === '/stream') return { status: 200, hang: true }
     if (path === '/me') return { status: 200, body: me }
+    if (path === '/me/avatar' && method === 'PATCH') {
+      const assetID = (body as { asset_id?: string | null }).asset_id
+      me.avatar_url = assetID ? img('portrait.jpg') : ''
+      return { status: 200, body: me }
+    }
     if (path === '/projects' && method === 'GET') {
       const term = new URLSearchParams(search).get('q') ?? ''
       return { status: 200, body: { projects: projects.filter((p) => !term || p.name.includes(term) || p.description.includes(term)) } }
@@ -428,6 +433,9 @@ export function createDemoApi(img: Img) {
       const page = rows.slice(start, start + limit)
       return { status: 200, body: { assets: page, ...(start + limit < rows.length ? { next_cursor: String(start + limit) } : {}) } }
     }
+    if (path === '/assets/upload-url' && method === 'POST') return { status: 200, body: { biz_id: `upload-${nextId++}`, upload_url: 'http://127.0.0.1:4173/mock-upload', storage_key: 'avatar.png' } }
+    const completeUpload = path.match(/^\/assets\/([^/]+)\/complete$/)
+    if (completeUpload && method === 'POST') return { status: 200, body: { ...assetBody('portrait'), biz_id: completeUpload[1], source: 'upload' } }
     if (path === '/assets/trash' && method === 'GET') {
       const rows = [...deletedAt].filter(([id]) => !purged.has(id)).map(([id, at]) => ({ ...assetBody(id), deleted_at: new Date(at).toISOString(), days_until_purge: 30 }))
       return { status: 200, body: { assets: rows, total: rows.length } }

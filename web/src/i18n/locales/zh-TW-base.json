@@ -1,0 +1,607 @@
+{
+  "admin" : {
+    "actionFailed" : "操作失敗，請重試",
+    "amount" : "積分數量",
+    "backToApp" : "返回應用",
+    "colAccount" : "賬號",
+    "colBalance" : "餘額",
+    "colComicAi" : "AI 漫畫",
+    "colCostYuan" : "實際花費（¥）",
+    "colHeld" : "持有中",
+    "colJobs" : "作業數",
+    "colRole" : "角色",
+    "colSpent" : "累計消耗",
+    "colStatus" : "狀態",
+    "comicAiAdmin" : "管理員默認開放",
+    "comicAiDisable" : "關閉 AI 漫畫",
+    "comicAiEnable" : "開放 AI 漫畫",
+    "comicAiOff" : "未開放",
+    "comicAiOn" : "內測中",
+    "confirmCreate" : "確認創建",
+    "confirmGrant" : "確認充值",
+    "copied" : "已複製",
+    "copy" : "複製",
+    "copyFailed" : "複製失敗，請手動選中複製",
+    "costYuanCol" : "實際花費（¥）",
+    "creating" : "創建中…",
+    "creditsConsumed" : "累計消耗積分",
+    "creditsConsumedCol" : "消耗積分",
+    "creditsRecharged" : "累計充值積分",
+    "day" : "日期",
+    "done" : "完成",
+    "grantCredits" : "充值",
+    "grantCreditsTitle" : "給該賬號充值",
+    "granting" : "充值中…",
+    "grantSucceeded" : "已為 {{account}} 充值 {{amount}} 積分",
+    "jobsByStatus" : "作業狀態分布",
+    "jobsCol" : "作業數",
+    "makeAdmin" : "設為管理員",
+    "newUser" : "+ 新建賬戶",
+    "newUserCreated" : "賬戶創建成功",
+    "newUserEmailLabel" : "郵箱（不需要是你自己的郵箱，任意可用郵箱地址即可）",
+    "newUserPasswordWarning" : "這個臨時密碼只會顯示這一次，請立即複製並轉發給對方——關閉後將無法再次查看，只能重新生成賬戶或讓對方自行改密碼。",
+    "newUserTitle" : "新建賬戶",
+    "noJobs" : "還沒有作業",
+    "noUsage" : "近期沒有使用記錄",
+    "noUsers" : "沒有匹配的用戶",
+    "reactivate" : "啓用",
+    "remarkOptional" : "備注（可選）",
+    "remarkPlaceholder" : "例如：客戶補償",
+    "revokeAdmin" : "取消管理員",
+    "roleAdmin" : "管理員",
+    "roleUser" : "普通用戶",
+    "searchPlaceholder" : "按郵箱或手機號搜索",
+    "status" : {
+      "cancelled" : "已取消",
+      "failed" : "失敗",
+      "running" : "進行中",
+      "succeeded" : "成功"
+    },
+    "statusActive" : "正常",
+    "statusSuspended" : "已停用",
+    "suspend" : "停用",
+    "tabSpend" : "花費",
+    "tabUsers" : "人員管理",
+    "title" : "管理後台",
+    "totalCostYuan" : "實際花費（¥）",
+    "totalJobs" : "作業總數",
+    "usageLast30Days" : "近 30 天使用情況",
+    "users" : "用戶總數",
+    "usersTitle" : "用戶列表"
+  },
+  "api" : {
+    "uploadFailed" : "上傳失敗（{{status}}）"
+  },
+  "assetDetail" : {
+    "backToLibrary" : "← 返回素材庫",
+    "deleting" : "刪除中…",
+    "download" : "下載",
+    "fromJob" : "來自作業 #{{id}}… →",
+    "meta" : {
+      "layout" : "拼版",
+      "mode" : "模式",
+      "model" : "模型",
+      "prompt" : "提示詞",
+      "seed" : "Seed"
+    },
+    "notFound" : "找不到這個素材，可能已被刪除",
+    "regenerateFromThis" : "以此再生成",
+    "saveAsCharacter" : "存為角色",
+    "saveFrameAsCharacter" : "抽幀存為角色",
+    "uploadedNoParams" : "這個素材是直接上傳的，沒有生成參數"
+  },
+  "assetPicker" : {
+    "choose" : "+ 選擇",
+    "collapse" : "收起",
+    "emptyDefault" : {
+      "image" : "還沒有圖片，點右側「上傳」添加",
+      "video" : "還沒有視頻，點右側「上傳」添加"
+    },
+    "upload" : "上傳",
+    "uploadFailed" : "上傳失敗，請重試",
+    "uploading" : "上傳中"
+  },
+  "assets" : {
+    "allProjects" : "全部項目",
+    "assignFailed" : "歸類失敗，請重試",
+    "assignToProject" : "歸入項目",
+    "batchDownload" : "批量下載",
+    "batchDownloadFailed" : "批量下載失敗，請重試",
+    "daysLeft" : "{{count}} 天後清除",
+    "deleteFailed" : "刪除失敗，請重試",
+    "deselect" : "取消選擇",
+    "empty" : "還沒有生成過任何素材，去「工坊」生成一些",
+    "emptyingTrash" : "清空中…",
+    "emptyTrash" : "清空回收站",
+    "emptyTrashConfirm" : "確定要永久刪除回收站裡的 {{count}} 個素材嗎？此操作無法撤銷。",
+    "emptyTrashFailed" : "清空失敗，請重試",
+    "filter" : {
+      "all" : "全部",
+      "image" : "圖片",
+      "video" : "視頻"
+    },
+    "library" : "素材庫",
+    "restore" : "恢復",
+    "restoreFailed" : "恢復失敗，請重試",
+    "searchPlaceholder" : "搜索提示詞…",
+    "selectedCount" : "已選 {{count}}",
+    "trash" : "回收站",
+    "trashEmpty" : "回收站是空的",
+    "unassigned" : "未分組",
+    "zipping" : "打包中…"
+  },
+  "brand" : {
+    "name" : "幀境",
+    "tagline" : "一幀一境，說出來就有"
+  },
+  "characters" : {
+    "create" : "創建角色",
+    "createWithThis" : "用這個角色創作",
+    "deleteFailed" : "刪除失敗，請重試",
+    "descriptionPlaceholder" : "外觀描述（可選）",
+    "empty" : "還沒有角色。先在工坊生成幾張圖，再回來把它們定為角色參考圖。",
+    "namePlaceholder" : "角色名",
+    "new" : "+ 新建角色",
+    "noProject" : "不歸類項目",
+    "pickerEmptyHint" : "還沒有生成過圖片，點右側「上傳」添加，或先去工坊生成一些",
+    "pickRefs" : "選擇 1-3 張參考圖（已選 {{count}}）",
+    "title" : "角色庫"
+  },
+  "common" : {
+    "cancel" : "取消",
+    "close" : "關閉",
+    "confirm" : "確認",
+    "create" : "創建",
+    "delete" : "刪除",
+    "edit" : "編輯",
+    "loading" : "加載中…",
+    "optional" : "可選",
+    "processing" : "處理中…",
+    "retry" : "重試",
+    "save" : "保存",
+    "saving" : "保存中…",
+    "somethingWentWrong" : "出錯了"
+  },
+  "community" : {
+    "empty" : "還沒有人發佈作品，來做第一個吧",
+    "mineEmpty" : "你還沒有發佈過作品",
+    "publish" : "發佈到社區",
+    "publishFailed" : "操作失敗，請重試",
+    "streak" : {
+      "capUsed" : "本月已用 {{used}}/{{cap}} 次",
+      "current" : "已連續發佈 {{count}} 天",
+      "current_zero" : "今天發佈一次，開始你的連續發佈記錄",
+      "heading" : "連續發佈",
+      "heatmap" : "近 12 周",
+      "heatmapEmpty" : "{{date}} 未發佈",
+      "heatmapPublished" : "{{date}} 已發佈",
+      "milestone" : "{{days}} 天 · +{{credits}} 積分"
+    },
+    "subtitle" : "瀏覽大家發佈的作品",
+    "tabs" : {
+      "feed" : "全部作品",
+      "mine" : "我發佈的"
+    },
+    "title" : "社區",
+    "unpublish" : "從社區移除"
+  },
+  "credits" : {
+    "balance" : "可用餘額",
+    "direction" : {
+      "commit" : "結算",
+      "hold" : "持有",
+      "recharge" : "充值",
+      "refund" : "退回"
+    },
+    "empty" : "還沒有流水記錄",
+    "held" : "持有中（作業進行中預扣）",
+    "ledger" : "流水",
+    "loadMore" : "加載更多",
+    "remark" : {
+      "commit" : "結算 {{amount}} 積分（成本 ¥{{cost}}）",
+      "community_streak_3" : "連續發佈 3 天獎勵",
+      "community_streak_10" : "連續發佈 10 天獎勵",
+      "community_streak_30" : "連續發佈 30 天獎勵",
+      "hold_draft" : "預留 {{amount}} 積分：連續鏡頭草稿",
+      "hold_job" : "預留 {{amount}} 積分：{{workflow}}",
+      "hold_retry" : "預留 {{amount}} 積分：{{workflow}}（重試）",
+      "hold_upgrade" : "預留 {{amount}} 積分：升級至 2K",
+      "recharge_custom" : "管理員充值：{{text}}",
+      "recharge_demo" : "演示充值（非真實支付）",
+      "refund" : "退還 {{amount}} 積分（未使用的預留額度）"
+    },
+    "title" : "積分",
+    "topupButton" : "+200 示範充值",
+    "topupFailed" : "充值失敗",
+    "topupPending" : "充值中…",
+    "topupTooltip" : "POC 示範充值，非真實支付，直接為帳號增加積分"
+  },
+  "errors" : {
+    "moderationBlocked" : "描述涉及敏感內容，未扣除積分",
+    "providerInsufficientBalance" : "生成未能開始：服務商賬戶餘額暫時不足，這不是你賬戶的問題，未使用的積分已退還，請稍後重試",
+    "unknown" : "未知錯誤",
+    "watchdogTimeout" : "生成服務響應較慢，系統已自動重試但仍未在時限內完成，積分已退還"
+  },
+  "generationProgress" : {
+    "elapsed" : "已用時 {{time}}",
+    "generating" : "生成中，請勿關閉頁面…",
+    "minSec" : "{{min}}分{{sec}}秒",
+    "stage" : {
+      "image" : {
+        "checkDetail" : "檢查細節",
+        "checkOverall" : "檢查整體效果",
+        "color" : "上色",
+        "detail" : "添加細節",
+        "lighting" : "添加光影",
+        "outline" : "勾勒輪廓",
+        "sketch" : "起稿"
+      },
+      "video" : {
+        "audio" : "合成音效",
+        "colorGrade" : "調色",
+        "encode" : "編碼輸出",
+        "finalCheck" : "最終質檢",
+        "motion" : "添加運動與轉場",
+        "render" : "渲染畫面",
+        "storyboard" : "構思分鏡"
+      }
+    },
+    "stillWorking" : "仍在處理中，可能正在自動重試，請耐心等待"
+  },
+  "homeFeed" : {
+    "inspiration" : "靈感範例",
+    "noRecent" : "還沒有作品，先生成一個試試",
+    "recent" : "最近作品",
+    "searchPlaceholder" : "搜索素材…",
+    "styles" : "預設風格"
+  },
+  "jobDetail" : {
+    "assetMissing" : "素材缺失",
+    "cancelFailed" : "取消失敗，請重試",
+    "cancelJob" : "取消作業",
+    "cancelling" : "取消中…",
+    "connectionUnstable" : "網絡連接不穩定，無法獲取作業狀態",
+    "creditEstimated" : "預估",
+    "creditHeld" : "已持有",
+    "creditRefunded" : "已退還",
+    "creditSettled" : "已結算",
+    "deleteFailed" : "刪除失敗，請重試",
+    "deleteJob" : "刪除記錄",
+    "deleting" : "刪除中…",
+    "notFound" : "找不到這個作業",
+    "viewAsset" : "查看素材 →"
+  },
+  "jobGraph" : {
+    "compose" : "拼接",
+    "concat" : "合成",
+    "doneOf" : "{{done}}/{{total}} 完成",
+    "extractFrames" : "抽取首尾幀",
+    "fourPanel" : "四格生成",
+    "generate" : "生成",
+    "panel" : "格 {{n}}",
+    "previewGate" : "預覽門",
+    "redo" : "重做",
+    "sequence" : "連續生成",
+    "shotN" : "第 {{n}} 張",
+    "shotSegment" : "第 {{n}} 段",
+    "shotSegmentExtract" : "第 {{n}} 段抽幀",
+    "upgrade2k" : "升級 2K",
+    "videoGenerate" : "視頻生成"
+  },
+  "jobs" : {
+    "allProjects" : "全部項目",
+    "empty" : "還沒有作業，去「工坊」生成一些",
+    "filter" : {
+      "all" : "全部",
+      "cancelled" : "已取消",
+      "failed" : "失敗",
+      "running" : "進行中",
+      "succeeded" : "已完成"
+    },
+    "held" : "持有 {{count}}",
+    "nodesDone" : "{{done}}/{{total}} 完成",
+    "retryIndicator" : "這是一次節點重做",
+    "retryIndicatorLinkTitle" : "查看原作業"
+  },
+  "login" : {
+    "codePlaceholder" : "驗證碼",
+    "codeSent" : "已發送，重新發送",
+    "continuePhone" : "登錄 / 註冊",
+    "continueWithGoogle" : "使用 Google 登錄",
+    "createAccount" : "創建賬號",
+    "email" : "郵箱",
+    "emailCodeNotConfigured" : "郵箱驗證碼尚未開放，可直接註冊",
+    "emailTaken" : "這個郵箱已經註冊過了，換個郵箱登錄方式試試",
+    "googleNotConfigured" : "Google 登錄尚未開放",
+    "notSure" : "還沒想好？",
+    "orDivider" : "或",
+    "passwordPlaceholder" : "密碼（至少 8 位）",
+    "phoneNotConfigured" : "手機號登錄尚未開放",
+    "phoneNumberPlaceholder" : "手機號",
+    "sendCode" : "發送驗證碼",
+    "signIn" : "登錄",
+    "signUp" : "註冊",
+    "tooManyAttempts" : "嘗試次數太多了，請稍後再試",
+    "tryFree" : "先去社區看看大家的作品",
+    "useEmail" : "使用郵箱登錄",
+    "usePhone" : "使用手機號登錄"
+  },
+  "notifications" : {
+    "awaitingDecision" : "等待你決策",
+    "none" : "暫無",
+    "recentlyDone" : "最近完成",
+    "recentlyFailed" : "最近失敗",
+    "title" : "通知"
+  },
+  "phase" : {
+    "cancelled" : "已取消",
+    "created" : "待創建",
+    "error" : "錯誤",
+    "failed" : "失敗",
+    "pending" : "等待中",
+    "ready" : "就緒",
+    "running" : "生成中",
+    "skipped" : "已跳過",
+    "succeeded" : "已完成",
+    "suspended" : "暫停中",
+    "timeout" : "超時",
+    "unknown" : "未知"
+  },
+  "presetCarousel" : {
+    "noCover" : "無封面"
+  },
+  "presets" : {
+    "category" : {
+      "camera" : "鏡頭",
+      "composition" : "構圖",
+      "lighting" : "光線",
+      "pose" : "姿勢",
+      "style" : "風格"
+    },
+    "create" : "創建預設",
+    "createFailed" : "創建失敗，請重試",
+    "deleteFailed" : "刪除失敗，請重試",
+    "fragmentPlaceholder" : "提示詞片段（英文，直接傳給生成模型，例如 watercolor style, soft edges）",
+    "namePlaceholder" : "預設名稱",
+    "new" : "+ 新建預設",
+    "styleTypePlaceholder" : "風格標籤（可選，用於風格類預設，如 水彩）",
+    "title" : "預設庫"
+  },
+  "previewGate" : {
+    "bucket" : {
+      "keep" : "保留",
+      "redo" : "重做",
+      "upgrade" : "升 2K"
+    },
+    "compareAllUpgrade" : "對比：全部直接出 2K 需",
+    "compareClose" : "）",
+    "compareOpen" : "（",
+    "confirm" : "確認並合成",
+    "confirmWithUpgrade" : "確認並合成 (✦ +{{cost}} 升級)",
+    "currentSelection" : "當前選擇：升級 {{count}} 段",
+    "intro" : "{{count}} 段已生成 768P 草稿，逐段選擇保留 / 重做 / 升級 2K",
+    "redoCount" : "重做 {{count}} 段",
+    "savedPct" : "，省 {{pct}}%",
+    "segmentN" : "第 {{n}} 段",
+    "submitting" : "提交中…",
+    "willCost" : "將消耗"
+  },
+  "projects" : {
+    "create" : "創建項目",
+    "deleteFailed" : "刪除失敗，請重試",
+    "descriptionPlaceholder" : "說明（可選）",
+    "empty" : "還沒有項目。創建一個，再去資產庫把素材歸類進去。",
+    "namePlaceholder" : "項目名",
+    "new" : "+ 新建項目",
+    "title" : "項目"
+  },
+  "rail" : {
+    "admin" : "管理",
+    "assets" : "資產",
+    "characters" : "角色",
+    "community" : "社區",
+    "generate" : "工坊",
+    "jobs" : "作業",
+    "logout" : "退出登錄",
+    "presets" : "預設",
+    "projects" : "項目",
+    "switchLanguage" : "切換語言"
+  },
+  "settings" : {
+    "account" : "帳號",
+    "appearance" : "外觀",
+    "changePassword" : "修改密碼",
+    "currentPasswordPlaceholder" : "當前密碼",
+    "language" : "語言",
+    "newPasswordPlaceholder" : "新密碼（至少 8 位）",
+    "noEmail" : "未綁定郵箱",
+    "passwordChanged" : "密碼已修改",
+    "security" : "安全",
+    "themeDark" : "深色",
+    "themeLight" : "淺色",
+    "title" : "設置"
+  },
+  "shotMode" : {
+    "i2va" : "尾幀續接",
+    "r2va" : "角色錨定",
+    "t2va" : "純文字"
+  },
+  "studio" : {
+    "addSegment" : "+ 添加一段",
+    "breakdown" : {
+      "item" : {
+        "comic4_panels" : "四格漫畫",
+        "image_single" : "圖片生成",
+        "prompt_enhance" : "提示詞增強",
+        "sequence_shots" : "連續圖",
+        "story_split" : "劇情自動拆格",
+        "video_generation" : "視頻生成",
+        "video_sequence_direct" : "連續影片直接生成（2K）",
+        "video_sequence_preview" : "連續影片預覽（768P）"
+      },
+      "title" : "費用明細",
+      "toggle" : "點擊查看費用明細",
+      "upgradeHint" : "若這段升級到 2K 需要 ✦{{price}}"
+    },
+    "capsule" : {
+      "addCharacter" : "+ 添加角色",
+      "anchorInterval" : "錨定間隔",
+      "anchorIntervalTooltip" : "每 N 段重新錨定一次角色參考圖（r2va），其餘段落用前一段尾幀續接（i2va）",
+      "characterSlot" : "角色 {{letter}}",
+      "count" : "數量",
+      "duration" : "時長",
+      "everyNSegments" : "每 {{n}} 段",
+      "previewFirst" : "先出 768P 預覽",
+      "previewFirstTooltip" : "默認直接以 2K 生成每一段並自動完成，費用按 2K 全額預扣。開啓此項會先以 768P 預覽整段效果，確認後再選擇要升級的分段，避免為不滿意的效果多花錢。",
+      "project" : "項目",
+      "projectTooltip" : "把這次生成歸類到某個項目下，之後可在資產庫/作業列表按項目篩選",
+      "ratio" : "比例",
+      "ratioDisabledTooltip" : "首尾幀/參考素材模式下畫面比例由素材決定",
+      "refMode" : "參考模式",
+      "resolution" : "解析度"
+    },
+    "comic" : {
+      "auto" : "劇情自動拆格",
+      "autoTooltip" : "用 AI 把一段劇情自動拆成連續的畫面描述，每格默認參考上一格",
+      "detectedCount" : "識別到 {{n}} 格",
+      "insertSeparator" : "+ 插入分隔符 ---",
+      "manual" : "逐格手寫",
+      "panelCount" : "格數",
+      "panelsPlaceholder" : "第一格：小貓坐在窗台上\n---\n第二格：小貓跳下窗台\n---\n第三格：小貓追逐蝴蝶（用 --- 分隔每一格，也可以點下方按鈕插入）",
+      "provider" : "生圖模型",
+      "providerGeminiTooltip" : "試用中：改用 Google Gemini 生成每一格圖片，便於和 MiniMax 效果對比",
+      "storyPlaceholder" : "一段完整的劇情描述，系統會自動拆成連續分鏡"
+    },
+    "consistencyMode" : {
+      "continuity" : "連貫模式",
+      "continuityTooltip" : "自動引用上一張/上一段的畫面，並用 AI 改寫提示詞以保持情節連貫，速度較慢，成本較高",
+      "quick" : "快速模式",
+      "quickTooltip" : "每張/每段獨立生成，速度快，成本低"
+    },
+    "dragToReorder" : "拖拽排序",
+    "driftWarning" : "⚠ 鏡頭數 >4，已自動每 {{n}} 段重新錨定一次角色，防止漂移",
+    "emptyResult" : "結果會顯示在這裡",
+    "errors" : {
+      "needOneShot" : "至少需要一段鏡頭描述",
+      "paramsInvalid" : "參數不合法",
+      "storyRequired" : "請輸入劇情描述",
+      "submitFailed" : "提交失敗，請重試",
+      "trialFailed" : "生成失敗，請重試"
+    },
+    "estimatedWait" : "預計還需 {{minutes}} 分鐘",
+    "examples" : {
+      "fox" : "一隻狐狸站在雪地上，水彩風格",
+      "foxVideo" : "鏡頭緩緩推進，一隻狐狸轉身望向鏡頭，雪花飄落",
+      "rooftop" : "兩人在天台對峙，黃昏逆光，風很大"
+    },
+    "firstFrame" : "首幀",
+    "generate" : "生成 →",
+    "generating" : "生成中…",
+    "generationFailed" : "生成失敗：{{error}}",
+    "guessWhat" : "猜你想生成：",
+    "guestHint" : "先免費試用一次，註冊後解鎖全部形態與素材庫",
+    "headlineSuffix" : "· 現在就開始",
+    "image2imageRef" : "參考圖（可選，圖生圖）",
+    "imageMode" : {
+      "sequence" : "連續生成",
+      "single" : "單句"
+    },
+    "imageSequence" : {
+      "addLabel" : "+ 添加一張",
+      "linkedToShot" : "已鏈接到第{{n}}張",
+      "shotPlaceholder" : "第 {{n}} 張"
+    },
+    "insufficientBalance" : "積分不足（餘額 {{balance}}）",
+    "lastFrame" : "尾幀",
+    "mention" : {
+      "empty" : "還沒有素材",
+      "image" : "圖片{{n}}",
+      "pickHint" : "選擇要引用的素材",
+      "shot" : "第{{n}}張",
+      "shotPickHint" : "引用本批次鏡頭",
+      "typeHint" : "小技巧：輸入 # 可以引用已有素材",
+      "video" : "視頻{{n}}",
+      "videoShot" : "第{{n}}段"
+    },
+    "narrativeContinuity" : {
+      "label" : "敘事連貫（多素材參考 + AI 增強提示詞）",
+      "mode" : {
+        "manual" : "手動指定",
+        "smart" : "智能分析",
+        "window" : "滑動窗口"
+      },
+      "modeTooltip" : "滑動窗口：自動引用最近 1-2 個錨定段；手動指定：只用你 # 選擇的段落；智能分析：AI 判斷每段該參考哪些更早的段落"
+    },
+    "noCharactersHint" : "還沒有角色，去「角色庫」創建",
+    "presetDeleteFailed" : "預設刪除失敗",
+    "presetSaveFailed" : "預設保存失敗",
+    "promptEnhance" : "AI 提示詞增強（+約 {{cost}} 積分）",
+    "promptEnhanceTooltip" : "生成前用 AI 深度理解並潤色你的提示詞，按用量額外計費",
+    "refImages" : "參考圖片",
+    "refMode" : {
+      "firstLast" : "首尾幀",
+      "none" : "不使用",
+      "reference" : "參考素材"
+    },
+    "refVideos" : "參考視頻",
+    "retryGeneration" : "重新生成",
+    "rewrite" : {
+      "button" : "AI 改寫提示詞",
+      "failed" : "改寫失敗，請重試"
+    },
+    "savePreset" : {
+      "button" : "另存為我的預設",
+      "namePlaceholder" : "預設名稱"
+    },
+    "submitting" : "提交中…",
+    "suggestionsLabel" : "猜你想接著做：",
+    "tabMeta" : {
+      "imageComic4" : "共享角色與風格的四格",
+      "imageSingle" : "一句話生成一張或多張圖，也可連續出多段",
+      "videoSequence" : "多段視頻，默認直接出正式畫質",
+      "videoSingle" : "文生視頻或圖生視頻"
+    },
+    "trial" : {
+      "intro" : "不用註冊，先免費試用一次單圖生成",
+      "likeIt" : "喜歡這張？登錄後才能保存到素材庫",
+      "tryOnce" : "✦ 匿名試用一次"
+    },
+    "unselected" : "未選擇",
+    "videoSequence" : {
+      "anchorRef" : "錨點參考（角色錨定用，圖片或視頻）",
+      "anchorRefTooltip" : "作為 r2va 錨定段的參考素材，可以是圖片或視頻；未選擇時默認用綁定角色自己的參考圖",
+      "linkedToShot" : "已鏈接到第{{n}}段",
+      "shotPlaceholder" : "第 {{n}} 段鏡頭描述"
+    },
+    "videoValidation" : {
+      "modeConflict" : "首尾幀模式和參考素材模式不能同時使用",
+      "ratioRequired" : "純文字生成視頻必須選擇畫面比例",
+      "textRequired" : "請輸入視頻描述"
+    },
+    "viewGraph" : "查看流程圖 →"
+  },
+  "suggestions" : {
+    "moreBatch" : "再來一批",
+    "saveCharacter" : "存為角色",
+    "saveFrameCharacter" : "抽幀存為角色",
+    "toSequence" : "轉成分鏡",
+    "toVideo" : "轉成視頻",
+    "upgrade2k" : "升級 2K"
+  },
+  "workflow" : {
+    "imageComic4" : "四格漫畫",
+    "imageSequence" : "連續生成",
+    "imageSingle" : "單圖",
+    "videoSequence" : "連續影片",
+    "videoSingle" : "單段影片"
+  },
+  "workflowGraph" : {
+    "cost" : "消耗",
+    "duration" : "耗時 {{duration}}",
+    "inProgress" : "進行中…",
+    "retryFailed" : "重做失敗，請重試",
+    "retrying" : "重做中…",
+    "retryPromptPlaceholder" : "重做提示詞（留空則用原提示詞）",
+    "retryThis" : "重做這一格"
+  }
+}

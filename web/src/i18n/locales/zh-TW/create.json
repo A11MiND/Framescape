@@ -1,0 +1,438 @@
+{
+  "action" : {
+    "confirm" : "確認生成",
+    "generate" : "生成圖片",
+    "reviewCost" : "檢查費用",
+    "signIn" : "登錄後生成",
+    "trial" : "免費試用一次"
+  },
+  "character" : {
+    "add" : "添加角色",
+    "choose" : "選擇角色",
+    "empty" : "還沒有角色，去角色庫創建",
+    "label" : "角色",
+    "none" : "未選擇角色",
+    "refs" : "{{n}} 張參考圖",
+    "refs_one" : "{{n}} 張參考圖",
+    "refs_other" : "{{n}} 張參考圖",
+    "remove" : "移除角色 {{name}}"
+  },
+  "classic" : {
+    "baked" : "對白和文字會直接畫進圖片，生成後不能再編輯。",
+    "charactersHelp" : "角色會按分鏡自動分配到各格，並保持外觀一致。",
+    "count" : "分鏡數量",
+    "description" : "經典生成使用 MiniMax 或 Gemini 直接出整頁漫畫，不保證可編輯的文字層；需要逐格編輯文字請用「GPT 可編輯漫畫」。",
+    "fillAll" : "請填寫每一格的內容",
+    "generate" : "生成漫畫（{{n}} 格）",
+    "panel" : "第 {{n}} 格",
+    "panelPlaceholder" : "這一格的畫面和動作",
+    "panels" : "分鏡內容（{{n}} 格）",
+    "provider" : {
+      "gemini" : "Gemini",
+      "geminiOff" : "Gemini 暫不可用：此環境沒有配置",
+      "label" : "生成模型",
+      "minimax" : "MiniMax"
+    },
+    "reference" : "參考圖片",
+    "story" : {
+      "help" : "拆分在生成時進行，結果可在任務詳情中查看；拆分會另計費用。",
+      "label" : "輸入你的故事",
+      "placeholder" : "寫下完整的故事，生成時會自動拆成 {{n}} 格"
+    },
+    "tab" : {
+      "label" : "分鏡來源",
+      "panels" : "自己寫分鏡",
+      "story" : "從故事拆分"
+    },
+    "title" : "經典漫畫"
+  },
+  "confirm" : {
+    "count" : "數量",
+    "mode" : "方式",
+    "model" : "模型",
+    "quality" : "質量",
+    "references" : "參考圖",
+    "reservation" : "預留積分",
+    "size" : "尺寸",
+    "title" : "確認生成"
+  },
+  "cost" : {
+    "calculating" : "正在計算…",
+    "explain" : "費用說明",
+    "label" : "預計",
+    "note" : "提交時預留這些積分；任務結束後按實際結果結算，未用完的部分退回。",
+    "noteUsage" : "GPT 生圖按服務商返回的實際用量結算；預留不是用量上限，超出部分從餘額扣除，只有服務商未返回用量時按預留計費。",
+    "pending" : "填寫描述後顯示費用",
+    "unknown" : "暫時無法計算費用",
+    "value" : "{{n}} 積分"
+  },
+  "count" : {
+    "label" : "數量"
+  },
+  "error" : {
+    "insufficient" : "積分不足以預留本次費用。",
+    "priceChanged" : "費用已變化，請確認新的報價。",
+    "topUp" : "前往積分頁"
+  },
+  "gpt" : {
+    "baked" : "圖中文字會直接畫進圖片，之後不能逐字編輯。",
+    "beta" : "內測",
+    "mode" : {
+      "direct" : "原詞直出",
+      "general" : "通用",
+      "label" : "生成方式"
+    },
+    "modeHint" : {
+      "direct" : "原樣發送你的描述：固定 1536×1024、高質量、PNG、每次 1 張，不支持批量。",
+      "general" : "支持角色與風格預設，生成前可查看實際發送內容。"
+    },
+    "model" : "OpenAI · {{model}}",
+    "notEnabled" : {
+      "body" : "該賬號暫未開通內測。你仍可以使用單圖與批量、漫畫和視頻。",
+      "title" : "GPT 生圖內測未開通"
+    },
+    "optionGone" : "之前選擇的 {{value}} 已不再提供，已改為 {{next}}，費用已重新計算。",
+    "output" : {
+      "label" : "輸出",
+      "sequence" : "連續圖片",
+      "single" : "單圖與批量"
+    },
+    "preview" : {
+      "failed" : "暫時無法預覽",
+      "hide" : "收起",
+      "loading" : "正在生成預覽…",
+      "prompt" : "發送的描述",
+      "refs" : "參考圖 {{n}} 張",
+      "show" : "查看實際發送內容"
+    },
+    "quality" : "質量",
+    "qualityOpt" : {
+      "high" : "精細",
+      "low" : "快速",
+      "max" : "最高",
+      "medium" : "標準",
+      "xhigh" : "超精細"
+    },
+    "shape" : {
+      "landscape" : "橫向",
+      "portrait" : "縱向",
+      "square" : "方形"
+    },
+    "size" : "尺寸",
+    "title" : "GPT 生圖",
+    "unavailable" : {
+      "body" : "此環境沒有配置 OpenAI 生成服務。",
+      "title" : "GPT 生圖暫不可生成"
+    }
+  },
+  "guest" : {
+    "body" : "登錄後可獲得更多創作額度，並使用角色、預設和項目。",
+    "result" : "試用結果",
+    "signIn" : "立即登錄",
+    "title" : "免費試用 1 次"
+  },
+  "nav" : {
+    "badge" : {
+      "beta" : "內測未開通",
+      "unavailable" : "暫不可生成"
+    },
+    "family" : {
+      "comic" : "漫畫",
+      "image" : "圖片",
+      "video" : "視頻"
+    },
+    "label" : "創作模式",
+    "mode" : {
+      "comic" : "GPT 可編輯漫畫",
+      "comic-classic" : "經典漫畫",
+      "gpt" : "GPT 生圖",
+      "image" : "單圖與批量",
+      "image-sequence" : "連續圖片",
+      "video" : "單段視頻",
+      "video-sequence" : "連續視頻"
+    }
+  },
+  "presets" : {
+    "added" : "已加入風格預設：{{names}}",
+    "category" : {
+      "camera" : "鏡頭",
+      "composition" : "構圖",
+      "lighting" : "燈光",
+      "pose" : "姿勢",
+      "style" : "風格"
+    },
+    "choose" : "選擇預設",
+    "clear" : "清空",
+    "done" : "完成",
+    "label" : "風格預設",
+    "none" : "未選擇",
+    "selected" : "已選 {{n}} 個",
+    "selected_one" : "已選 {{n}} 個",
+    "selected_other" : "已選 {{n}} 個",
+    "title" : "選擇風格預設"
+  },
+  "project" : {
+    "label" : "項目",
+    "none" : "未歸屬項目"
+  },
+  "prompt" : {
+    "example" : "陽光明媚的海濱城市，一輛紅色有軌電車行駛在靠海的街道上，遠處是藍色的大海和山城。",
+    "imageN" : "圖{{n}}",
+    "label" : "描述畫面",
+    "mentionAssets" : "最近的圖片",
+    "mentionCharacters" : "角色",
+    "mentionEmpty" : "沒有可引用的內容",
+    "mentionHint" : "輸入 @ 引用角色，輸入 # 引用素材庫里的圖片",
+    "placeholder" : "描述你想生成的畫面",
+    "required" : "請先描述畫面",
+    "rewrite" : "AI 潤色",
+    "tooLong" : "描述不能超過 {{max}} 字",
+    "useExample" : "填入示例"
+  },
+  "reference" : {
+    "audioN" : "音頻{{n}}",
+    "confirm" : "使用所選",
+    "count" : "已選 {{n}} / {{max}}",
+    "format" : "僅支持 {{formats}} 格式",
+    "fromLibrary" : "從素材庫選擇",
+    "label" : "參考圖片",
+    "pickEmpty" : "素材庫里還沒有圖片",
+    "pickEmptyAudio" : "素材庫里還沒有音頻",
+    "pickEmptyVideo" : "素材庫里還沒有視頻",
+    "pickTitle" : "選擇參考圖",
+    "pickTitleAudio" : "選擇參考音頻",
+    "pickTitleVideo" : "選擇參考視頻",
+    "remove" : "移除參考圖 {{n}}",
+    "tooLarge" : "單張不能超過 {{mb}} MB",
+    "tooMany" : "參考圖最多 {{max}} 張",
+    "total" : "參考圖合計 {{n}} / {{max}} 張（含角色參考圖）",
+    "upload" : "上傳",
+    "uploading" : "正在上傳…",
+    "videoN" : "視頻{{n}}"
+  },
+  "result" : {
+    "emptyBody" : "描述你想要的畫面，生成的結果會顯示在這裡。",
+    "emptyTitle" : "從一句描述開始",
+    "recent" : "最近創作",
+    "running" : "正在生成",
+    "submitted" : "已提交，結果會顯示在這裡",
+    "title" : "生成結果",
+    "viewAll" : "查看全部",
+    "viewTask" : "查看任務"
+  },
+  "rewrite" : {
+    "accept" : "接受建議",
+    "failed" : "潤色失敗，原文未改動",
+    "keep" : "保留原文",
+    "original" : "原文",
+    "suggestion" : "建議",
+    "title" : "潤色建議"
+  },
+  "sequence" : {
+    "add" : "添加畫面",
+    "count" : "共 {{n}} 張",
+    "count_one" : "共 {{n}} 張",
+    "count_other" : "共 {{n}} 張",
+    "countSkipped" : "共 {{n}} 張，{{empty}} 個空白畫面不生成",
+    "countSkipped_one" : "共 {{n}} 張，{{empty}} 個空白畫面不生成",
+    "countSkipped_other" : "共 {{n}} 張，{{empty}} 個空白畫面不生成",
+    "description" : "多張有關聯的畫面，每張寫一句描述；後面的畫面可以沿用前面某一張的構圖和人物。",
+    "duplicate" : "複製畫面",
+    "generate" : "生成系列",
+    "gptLocked" : "GPT 暫不可用於連續圖片：{{reason}}",
+    "initialRef" : {
+      "help" : "每張畫面都參考這張圖；引用了前面畫面的那一張改為參考被引用的畫面。",
+      "label" : "初始參考圖"
+    },
+    "lastResult" : "上次生成",
+    "max" : "最多 {{max}} 個畫面",
+    "mode" : {
+      "continuity" : {
+        "body" : "每張默認沿用上一張，人物和場景更一致；也可以改為引用更早的畫面。",
+        "title" : "連貫畫面"
+      },
+      "label" : "生成方式",
+      "quick" : {
+        "body" : "每張單獨生成，速度快；需要時手動指定引用。",
+        "title" : "快速獨立"
+      }
+    },
+    "more" : "畫面 {{n}} 的更多操作",
+    "move" : {
+      "down" : "下移",
+      "handle" : "拖動調整畫面 {{n}} 的順序",
+      "hint" : "也可以按 Alt + ↑ / ↓ 調整順序",
+      "moved" : "畫面已移到第 {{n}} 位",
+      "up" : "上移"
+    },
+    "placeholder" : "生成後顯示在這裡",
+    "provider" : {
+      "label" : "生成服務",
+      "minimax" : "MiniMax",
+      "openai" : "GPT",
+      "openaiHint" : "尺寸和質量對所有畫面生效，每張按實際用量結算。"
+    },
+    "ref" : {
+      "aria" : "畫面 {{n}} 引用的畫面",
+      "auto" : "上一張（連貫畫面）",
+      "emptyTarget" : "畫面 {{n}} 還沒有描述，生成時不會使用這個引用。",
+      "first" : "第一張沒有可引用的畫面",
+      "label" : "引用",
+      "later" : "畫面 {{n}}（排在後面，不能引用）",
+      "none" : "不引用",
+      "option" : "畫面 {{n}}"
+    },
+    "remove" : "刪除畫面",
+    "reset" : {
+      "dismiss" : "知道了",
+      "order" : "畫面 {{shot}} 的引用已清除：畫面 {{ref}} 現在排在它後面。",
+      "removed" : "畫面 {{shot}} 的引用已清除：它引用的畫面 {{ref}} 已刪除。"
+    },
+    "shot" : "畫面 {{n}}",
+    "shotPlaceholder" : "描述這一張畫面",
+    "shots" : "畫面",
+    "title" : "連續圖片"
+  },
+  "video" : {
+    "description" : "用文字、首尾幀或多素材參考生成一段視頻。",
+    "enhance" : {
+      "cost" : "另計 {{n}} 積分",
+      "costPending" : "開啓後另計費用，以報價為準",
+      "help" : "生成前先改寫描述，讓動作和鏡頭更具體。",
+      "label" : "AI 增強提示詞"
+    },
+    "frames" : {
+      "first" : "首幀",
+      "firstRequired" : "請添加首幀",
+      "last" : "尾幀"
+    },
+    "generate" : "生成視頻",
+    "mode" : {
+      "frames" : "首尾幀",
+      "hint" : {
+        "frames" : "從首幀過渡到尾幀，畫面比例沿用首幀。",
+        "refs" : "參考圖片、視頻或音頻的風格、人物與節奏，畫面比例沿用參考。",
+        "text" : "只用文字描述生成，需要選擇畫面比例。"
+      },
+      "label" : "參考方式",
+      "refs" : "多素材參考",
+      "text" : "文字生成"
+    },
+    "preview" : {
+      "empty" : "添加首幀後在這裡預覽",
+      "first" : "首幀",
+      "last" : "尾幀（可選）",
+      "noLast" : "未添加尾幀",
+      "title" : "首尾幀預覽"
+    },
+    "prompt" : {
+      "label" : "運動描述",
+      "placeholder" : "描述畫面中的動作、鏡頭運動和節奏"
+    },
+    "refs" : {
+      "audios" : "音頻",
+      "images" : "圖片",
+      "label" : "參考素材",
+      "required" : "請至少添加一個參考素材",
+      "videoBudget" : "最多 {{max}} 段，合計不超過 {{seconds}} 秒",
+      "videos" : "視頻"
+    },
+    "settings" : {
+      "duration" : "時長",
+      "ratio" : "畫面比例",
+      "ratioFollows" : "跟隨參考畫面",
+      "ratioFollowsHint" : "有首尾幀或參考素材時，畫面比例沿用參考，不能單獨設置。",
+      "resolution" : "分辨率",
+      "seconds" : "{{n}} 秒",
+      "title" : "生成設置"
+    },
+    "switch" : {
+      "body" : "首尾幀和參考素材不能同時使用，切換會清除：",
+      "confirm" : "清除並切換",
+      "item" : {
+        "audios" : "{{count}} 段參考音頻",
+        "first" : "首幀",
+        "images" : "{{count}} 張參考圖片",
+        "last" : "尾幀",
+        "videos" : "{{count}} 段參考視頻"
+      },
+      "title" : "切換到「{{mode}}」"
+    },
+    "title" : "單段視頻"
+  },
+  "vseq" : {
+    "action" : {
+      "direct" : "直接生成 2K（{{n}} 個鏡頭）",
+      "preview" : "生成預覽（{{n}} 個鏡頭）"
+    },
+    "add" : "添加鏡頭",
+    "advanced" : {
+      "continuity" : "敘事連貫",
+      "continuityHelp" : "重新定調的鏡頭同時參考最近生成的鏡頭，保持人物和情節連貫，會另計提示詞改寫費用。",
+      "every" : "角色刷新頻率",
+      "everyValue" : "每 {{n}} 個鏡頭",
+      "manual" : "手動",
+      "smart" : "智能",
+      "strategy" : "參考策略",
+      "strategyHelp" : {
+        "manual" : "只參考你在鏡頭上選定的鏡頭。",
+        "smart" : "根據鏡頭描述自動判斷參考哪幾個鏡頭。",
+        "window" : "參考最近的幾個鏡頭。"
+      },
+      "title" : "高級設置",
+      "window" : "近鄰"
+    },
+    "anchor" : "重新定調",
+    "anchorHint" : "重新定調的鏡頭會參考角色或參考素材，其餘鏡頭接續上一鏡頭的最後一幀。",
+    "description" : "把故事拆成多個鏡頭，調整順序與描述，生成連貫的視頻作品。",
+    "detail" : "共 {{n}} 個鏡頭，總時長 {{total}} 秒",
+    "flow" : {
+      "direct" : {
+        "body" : "跳過預覽，直接生成 2K 並合成，不能逐鏡頭調整。",
+        "title" : "直接生成 2K"
+      },
+      "estimate" : "預計 {{n}} 積分",
+      "estimatePending" : "報價計算中",
+      "label" : "生成流程",
+      "preview" : {
+        "badge" : "推薦",
+        "body" : "先生成 768P 預覽，逐鏡頭確認保留、重做或升級 2K，再合成。",
+        "title" : "先預覽再確認"
+      }
+    },
+    "follow" : "接續上一鏡頭",
+    "handle" : "拖動調整鏡頭 {{n}} 的順序",
+    "max" : "最多 {{max}} 個鏡頭",
+    "moved" : "鏡頭已移到第 {{n}} 位",
+    "pick" : {
+      "aria" : "鏡頭 {{n}} 參考的鏡頭",
+      "label" : "參考鏡頭",
+      "later" : "鏡頭 {{n}}（排在後面，不能引用）",
+      "none" : "按參考策略自動選擇",
+      "option" : "鏡頭 {{n}}"
+    },
+    "reset" : {
+      "order" : "鏡頭 {{shot}} 的參考已清除：鏡頭 {{ref}} 現在排在它後面。",
+      "removed" : "鏡頭 {{shot}} 的參考已清除：它參考的鏡頭 {{ref}} 已刪除。"
+    },
+    "review" : {
+      "go" : "去確認",
+      "ready" : "預覽已生成，請逐鏡頭確認。"
+    },
+    "settings" : {
+      "anchorHelp" : "第一個角色的參考圖用於重新定調的鏡頭；有參考素材時改用參考素材。",
+      "anchorLabel" : "角色錨點",
+      "perShot" : "每個鏡頭時長",
+      "ratio" : "畫面比例",
+      "reference" : "參考素材",
+      "referenceImage" : "圖片",
+      "referenceVideo" : "視頻",
+      "title" : "生成設置",
+      "total" : "總時長",
+      "totalValue" : "{{total}} 秒（{{n}} 個鏡頭 × {{d}} 秒）"
+    },
+    "shot" : "鏡頭 {{n}}",
+    "shotPlaceholder" : "描述這個鏡頭的畫面和動作",
+    "title" : "分鏡規劃"
+  }
+}

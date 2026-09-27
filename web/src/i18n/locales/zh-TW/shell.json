@@ -1,0 +1,52 @@
+{
+  "admin": {
+    "backToApp": "返回創作",
+    "spend": "費用",
+    "title": "管理後台",
+    "users": "用戶"
+  },
+  "brand": "幀境",
+  "lang": {
+    "en": "EN",
+    "zh": "中文",
+    "zhCN": "簡體",
+    "zhTW": "繁體"
+  },
+  "more": {
+    "language": "語言",
+    "title": "更多"
+  },
+  "nav": {
+    "characters": "角色",
+    "collapse": "收起導航",
+    "community": "社區",
+    "create": "創作",
+    "credits": "積分",
+    "expand": "展開導航",
+    "label": "主導航",
+    "library": "素材庫",
+    "more": "更多",
+    "presets": "風格預設",
+    "projects": "項目",
+    "settings": "設置",
+    "tasks": "任務"
+  },
+  "skipToContent": "跳到主要內容",
+  "stream": {
+    "offline": "連接中斷 · 上次更新 {{time}}",
+    "reconnecting": "正在重新連接…"
+  },
+  "top": {
+    "account": "賬戶菜單",
+    "admin": "管理後台",
+    "allProjects": "全部項目",
+    "credits": "{{n}} 積分",
+    "currentProject": "當前項目",
+    "language": "界面語言",
+    "needsReview": "待確認 {{n}}",
+    "notifications": "通知",
+    "running": "進行中 {{n}}",
+    "signIn": "登錄",
+    "signOut": "退出登錄"
+  }
+}

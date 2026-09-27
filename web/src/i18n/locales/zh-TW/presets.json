@@ -1,0 +1,62 @@
+{
+  "categoryLabel" : "分類",
+  "create" : "新建預設",
+  "deleteDialog" : {
+    "body" : "已經生成的作品不受影響；刪除後不能再選擇這個預設。",
+    "confirm" : "刪除預設",
+    "done" : "預設已刪除",
+    "title" : "刪除預設「{{name}}」？"
+  },
+  "description" : "用風格、姿勢、構圖、燈光和鏡頭預設補充描述；可以多選後一起應用到創作。",
+  "detail" : {
+    "apply" : "應用到創作",
+    "category" : "所屬分類",
+    "close" : "關閉詳情",
+    "copied" : "已另存為我的預設",
+    "copySuffix" : "（副本）",
+    "coverNote" : "封面僅為示意，不代表實際生成效果。",
+    "createConfirm" : "創建預設",
+    "created" : "預設已創建",
+    "createTitle" : "新建預設",
+    "delete" : "刪除預設",
+    "fragment" : "描述詞片段",
+    "fragmentHelp" : "應用後會拼接進提示詞。",
+    "fragmentRequired" : "請填寫描述詞片段",
+    "mineTag" : "我的預設",
+    "name" : "預設名稱",
+    "nameRequired" : "請填寫預設名稱",
+    "readOnly" : "系統預設不能修改或刪除；可以另存為我的預設後再改。",
+    "save" : "保存修改",
+    "saveCopy" : "另存為我的預設",
+    "saved" : "預設已保存",
+    "styleTag" : "風格標籤",
+    "styleTagHelp" : "只用於整理和顯示，不改變生成參數。",
+    "systemTag" : "系統預設",
+    "title" : "預設詳情"
+  },
+  "empty" : {
+    "filtered" : "沒有符合搜索的預設",
+    "mine" : "還沒有自己的預設",
+    "mineBody" : "新建一個，或把系統預設另存為自己的再修改。"
+  },
+  "noCover" : "沒有封面",
+  "open" : "查看 {{name}}",
+  "search" : "搜索預設名稱或描述詞",
+  "select" : "選擇 {{name}}",
+  "source" : {
+    "mine" : "我的",
+    "system" : "系統"
+  },
+  "sourceLabel" : "來源",
+  "title" : "風格預設",
+  "tray" : {
+    "apply" : "應用到創作",
+    "applyHint" : "打開上次使用的圖片類創作模式並加入這些預設，已有草稿保留。",
+    "clear" : "清空",
+    "count" : "已選 {{n}} 個",
+    "count_one" : "已選 {{n}} 個",
+    "count_other" : "已選 {{n}} 個",
+    "label" : "已選擇的預設",
+    "remove" : "移除 {{name}}"
+  }
+}

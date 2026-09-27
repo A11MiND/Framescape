@@ -100,7 +100,9 @@
     "duplicate": "Duplicate",
     "delete": "Delete layer",
     "pick": "Click a bubble on the canvas or pick one from the layer list.",
-    "footer": "The browser keeps a local backup automatically; \"Save draft\" saves to your account. Save before closing. Exports are 1536 × 1024 PNG; the draft is kept separately."
+    "footer": "The browser keeps a local backup automatically; \"Save draft\" saves to your account. Save before closing. Exports are 1536 × 1024 PNG; the draft is kept separately.",
+    "opacity": "Bubble opacity (%)",
+    "opacityHelp": "0 is transparent, 100 is opaque. Text remains fully visible."
   },
   "canvas": {
     "label": "Four-panel comic canvas",

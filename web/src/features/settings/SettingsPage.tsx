@@ -1,9 +1,11 @@
-import { useState, type ReactNode } from 'react'
+import { useState, useRef, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleCheck, Globe, LogOut, Monitor, Palette, ShieldCheck, UserRound } from 'lucide-react'
 import { Button, Card, Field, Input, PageHeader, PasswordInput, cn } from '../../ui'
+import { uploadAssetWithProgress } from '../../lib/upload'
+import { AccountAvatar } from '../../app/shell/AccountAvatar'
 import { accountApi } from '../../lib/api/account'
 import { createApi } from '../../lib/api/create'
 import { ApiError } from '../../lib/api/client'
@@ -154,7 +156,7 @@ function ThemeThumb({ dark }: { dark: boolean }) {
 /** Settings (spec P19): account, password, appearance and language; switching keeps what is being edited. */
 export default function SettingsPage() {
   const { t, i18n } = useTranslation('settings')
-  const lang = i18n.language === 'en' ? 'en' : 'zh'
+  const lang = i18n.language as Lang
   const navigate = useNavigate()
   const qc = useQueryClient()
   const logout = useAuthStore((s) => s.logout)
@@ -162,7 +164,26 @@ export default function SettingsPage() {
   const caps = useQuery({ queryKey: keys.capabilities, queryFn: createApi.capabilities, staleTime: 60_000 })
   const [pref, resolved] = useThemePreference()
   const login = me.data?.email ?? me.data?.phone ?? ''
-  const initial = (me.data?.email ?? '').trim().charAt(0).toUpperCase() || (me.data?.phone ?? '').slice(-2)
+
+  const avatarInput = useRef<HTMLInputElement>(null)
+  const [avatarError, setAvatarError] = useState('')
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const avatar = useMutation({
+    mutationFn: async (file: File | null) => {
+      if (!file) return accountApi.setAvatar(null)
+      const asset = await uploadAssetWithProgress(file, (v) => setUploadProgress(Math.round(v * 100)))
+      return accountApi.setAvatar(asset.biz_id)
+    },
+    onSuccess: (account) => { qc.setQueryData(keys.me, account) },
+  })
+  const selectAvatar = (file?: File) => {
+    setAvatarError(''); avatar.reset(); setUploadProgress(0)
+    if (!file) return
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024 || file.size === 0) {
+      setAvatarError(t('account.avatarInvalid')); return
+    }
+    avatar.mutate(file)
+  }
   const sample = new Date(Date.UTC(2026, 8, 26, 6, 20))
   const signOut = () => {
     logout()
@@ -176,11 +197,19 @@ export default function SettingsPage() {
       <div className="grid items-start gap-4 md:grid-cols-2">
         <Section icon={<UserRound className="size-5" />} title={t('account.title')}>
           <div className="flex items-center gap-3">
-            <span aria-hidden className="flex size-12 items-center justify-center rounded-full bg-primary-soft text-title font-semibold text-primary-text">
-              {initial || <UserRound className="size-6" />}
-            </span>
+            <AccountAvatar url={me.data?.avatar_url} className="size-12" />
             <span className="min-w-0 truncate text-body font-medium text-fg">{login}</span>
           </div>
+          <input ref={avatarInput} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label={t('account.avatarUpload')} disabled={avatar.isPending}
+            onChange={(e) => { selectAvatar(e.target.files?.[0]); e.target.value = '' }} />
+          <div className="flex flex-wrap gap-2">
+            <Button loading={avatar.isPending} onClick={() => avatarInput.current?.click()}>{t('account.avatarUpload')}</Button>
+            {me.data?.avatar_url && <Button disabled={avatar.isPending} onClick={() => { setAvatarError(''); avatar.mutate(null) }}>{t('account.avatarRemove')}</Button>}
+          </div>
+          <p className="text-caption text-fg-muted">{t('account.avatarHelp')}</p>
+          {avatar.isPending && <p role="status" className="text-caption text-fg-muted">{t('account.avatarProgress', { n: uploadProgress })}</p>}
+          {avatar.isSuccess && <p role="status" className="text-caption text-success-fg">{t('account.avatarSaved')}</p>}
+          {(avatarError || avatar.error) && <p role="alert" className="text-caption text-danger-fg">{avatarError || errorText(t, avatar.error)}</p>}
           {login && (
             <Field label={me.data?.email ? t('account.email') : t('account.phone')} help={t('account.emailHelp')}>
               <Input value={login} readOnly />
@@ -231,7 +260,7 @@ export default function SettingsPage() {
 
         <Section icon={<Globe className="size-5" />} title={t('language.title')}>
           <div role="radiogroup" aria-label={t('language.label')} className="flex flex-col gap-2">
-            {(['zh', 'en'] as Lang[]).map((l) => (
+            {(['zh', 'zh-TW', 'en'] as Lang[]).map((l) => (
               <button
                 key={l}
                 type="button"

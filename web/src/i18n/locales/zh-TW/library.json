@@ -1,0 +1,186 @@
+{
+  "card" : {
+    "delete" : "刪除",
+    "download" : "下載",
+    "more" : "{{name}} 的更多操作",
+    "move" : "歸入項目…",
+    "noProject" : "未歸屬項目",
+    "open" : "打開"
+  },
+  "delete" : {
+    "body" : "素材會移到回收站，{{days}} 天內可以恢復。",
+    "confirm" : "移到回收站",
+    "hidden" : "其中 {{n}} 個不在當前篩選中。",
+    "title" : "刪除 {{n}} 個素材？",
+    "title_one" : "刪除 {{n}} 個素材？",
+    "title_other" : "刪除 {{n}} 個素材？"
+  },
+  "description" : "生成和上傳的圖片、視頻都在這裡；刪除的素材先進入回收站。",
+  "detail" : {
+    "action" : {
+      "again" : "以此再生成",
+      "createFrom" : "基於此圖創作",
+      "download" : "下載",
+      "saveCharacter" : "保存為角色",
+      "saveFrame" : "提取此幀保存角色",
+      "toVideo" : "生成視頻"
+    },
+    "back" : "返回素材庫",
+    "copied" : "已複製提示詞",
+    "copy" : "複製提示詞",
+    "created" : "創建時間",
+    "delete" : "刪除素材",
+    "deleteBody" : "素材會移到回收站，{{days}} 天內可以恢復。",
+    "deleteConfirm" : "移到回收站",
+    "deleteTitle" : "刪除這個素材？",
+    "frameFailed" : "無法從視頻截取畫面（跨域設置阻止），已改用視頻首幀。",
+    "frameUnavailable" : "無法從視頻截取畫面，請檢查存儲服務的跨域設置。",
+    "fullscreen" : "全屏查看",
+    "missing" : {
+      "back" : "返回素材庫",
+      "body" : "這個素材已被刪除，或者文件無法讀取。",
+      "title" : "文件已失效"
+    },
+    "more" : "更多操作",
+    "next" : "下一個素材",
+    "noProject" : "未歸屬項目",
+    "noTask" : "沒有關聯的任務",
+    "notFound" : {
+      "body" : "它可能已被刪除，或者不屬於你的賬號。",
+      "title" : "找不到這個素材"
+    },
+    "openTask" : "查看任務",
+    "params" : "模型與參數",
+    "prev" : "上一個素材",
+    "project" : "所屬項目",
+    "projectSaved" : "已更新所屬項目",
+    "prompt" : "提示詞",
+    "publish" : {
+      "confirm" : "發佈",
+      "confirmBody" : "發佈後所有人都能在社區看到：",
+      "confirmTitle" : "發佈到社區？",
+      "notShared" : "模型、種子等生成參數，以及你用到的參考圖、角色圖和資料，都不會公開。",
+      "private" : "未發佈",
+      "public" : "已發佈到社區",
+      "publish" : "發佈到社區",
+      "published" : "已發佈到社區",
+      "title" : "社區發佈",
+      "unpublish" : "取消發佈",
+      "unpublished" : "已取消發佈",
+      "what1" : "這張圖片或視頻本身",
+      "what2" : "它的提示詞"
+    },
+    "size" : "尺寸與格式",
+    "sourceTask" : "來源任務",
+    "uploaded" : "上傳素材，無生成參數",
+    "zoomIn" : "放大",
+    "zoomOut" : "縮小",
+    "zoomReset" : "恢復 100%"
+  },
+  "done" : {
+    "deleted" : "已刪除 {{n}} 個素材，已移到回收站。",
+    "deleted_one" : "已刪除 {{n}} 個素材，已移到回收站。",
+    "deleted_other" : "已刪除 {{n}} 個素材，已移到回收站。",
+    "downloading" : "正在打包 {{n}} 個素材…",
+    "downloading_one" : "正在打包 {{n}} 個素材…",
+    "downloading_other" : "正在打包 {{n}} 個素材…",
+    "moved" : "已把 {{n}} 個素材歸入項目。",
+    "moved_one" : "已把 {{n}} 個素材歸入項目。",
+    "moved_other" : "已把 {{n}} 個素材歸入項目。",
+    "restored" : "已恢復 {{n}} 個素材。",
+    "restored_one" : "已恢復 {{n}} 個素材。",
+    "restored_other" : "已恢復 {{n}} 個素材。",
+    "undo" : "撤銷"
+  },
+  "empty" : {
+    "body" : "生成的作品會自動出現在這裡，也可以直接上傳。",
+    "clear" : "清除篩選",
+    "filtered" : "沒有符合篩選的素材",
+    "title" : "還沒有素材"
+  },
+  "filter" : {
+    "allProjects" : "全部項目",
+    "allTypes" : "全部類型",
+    "image" : "圖片",
+    "project" : "項目",
+    "search" : "搜索提示詞",
+    "type" : "類型",
+    "video" : "視頻"
+  },
+  "kind" : {
+    "audio" : "音頻",
+    "image" : "圖片",
+    "video" : "視頻"
+  },
+  "loadMore" : "加載更多",
+  "move" : {
+    "body" : "把 {{n}} 個素材歸入：",
+    "body_one" : "把 {{n}} 個素材歸入：",
+    "body_other" : "把 {{n}} 個素材歸入：",
+    "confirm" : "歸入",
+    "hidden" : "其中 {{n}} 個不在當前篩選中。",
+    "none" : "未歸屬項目",
+    "target" : "目標項目",
+    "title" : "歸入項目"
+  },
+  "select" : {
+    "clear" : "清除選擇",
+    "clearHidden" : "清除這些",
+    "count" : "已選 {{n}} 個",
+    "count_one" : "已選 {{n}} 個",
+    "count_other" : "已選 {{n}} 個",
+    "delete" : "刪除",
+    "done" : "完成選擇",
+    "download" : "下載所選",
+    "hidden" : "另有 {{n}} 個已選素材不在當前篩選中",
+    "hidden_one" : "另有 1 個已選素材不在當前篩選中",
+    "hidden_other" : "另有 {{n}} 個已選素材不在當前篩選中",
+    "item" : "選擇 {{name}}",
+    "move" : "歸入項目",
+    "start" : "選擇"
+  },
+  "tab" : {
+    "label" : "素材分類",
+    "mine" : "我的素材",
+    "trash" : "回收站"
+  },
+  "title" : "素材庫",
+  "trash" : {
+    "daysLeft" : "{{n}} 天後永久刪除",
+    "emptied" : "已永久刪除 {{n}} 個素材。",
+    "emptied_one" : "已永久刪除 {{n}} 個素材。",
+    "emptied_other" : "已永久刪除 {{n}} 個素材。",
+    "empty" : "回收站是空的",
+    "emptyAll" : "清空回收站（{{n}}）",
+    "emptyBody" : "將永久刪除回收站裡的 {{n}} 個素材，刪除後無法恢復。",
+    "emptyBody_one" : "將永久刪除回收站裡的 {{n}} 個素材，刪除後無法恢復。",
+    "emptyBody_other" : "將永久刪除回收站裡的 {{n}} 個素材，刪除後無法恢復。",
+    "emptyConfirm" : "永久刪除",
+    "emptyTitle" : "清空回收站？",
+    "hint" : "回收站裡的素材在刪除 {{days}} 天後永久刪除。",
+    "restore" : "恢復"
+  },
+  "untitled" : {
+    "audio" : "上傳的音頻",
+    "image" : "上傳的圖片",
+    "video" : "上傳的視頻"
+  },
+  "upload" : "上傳素材",
+  "uploads" : {
+    "cancel" : "取消上傳",
+    "choose" : "選擇文件",
+    "clearDone" : "清除已完成",
+    "done" : "已完成",
+    "drop" : "拖放文件到這裡，或點擊選擇",
+    "failed" : "上傳失敗",
+    "failedReason" : "上傳失敗：{{reason}}",
+    "limits" : "圖片不超過 {{image}}，視頻不超過 {{video}}，音頻不超過 {{audio}}。",
+    "queue" : "上傳隊列",
+    "remove" : "移除",
+    "retry" : "重試",
+    "title" : "上傳素材",
+    "tooLarge" : "超過 {{max}}",
+    "unsupported" : "只能上傳圖片、視頻或音頻",
+    "uploading" : "上傳中 {{pct}}%"
+  }
+}

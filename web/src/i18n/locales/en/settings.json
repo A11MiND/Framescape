@@ -6,7 +6,13 @@
     "email": "Email",
     "phone": "Phone",
     "emailHelp": "Used to sign in; it cannot be changed here.",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "avatarUpload": "Upload avatar",
+    "avatarRemove": "Remove avatar",
+    "avatarHelp": "PNG, JPEG or WebP, up to 5 MB. Displayed with a centre crop; never published to the community.",
+    "avatarInvalid": "Choose a PNG, JPEG or WebP image up to 5 MB.",
+    "avatarProgress": "Saving avatar: {{n}}%",
+    "avatarSaved": "Avatar saved."
   },
   "security": {
     "title": "Password",
@@ -48,8 +54,9 @@
     "number": "Number",
     "note": "Changes the interface only; your prompts, character names and project names are not translated.",
     "names": {
-      "zh": "中文",
-      "en": "English"
+      "zh": "Simplified Chinese",
+      "en": "English",
+      "zh-TW": "Traditional Chinese"
     }
   }
 }

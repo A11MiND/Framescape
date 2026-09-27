@@ -9,8 +9,9 @@ import "time"
 
 // User mirrors the `users` table (migrations/00001_init.sql).
 type User struct {
-	ID    uint64 `gorm:"primaryKey"`
-	BizID string `gorm:"column:biz_id"`
+	AvatarAssetID *string `gorm:"column:avatar_asset_id"`
+	ID            uint64  `gorm:"primaryKey"`
+	BizID         string  `gorm:"column:biz_id"`
 	// Email/PasswordHash are nullable (migration 00013): a Google- or
 	// phone-only account has neither. Every login path still resolves to
 	// exactly one row via whichever identifier it was created with.

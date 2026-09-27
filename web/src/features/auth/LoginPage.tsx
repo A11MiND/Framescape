@@ -195,7 +195,7 @@ export default function LoginPage() {
         </div>
       </aside>
       <main className="flex min-w-0 flex-col bg-surface px-5 py-6 sm:px-10 lg:px-10 xl:px-14">
-        <header className="flex items-center justify-between gap-3 lg:justify-end">
+        <header className="flex flex-wrap items-center justify-between gap-3 lg:justify-end">
           <div className="lg:hidden"><LoginBrand t={t} /></div>
           <LanguageSwitch />
         </header>

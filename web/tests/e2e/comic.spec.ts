@@ -56,6 +56,23 @@ async function setup(page: Page, { comicAI = true, lang = 'zh' } = {}) {
 const layers = (page: Page) => page.locator('[data-layer]')
 const step = (page: Page, name: string) => page.getByRole('navigation', { name: '漫画步骤' }).getByRole('button', { name })
 
+test('numeric layer properties accept direct entry and bubble opacity is persisted', async ({ page }) => {
+  const state = await setup(page)
+  await page.getByRole('button', { name: '添加对话框', exact: true }).click()
+  const font = page.getByLabel('字号', { exact: true })
+  await font.fill('')
+  await font.type('48')
+  await font.press('Enter')
+  await expect(font).toHaveValue('48')
+  const opacity = page.getByLabel('气泡不透明度 (%)', { exact: true })
+  await opacity.fill('35')
+  await opacity.press('Enter')
+  await expect(opacity).toHaveValue('35')
+  await page.getByRole('button', { name: '保存编辑稿', exact: true }).click()
+  await expect(page.getByText('编辑稿已保存到服务器。')).toBeVisible()
+  expect((state.lastSaved?.layers as { font_size: number; fill_opacity?: number }[])[0]).toMatchObject({ font_size: 48, fill_opacity: 0.35 })
+})
+
 test('Chinese text, drag, resize, lock, undo and persisted reload', async ({ page }) => {
   await setup(page)
   await page.getByRole('button', { name: '添加对话框', exact: true }).click()

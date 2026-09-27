@@ -70,6 +70,16 @@ test('theme and language switch without losing what is being edited', async ({ p
   await expect(page.getByRole('combobox', { name: 'Describe the image' })).toHaveValue('海边的红色电车')
 })
 
+test('Traditional Chinese and avatar upload are available in settings', async ({ page }) => {
+  await useDemoApi(page)
+  await page.route('**/mock-upload', (route) => route.fulfill({ status: 200 }))
+  await page.goto('/settings')
+  await page.getByRole('radio', { name: '繁體中文' }).click()
+  await expect(page.getByRole('heading', { name: '設置', level: 1 })).toBeVisible()
+  await page.getByLabel('上傳頭像').setInputFiles({ name: 'avatar.png', mimeType: 'image/png', buffer: Buffer.from('png') })
+  await expect(page.getByRole('status').filter({ hasText: '頭像已保存' })).toBeVisible()
+})
+
 test('signing out returns to the sign-in page', async ({ page }) => {
   await useDemoApi(page)
   await page.goto('/settings')

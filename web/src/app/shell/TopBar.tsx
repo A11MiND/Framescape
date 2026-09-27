@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CircleUserRound, Coins, WifiOff } from 'lucide-react'
+import { Coins, WifiOff } from 'lucide-react'
 import { Button, Menu, SegmentedControl, cn } from '../../ui'
 import { useAuthStore } from '../../lib/authStore'
 import type { Me } from '../../lib/api/account'
@@ -11,6 +11,7 @@ import { useStream } from '../../lib/stream/context'
 import { formatClock, formatNumber } from '../../lib/format'
 import { setStoredLang, type Lang } from '../../i18n'
 import { useCurrentProject } from '../currentProject'
+import { AccountAvatar } from './AccountAvatar'
 import { Brand } from './Brand'
 import NotificationCenter from '../../components/NotificationCenter'
 import type { JobCounts } from '../../lib/api/jobs'
@@ -34,10 +35,11 @@ export function LanguageSwitch() {
   return (
     <SegmentedControl<Lang>
       label={t('top.language')}
-      value={i18n.language === 'en' ? 'en' : 'zh'}
+      value={i18n.language as Lang}
       onChange={setStoredLang}
       options={[
-        { value: 'zh', label: t('lang.zh') },
+        { value: 'zh', label: t('lang.zhCN') },
+        { value: 'zh-TW', label: t('lang.zhTW') },
         { value: 'en', label: t('lang.en') },
       ]}
     />
@@ -111,7 +113,7 @@ export function TopBar({ me, counts, countsFailed }: { me: Me | undefined; count
           <Menu
             trigger={
               <button type="button" aria-label={t('top.account')} className="inline-flex size-10 items-center justify-center rounded-full text-fg-muted hover:bg-surface-2 hover:text-fg">
-                <CircleUserRound aria-hidden className="size-6" />
+                <AccountAvatar url={me?.avatar_url} className="size-8" />
               </button>
             }
             items={[

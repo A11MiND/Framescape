@@ -104,6 +104,7 @@ func (s *Server) Router() *gin.Engine {
 		authed.PATCH("/comics/:bizID", s.handleSaveComic)
 		authed.DELETE("/comics/:bizID", s.handleDeleteComic)
 		authed.PATCH("/me/password", s.handleChangePassword)
+		authed.PATCH("/me/avatar", s.handleSetAvatar)
 		authed.POST("/prompts/rewrite", s.handleRewritePrompt)
 		authed.POST("/jobs", s.handleCreateJob)
 		authed.GET("/jobs", s.handleListJobs)

@@ -45,6 +45,8 @@
   },
   "lang": {
     "zh": "中文",
-    "en": "EN"
+    "en": "EN",
+    "zhCN": "Simplified",
+    "zhTW": "Traditional"
   }
 }

@@ -1,0 +1,51 @@
+{
+  "create" : "新建角色",
+  "createTile" : "創建新角色",
+  "createTileHint" : "支持 1–{{max}} 張參考圖",
+  "delete" : "刪除",
+  "deleteDialog" : {
+    "body" : "已經生成的作品不受影響；刪除後創作時不能再選擇這個角色，參考圖仍保留在素材庫。",
+    "confirm" : "刪除角色",
+    "done" : "角色已刪除",
+    "title" : "刪除角色「{{name}}」？"
+  },
+  "description" : "保存人物或形象的參考圖與外觀描述，創作時綁定角色，保持同一形象。",
+  "edit" : "編輯",
+  "empty" : {
+    "body" : "上傳 1–{{max}} 張人物參考圖，快速創建你的第一個角色。",
+    "filtered" : "沒有符合搜索的角色",
+    "title" : "還沒有角色",
+    "upload" : "上傳參考圖",
+    "uploading" : "正在上傳…"
+  },
+  "form" : {
+    "advanced" : "高級設置",
+    "created" : "角色已創建",
+    "createTitle" : "新建角色",
+    "description" : "外觀描述",
+    "descriptionHelp" : "描述會隨角色一起拼接進提示詞；不會翻譯。",
+    "descriptionPlaceholder" : "年齡、髮型、服裝、氣質等；會拼接進提示詞。",
+    "editTitle" : "編輯角色",
+    "name" : "角色名稱",
+    "namePlaceholder" : "例如：小悠",
+    "nameRequired" : "請填寫角色名稱",
+    "project" : "所屬項目",
+    "refs" : "參考圖片",
+    "refsHelp" : "1–{{max}} 張，建議正面清晰的人物圖。",
+    "refsRequired" : "請至少添加 1 張參考圖片",
+    "save" : "保存角色",
+    "saved" : "角色已保存",
+    "seed" : "隨機種子",
+    "seedHelp" : "同一角色每次使用同一個種子，幫助保持形象一致。只對 MiniMax 生成生效，GPT 生圖不使用種子。",
+    "seedInvalid" : "種子必須是 0 到 2147483647 之間的整數",
+    "seedPlaceholder" : "留空則自動生成一個固定種子"
+  },
+  "more" : "{{name}} 的更多操作",
+  "noDescription" : "沒有外觀描述",
+  "noProject" : "未歸屬項目",
+  "refs" : "{{n}} 張參考圖",
+  "search" : "搜索角色名稱或描述",
+  "title" : "角色庫",
+  "use" : "創作時使用",
+  "useHint" : "打開上次使用的創作模式並綁定「{{name}}」，已有草稿保留。"
+}
