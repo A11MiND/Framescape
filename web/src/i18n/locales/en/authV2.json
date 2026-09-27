@@ -1,8 +1,8 @@
 {
-  "hero": "Turn ideas into images",
-  "heroBody": "Images, comics and videos start with an idea.",
-  "welcome": "Welcome to Framescape",
-  "subtitle": "Sign in to keep creating, or explore the community first.",
+  "hero": "Start creating here",
+  "heroBody": "Turn your ideas into stunning images and videos with AI",
+  "welcome": "Welcome back",
+  "subtitle": "Sign in to Framescape and continue your creative journey",
   "method": "Sign-in method",
   "emailMethod": "Email and password",
   "phoneMethod": "Phone code",
@@ -30,5 +30,13 @@
   "showcaseAlt": "A four-panel community comic: spot wasted energy, switch off unused lights, share energy-saving tips, and record actions.",
   "showcaseTitle": "A greener community, together",
   "showcaseSource": "GPT comic example",
-  "referenceCaption": "From character references to a four-panel story. Bring your ideas to life."
+  "referenceCaption": "From character references to a four-panel story. Bring your ideas to life.",
+  "heroSecondary": "创意从这里开始",
+  "heroBodySecondary": "用 AI 将想象变成真实的图像与视频",
+  "welcomeSecondary": "欢迎回来",
+  "subtitleSecondary": "登录帧境，继续你的创作之旅",
+  "emailSecondary": "邮箱",
+  "passwordSecondary": "密码",
+  "phoneSecondary": "手机验证码",
+  "brandSecondary": "帧境"
 }

@@ -1,8 +1,8 @@
 {
-  "hero": "把灵感变成画面",
-  "heroBody": "图片、漫画与视频，从一个想法开始。",
-  "welcome": "欢迎来到帧境",
-  "subtitle": "登录继续创作，或先浏览社区。",
+  "hero": "创意从这里开始",
+  "heroBody": "用 AI 将想象变成真实的图像与视频",
+  "welcome": "欢迎回来",
+  "subtitle": "登录帧境，继续你的创作之旅",
   "method": "登录方式",
   "emailMethod": "邮箱密码",
   "phoneMethod": "手机验证码",
@@ -30,5 +30,13 @@
   "showcaseAlt": "港灯社区节能主题四格漫画：发现浪费、随手关灯、分享节能知识、记录行动。",
   "showcaseTitle": "一起点亮绿色社区",
   "showcaseSource": "GPT 四格创作示例",
-  "referenceCaption": "从角色参考到四格故事，让想法有画面。"
+  "referenceCaption": "从角色参考到四格故事，让想法有画面。",
+  "heroSecondary": "Start creating here",
+  "heroBodySecondary": "Turn your ideas into stunning images and videos with AI",
+  "welcomeSecondary": "Welcome back",
+  "subtitleSecondary": "Sign in to Framescape and continue your creative journey",
+  "emailSecondary": "Email",
+  "passwordSecondary": "Password",
+  "phoneSecondary": "Phone code",
+  "brandSecondary": "帧境"
 }

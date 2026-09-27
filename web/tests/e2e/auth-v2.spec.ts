@@ -71,6 +71,6 @@ test('English login and capabilities failure recovery', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible({ timeout: 15000 })
   await page.unroute('**/api/v1/capabilities')
   await page.getByRole('button', { name: 'Retry' }).click()
-  await expect(page.getByRole('heading', { name: 'Welcome to Framescape' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible()
   await expect(page.getByLabel(/^Password/)).toBeVisible()
 })

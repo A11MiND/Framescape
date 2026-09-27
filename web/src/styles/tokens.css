@@ -33,6 +33,8 @@
   --overlay: rgb(20 23 29 / 0.45);
   --inverse: #20232b;
   --inverse-fg: #ffffff;
+  --hero-fg: #20232b;
+  --hero-muted: #616875;
   --shadow-overlay-color: rgb(20 23 29 / 0.12);
 }
 
@@ -62,6 +64,9 @@
   --overlay: rgb(0 0 0 / 0.6);
   --inverse: #edeff3;
   --inverse-fg: #15171d;
+  /* The login collage stays bright in dark mode, so its copy keeps a fixed dark contrast. */
+  --hero-fg: #20232b;
+  --hero-muted: #616875;
   --shadow-overlay-color: rgb(0 0 0 / 0.4);
 }
 
@@ -91,6 +96,8 @@
   --color-overlay: var(--overlay);
   --color-inverse: var(--inverse);
   --color-inverse-fg: var(--inverse-fg);
+  --color-hero-fg: var(--hero-fg);
+  --color-hero-muted: var(--hero-muted);
   --shadow-overlay: 0 8px 24px var(--shadow-overlay-color);
 }
 

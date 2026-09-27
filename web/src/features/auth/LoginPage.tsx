@@ -9,7 +9,6 @@ import { keys } from '../../lib/api/keys'
 import { errorText } from '../../lib/errorText'
 import { useAuthStore } from '../../lib/authStore'
 import { safeReturnPath } from '../../app/routing'
-import { Brand } from '../../app/shell/Brand'
 import { LanguageSwitch } from '../../app/shell/TopBar'
 import { Button, ErrorState, Field, Input, PasswordInput, SegmentedControl, Skeleton, Tabs, TabList } from '../../ui'
 
@@ -44,6 +43,24 @@ function loadGoogleScript(): Promise<void> {
     })
   }
   return googleScriptPromise
+}
+
+function LoginBrand({ t }: { t: (key: string) => string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <img src="/logo-mark.png" alt="" className="size-9 shrink-0 object-contain" />
+      <span className="whitespace-nowrap text-[18px] font-semibold tracking-tight text-hero-fg sm:text-[22px]">Framescape <span className="font-normal text-hero-muted">{t('brandSecondary')}</span></span>
+    </div>
+  )
+}
+
+function DualLabel({ primary, secondary }: { primary: string; secondary: string }) {
+  return (
+    <>
+      {primary}
+      <span className="ml-2 font-normal text-fg-muted">{secondary}</span>
+    </>
+  )
 }
 
 export default function LoginPage() {
@@ -164,43 +181,29 @@ export default function LoginPage() {
     setError(null)
   }
   return (
-    <div className="grid min-h-dvh bg-bg text-fg lg:grid-cols-2">
-      <aside className="hidden min-w-0 flex-col border-r border-border bg-surface-2 p-8 lg:flex xl:p-12">
-        <Brand />
-        <div className="my-auto w-full max-w-[680px] self-center py-10">
-          <p className="max-w-[540px] text-[36px] leading-tight font-semibold xl:text-[44px]">{t('hero')}</p>
-          <p className="mt-4 text-body text-fg-muted">{t('heroBody')}</p>
-          <figure className="mt-8">
-            <img
-              src="/login-showcase/community-comic.jpg"
-              alt={t('showcaseAlt')}
-              width={1536}
-              height={1024}
-              className="aspect-[3/2] w-full rounded-dialog object-contain"
-            />
-            <figcaption className="mt-3 flex flex-wrap justify-between gap-2 text-caption text-fg-muted">
-              <span>{t('showcaseTitle')}</span>
-              <span>{t('showcaseSource')}</span>
-            </figcaption>
-          </figure>
-          <div className="mt-6 flex items-center gap-4 border-t border-border pt-5">
-            <div aria-hidden className="flex shrink-0 gap-2">
-              {['character-girl.png', 'character-mascot.jpg', 'character-boy.png'].map((file) => (
-                <img key={file} src={`/login-showcase/${file}`} alt="" width={56} height={64} className="h-16 w-14 rounded-control bg-white object-contain p-1" />
-              ))}
-            </div>
-            <p className="text-caption leading-relaxed text-fg-muted">{t('referenceCaption')}</p>
-          </div>
+    <div className="min-h-dvh bg-surface-2 p-2 text-fg sm:p-3 lg:p-4">
+      <div className="grid min-h-[calc(100dvh-1rem)] overflow-hidden rounded-dialog border border-border bg-surface sm:min-h-[calc(100dvh-1.5rem)] lg:grid-cols-[1.08fr_.92fr] lg:min-h-[calc(100dvh-2rem)]">
+      <aside className="relative hidden min-w-0 overflow-hidden bg-[#edf6ff] lg:block dark:bg-surface-2">
+        <img src="/login-showcase/creative-collage.png" alt={t('showcaseAlt')} width={1536} height={1024} className="absolute inset-0 size-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-[#edf6ff]/20 dark:from-black/5 dark:to-surface-2/20" />
+        <div className="relative z-10 max-w-[440px] p-8 xl:p-12 dark:rounded-dialog dark:bg-surface/80 dark:backdrop-blur-sm">
+          <LoginBrand t={t} />
+          <p className="mt-14 text-[38px] leading-[1.12] font-semibold tracking-tight text-hero-fg xl:text-[48px]">{t('hero')}</p>
+          <p className="mt-2 text-[22px] leading-tight text-hero-fg xl:text-[28px]">{t('heroSecondary')}</p>
+          <p className="mt-5 text-body leading-relaxed text-hero-muted">{t('heroBody')}</p>
+          <p className="mt-1 text-caption text-hero-muted">{t('heroBodySecondary')}</p>
         </div>
       </aside>
-      <main className="flex min-w-0 flex-col px-5 py-6 sm:px-10">
+      <main className="flex min-w-0 flex-col bg-surface px-5 py-6 sm:px-10 lg:px-14 xl:px-20">
         <header className="flex items-center justify-between gap-3">
-          <div className="lg:invisible"><Brand /></div>
+          <div className="lg:hidden"><LoginBrand t={t} /></div>
           <LanguageSwitch />
         </header>
-        <div className="my-auto w-full max-w-[420px] self-center py-10">
-          <h1 className="text-[28px] font-semibold">{t('welcome')}</h1>
-          <p className="mt-2 mb-6 text-body text-fg-muted">{t('subtitle')}</p>
+        <div className="my-auto w-full max-w-[500px] self-center py-10">
+          <h1 className="text-[30px] font-semibold tracking-tight">{t('welcome')}</h1>
+          <p className="mt-1 text-[21px] leading-tight text-fg-muted">{t('welcomeSecondary')}</p>
+          <p className="mt-5 text-body text-fg-muted">{t('subtitle')}</p>
+          <p className="mt-1 text-caption text-fg-muted">{t('subtitleSecondary')}</p>
           {caps.isPending ? (
             <Skeleton className="h-72" />
           ) : caps.isError ? (
@@ -236,7 +239,7 @@ export default function LoginPage() {
                           ]}
                         />
                       </Tabs>
-                      <Field label={t('email')} required error={fieldError('email', emailError)}>
+                      <Field label={<DualLabel primary={t('email')} secondary={t('emailSecondary')} />} required error={fieldError('email', emailError)}>
                         <Input
                           type="email"
                           autoComplete="email"
@@ -249,7 +252,7 @@ export default function LoginPage() {
                         />
                       </Field>
                       <Field
-                        label={t('password')}
+                        label={<DualLabel primary={t('password')} secondary={t('passwordSecondary')} />}
                         required
                         help={mode === 'register' ? t('passwordRule', { min, max }) : undefined}
                         error={fieldError('password', passwordError)}
@@ -266,7 +269,7 @@ export default function LoginPage() {
                       </Field>
                     </>
                   ) : (
-                    <Field label={t('phone')} required help={t('phoneHelp')} error={fieldError('phone', phoneError)}>
+                    <Field label={<DualLabel primary={t('phone')} secondary={t('phoneSecondary')} />} required help={t('phoneHelp')} error={fieldError('phone', phoneError)}>
                       <Input
                         type="tel"
                         autoComplete="tel"
@@ -308,9 +311,10 @@ export default function LoginPage() {
               {auth?.google && googleId && (
                 <div className="mt-5 border-t border-border pt-5">
                   <p className="mb-3 text-center text-caption text-fg-muted">{t('or')}</p>
-                  <Button className="w-full" loading={busy} onClick={google}>
-                    {t('google')}
-                  </Button>
+                  <div className={auth.phone_sms ? 'grid gap-3 sm:grid-cols-2' : ''}>
+                    {auth.phone_sms && <Button className="w-full" disabled={busy} onClick={() => setMethod('phone')}>{t('phoneMethod')}</Button>}
+                    <Button className="w-full" loading={busy} onClick={google}>{t('google')}</Button>
+                  </div>
                 </div>
               )}
               {error?.field === 'form' && (
@@ -326,6 +330,7 @@ export default function LoginPage() {
           </nav>
         </div>
       </main>
+      </div>
     </div>
   )
 }
