@@ -6,7 +6,7 @@ import CreateRoute from './CreateRoute'
 import { RedirectKeeping, RequireAdmin, RequireAuth } from './guards'
 import { lastCreateMode, prefillTarget } from './routing'
 
-const Login = lazy(() => import('../pages/Login'))
+const Login = lazy(() => import('../features/auth/LoginPage'))
 const Characters = lazy(() => import('../features/characters/CharactersPage'))
 const Presets = lazy(() => import('../features/presets/PresetsPage'))
 const Assets = lazy(() => import('../features/library/LibraryPage'))
@@ -19,8 +19,8 @@ const Credits = lazy(() => import('../features/credits/CreditsPage'))
 const Projects = lazy(() => import('../features/projects/ProjectsPage'))
 const ProjectDetail = lazy(() => import('../features/projects/ProjectDetailPage'))
 const Settings = lazy(() => import('../features/settings/SettingsPage'))
-const AdminSpend = lazy(() => import('../pages/AdminSpend'))
-const AdminUsers = lazy(() => import('../pages/AdminUsers'))
+const AdminSpend = lazy(() => import('../features/admin/SpendPage'))
+const AdminUsers = lazy(() => import('../features/admin/UsersPage'))
 
 /** `/` opens the mode a prefill belongs to, else the mode used last (image on a first visit). */
 function Home() {

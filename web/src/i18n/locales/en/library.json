@@ -21,7 +21,11 @@
     "done": "Done",
     "item": "Select {{name}}",
     "count": "{{n}} selected",
+    "count_one": "{{n}} selected",
+    "count_other": "{{n}} selected",
     "hidden": "{{n}} more selected items are outside the current filter",
+    "hidden_one": "1 more selected item is outside the current filter",
+    "hidden_other": "{{n}} more selected items are outside the current filter",
     "clearHidden": "Clear those",
     "clear": "Clear selection",
     "download": "Download",
@@ -56,6 +60,8 @@
   "move": {
     "title": "Move to project",
     "body": "Move {{n}} items to:",
+    "body_one": "Move 1 item to:",
+    "body_other": "Move {{n}} items to:",
     "hidden": "{{n}} of them are outside the current filter.",
     "target": "Project",
     "none": "No project",
@@ -63,16 +69,26 @@
   },
   "delete": {
     "title": "Delete {{n}} items?",
+    "title_one": "Delete 1 item?",
+    "title_other": "Delete {{n}} items?",
     "body": "They move to the trash and can be restored within {{days}} days.",
     "hidden": "{{n}} of them are outside the current filter.",
     "confirm": "Move to trash"
   },
   "done": {
     "deleted": "{{n}} items moved to the trash.",
+    "deleted_one": "1 item moved to the trash.",
+    "deleted_other": "{{n}} items moved to the trash.",
     "undo": "Undo",
     "restored": "{{n}} items restored.",
+    "restored_one": "1 item restored.",
+    "restored_other": "{{n}} items restored.",
     "moved": "{{n}} items moved to the project.",
-    "downloading": "Packing {{n}} items…"
+    "moved_one": "1 item moved to the project.",
+    "moved_other": "{{n}} items moved to the project.",
+    "downloading": "Packing {{n}} items…",
+    "downloading_one": "Packing 1 item…",
+    "downloading_other": "Packing {{n}} items…"
   },
   "trash": {
     "hint": "Items in the trash are deleted for good {{days}} days after deletion.",
@@ -82,8 +98,12 @@
     "emptyAll": "Empty trash ({{n}})",
     "emptyTitle": "Empty the trash?",
     "emptyBody": "This permanently deletes the {{n}} items in the trash. It cannot be undone.",
+    "emptyBody_one": "This permanently deletes the 1 item in the trash. It cannot be undone.",
+    "emptyBody_other": "This permanently deletes the {{n}} items in the trash. It cannot be undone.",
     "emptyConfirm": "Delete permanently",
-    "emptied": "{{n}} items deleted permanently."
+    "emptied": "{{n}} items deleted permanently.",
+    "emptied_one": "1 item deleted permanently.",
+    "emptied_other": "{{n}} items deleted permanently."
   },
   "uploads": {
     "title": "Upload",

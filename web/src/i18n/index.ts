@@ -1,3 +1,7 @@
+import enauthV2 from './locales/en/authV2.json'
+import zhauthV2 from './locales/zh/authV2.json'
+import enadminV2 from './locales/en/adminV2.json'
+import zhadminV2 from './locales/zh/adminV2.json'
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import zh from './zh.json'
@@ -55,8 +59,8 @@ export function setStoredLang(lang: Lang) {
 }
 
 export const resources = {
-  zh: { translation: zh, ui: zhUi, codes: zhCodes, shell: zhShell, tasks: zhTasks, job: zhJob, create: zhCreate, comic: zhComic, library: zhLibrary, projects: zhProjects, characters: zhCharacters, presets: zhPresets, community: zhCommunity, credits: zhCredits, settings: zhSettings },
-  en: { translation: en, ui: enUi, codes: enCodes, shell: enShell, tasks: enTasks, job: enJob, create: enCreate, comic: enComic, library: enLibrary, projects: enProjects, characters: enCharacters, presets: enPresets, community: enCommunity, credits: enCredits, settings: enSettings },
+  zh: { authV2: zhauthV2, adminV2: zhadminV2, translation: zh, ui: zhUi, codes: zhCodes, shell: zhShell, tasks: zhTasks, job: zhJob, create: zhCreate, comic: zhComic, library: zhLibrary, projects: zhProjects, characters: zhCharacters, presets: zhPresets, community: zhCommunity, credits: zhCredits, settings: zhSettings },
+  en: { authV2: enauthV2, adminV2: enadminV2, translation: en, ui: enUi, codes: enCodes, shell: enShell, tasks: enTasks, job: enJob, create: enCreate, comic: enComic, library: enLibrary, projects: enProjects, characters: enCharacters, presets: enPresets, community: enCommunity, credits: enCredits, settings: enSettings },
 } as const
 
 i18n.use(initReactI18next).init({

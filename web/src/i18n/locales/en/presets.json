@@ -43,6 +43,8 @@
   "tray": {
     "label": "Selected presets",
     "count": "{{n}} selected",
+    "count_one": "1 selected",
+    "count_other": "{{n}} selected",
     "clear": "Clear",
     "remove": "Remove {{name}}",
     "apply": "Apply to creation",

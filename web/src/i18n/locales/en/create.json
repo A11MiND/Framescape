@@ -70,13 +70,17 @@
     "remove": "Remove {{name}}",
     "choose": "Choose a character",
     "empty": "No characters yet; create one in Characters",
-    "refs": "{{n}} reference images"
+    "refs": "{{n}} reference images",
+    "refs_one": "1 reference image",
+    "refs_other": "{{n}} reference images"
   },
   "presets": {
     "label": "Style presets",
     "none": "None",
     "choose": "Choose presets",
     "selected": "{{n}} selected",
+    "selected_one": "1 selected",
+    "selected_other": "{{n}} selected",
     "title": "Choose style presets",
     "category": {
       "style": "Style",
@@ -246,7 +250,11 @@
       "dismiss": "Got it"
     },
     "count": "{{n}} images",
+    "count_one": "1 image",
+    "count_other": "{{n}} images",
     "countSkipped": "{{n}} images; {{empty}} empty ones are skipped",
+    "countSkipped_one": "1 image; {{empty}} empty one is skipped",
+    "countSkipped_other": "{{n}} images; {{empty}} empty ones are skipped",
     "placeholder": "The result appears here",
     "lastResult": "Last result",
     "initialRef": {

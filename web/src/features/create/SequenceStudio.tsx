@@ -154,7 +154,7 @@ export default function SequenceStudio() {
     update({ lastJob: bizId, lastShotIds: sentIds })
   })
   const credits = job.estimate?.data?.credits_total
-  const count = empty > 0 ? t('sequence.countSkipped', { n: spec.shots.length, empty }) : t('sequence.count', { n: spec.shots.length })
+  const count = empty > 0 ? t('sequence.countSkipped', { n: spec.shots.length, count: spec.shots.length, empty }) : t('sequence.count', { n: spec.shots.length, count: spec.shots.length })
 
   return (
     <div className="mx-auto flex max-w-[1440px] flex-col gap-5 px-4 py-6 lg:px-6">

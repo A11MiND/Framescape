@@ -20,7 +20,7 @@ test('each ledger event names its type, task and meaning', async ({ page }) => {
   await expect(reserve).toContainText('预留')
   await expect(reserve).toContainText('预留 40')
   await expect(reserve.getByRole('link', { name: '柠檬汽水四格漫画' })).toHaveAttribute('href', '/jobs/J005')
-  await expect(rows.filter({ hasText: '其中 1 超出预留，从可用积分补扣' })).toContainText('−21')
+  await expect(rows.filter({ hasText: '其中 1 超出预留，从可用积分补扣' })).toContainText('−31')
   await expect(rows.filter({ hasText: '未用完的预留退回' })).toContainText('释放 9')
   await expect(rows.filter({ hasText: '连续发布 3 天奖励' })).toContainText('+10')
   await expect(rows.filter({ hasText: '管理员发放 · 内测赠送' })).toContainText('+500')

@@ -21,7 +21,7 @@ export function CharacterPicker({ characters, value, onChange }: { characters: C
         {bound.map((c) => (
           <span key={c.biz_id} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border-control bg-surface pr-1 pl-3 text-body text-fg">
             @{c.name}
-            <span className="text-caption text-fg-muted">{t('character.refs', { n: c.ref_asset_ids.length })}</span>
+            <span className="text-caption text-fg-muted">{t('character.refs', { n: c.ref_asset_ids.length, count: c.ref_asset_ids.length })}</span>
             <button
               type="button"
               aria-label={t('character.remove', { name: c.name })}
@@ -47,7 +47,7 @@ export function CharacterPicker({ characters, value, onChange }: { characters: C
                   {t('character.add')}
                 </button>
               }
-              items={available.map((c) => ({ key: c.biz_id, label: `${c.name} · ${t('character.refs', { n: c.ref_asset_ids.length })}`, onSelect: () => onChange([...value, c.biz_id]) }))}
+              items={available.map((c) => ({ key: c.biz_id, label: `${c.name} · ${t('character.refs', { n: c.ref_asset_ids.length, count: c.ref_asset_ids.length })}`, onSelect: () => onChange([...value, c.biz_id]) }))}
             />
           )
         )}

@@ -80,7 +80,7 @@ export default function AssetDetailPage() {
     mutationFn: () => assetsApi.batch('delete', [assetId]),
     onSuccess: () => {
       refresh()
-      toast(t('done.deleted', { n: 1 }), { label: t('done.undo'), onClick: () => void assetsApi.batch('restore', [assetId]).then(refresh) })
+      toast(t('done.deleted', { n: 1, count: 1 }), { label: t('done.undo'), onClick: () => void assetsApi.batch('restore', [assetId]).then(refresh) })
       navigate('/assets')
     },
     onError: (err) => toast(errorText(t, err)),

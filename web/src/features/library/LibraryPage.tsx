@@ -85,7 +85,7 @@ export default function LibraryPage() {
   const restore = useMutation({
     mutationFn: (ids: string[]) => assetsApi.batch('restore', ids),
     onSuccess: (res) => {
-      toast(t('done.restored', { n: res.affected }))
+      toast(t('done.restored', { n: res.affected, count: res.affected }))
       refresh()
     },
     onError: (err) => toast(errorText(t, err)),
@@ -95,7 +95,7 @@ export default function LibraryPage() {
     onSuccess: (res, ids) => {
       setDeleting(null)
       setSelected((cur) => new Map([...cur].filter(([id]) => !ids.includes(id))))
-      toast(t('done.deleted', { n: res.affected }), { label: t('done.undo'), onClick: () => restore.mutate(ids) })
+      toast(t('done.deleted', { n: res.affected, count: res.affected }), { label: t('done.undo'), onClick: () => restore.mutate(ids) })
       refresh()
     },
     onError: (err) => toast(errorText(t, err)),
@@ -104,14 +104,14 @@ export default function LibraryPage() {
     mutationFn: ({ ids, target }: { ids: string[]; target: string }) => assetsApi.batch('move', ids, target),
     onSuccess: (res) => {
       setMoving(null)
-      toast(t('done.moved', { n: res.affected }))
+      toast(t('done.moved', { n: res.affected, count: res.affected }))
       refresh()
     },
     onError: (err) => toast(errorText(t, err)),
   })
   const download = useMutation({
     mutationFn: (ids: string[]) => {
-      toast(t('done.downloading', { n: ids.length }))
+      toast(t('done.downloading', { n: ids.length, count: ids.length }))
       return assetsApi.download(ids)
     },
     onSuccess: (blob) => saveBlob(blob, 'assets.zip'),
@@ -254,11 +254,11 @@ export default function LibraryPage() {
           )}
 
           {selected.size > 0 && (
-            <div role="region" aria-label={t('select.count', { n: selected.size })} className="sticky bottom-3 z-20 flex flex-wrap items-center gap-2 rounded-card border border-border bg-surface p-3 shadow-overlay">
-              <span className="text-body font-semibold text-fg tabular-nums">{t('select.count', { n: selected.size })}</span>
+            <div role="region" aria-label={t('select.count', { n: selected.size, count: selected.size })} className="sticky bottom-3 z-20 flex flex-wrap items-center gap-2 rounded-card border border-border bg-surface p-3 shadow-overlay">
+              <span className="text-body font-semibold text-fg tabular-nums">{t('select.count', { n: selected.size, count: selected.size })}</span>
               {hidden > 0 && (
                 <span className="flex items-center gap-1 text-caption text-warning-fg">
-                  {t('select.hidden', { n: hidden })}
+                  {t('select.hidden', { n: hidden, count: hidden })}
                   <Button size="sm" variant="ghost" onClick={clearHidden}>
                     {t('select.clearHidden')}
                   </Button>
@@ -306,7 +306,7 @@ export default function LibraryPage() {
       >
         {moving && (
           <div className="flex flex-col gap-3 text-body text-fg">
-            <p>{t('move.body', { n: moving.length })}</p>
+            <p>{t('move.body', { n: moving.length, count: moving.length })}</p>
             {hiddenOf(moving) > 0 && <p className="text-caption text-warning-fg">{t('move.hidden', { n: hiddenOf(moving) })}</p>}
             <Field label={t('move.target')}>
               <Select value={moveTarget} onChange={(e) => setMoveTarget(e.target.value)}>
@@ -325,7 +325,7 @@ export default function LibraryPage() {
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(o) => !o && setDeleting(null)}
-        title={t('delete.title', { n: deleting?.length ?? 0 })}
+        title={t('delete.title', { n: deleting?.length ?? 0, count: deleting?.length ?? 0 })}
         body={
           <>
             <p>{t('delete.body', { days: retention })}</p>

@@ -70,13 +70,17 @@
     "remove": "移除角色 {{name}}",
     "choose": "选择角色",
     "empty": "还没有角色，去角色库创建",
-    "refs": "{{n}} 张参考图"
+    "refs": "{{n}} 张参考图",
+    "refs_one": "{{n}} 张参考图",
+    "refs_other": "{{n}} 张参考图"
   },
   "presets": {
     "label": "风格预设",
     "none": "未选择",
     "choose": "选择预设",
     "selected": "已选 {{n}} 个",
+    "selected_one": "已选 {{n}} 个",
+    "selected_other": "已选 {{n}} 个",
     "title": "选择风格预设",
     "category": {
       "style": "风格",
@@ -246,7 +250,11 @@
       "dismiss": "知道了"
     },
     "count": "共 {{n}} 张",
+    "count_one": "共 {{n}} 张",
+    "count_other": "共 {{n}} 张",
     "countSkipped": "共 {{n}} 张，{{empty}} 个空白画面不生成",
+    "countSkipped_one": "共 {{n}} 张，{{empty}} 个空白画面不生成",
+    "countSkipped_other": "共 {{n}} 张，{{empty}} 个空白画面不生成",
     "placeholder": "生成后显示在这里",
     "lastResult": "上次生成",
     "initialRef": {

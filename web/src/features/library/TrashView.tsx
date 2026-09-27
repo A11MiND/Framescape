@@ -20,7 +20,7 @@ export function TrashView({ retention }: { retention: number }) {
   const restore = useMutation({
     mutationFn: (id: string) => assetsApi.batch('restore', [id]),
     onSuccess: (res) => {
-      toast(t('done.restored', { n: res.affected }))
+      toast(t('done.restored', { n: res.affected, count: res.affected }))
       refresh()
     },
     onError: (err) => toast(errorText(t, err)),
@@ -29,7 +29,7 @@ export function TrashView({ retention }: { retention: number }) {
     mutationFn: assetsApi.emptyTrash,
     onSuccess: (res) => {
       setConfirming(false)
-      toast(t('trash.emptied', { n: res.purged }))
+      toast(t('trash.emptied', { n: res.purged, count: res.purged }))
       refresh()
     },
     onError: (err) => toast(errorText(t, err)),
@@ -75,7 +75,7 @@ export function TrashView({ retention }: { retention: number }) {
         open={confirming}
         onOpenChange={setConfirming}
         title={t('trash.emptyTitle')}
-        body={t('trash.emptyBody', { n: total })}
+        body={t('trash.emptyBody', { n: total, count: total })}
         confirmLabel={t('trash.emptyConfirm')}
         danger
         busy={empty.isPending}

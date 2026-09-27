@@ -46,6 +46,8 @@
   "results": {
     "title": "生成结果",
     "count": "{{n}} 个结果",
+    "count_one": "{{n}} 个结果",
+    "count_other": "{{n}} 个结果",
     "missing": "文件已失效",
     "prev": "上一张",
     "next": "下一张",

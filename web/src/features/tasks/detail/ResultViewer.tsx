@@ -48,7 +48,7 @@ export function ResultViewer({ assetIds, showTitle = true, layout = 'viewer' }: 
         <h2 id="results-title" className={showTitle ? 'text-section font-semibold text-fg' : 'sr-only'}>
           {t('results.title')}
         </h2>
-        {assetIds.length > 1 && <span className="text-caption text-fg-muted">{t('results.count', { n: assetIds.length })}</span>}
+        {assetIds.length > 1 && <span className="text-caption text-fg-muted">{t('results.count', { n: assetIds.length, count: assetIds.length })}</span>}
       </div>
 
       {layout === 'grid' && assetIds.length > 1 ? (

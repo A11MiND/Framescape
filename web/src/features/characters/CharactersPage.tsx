@@ -163,7 +163,7 @@ export default function CharactersPage() {
                   <FolderOpen aria-hidden className="size-3.5 shrink-0" />
                   <span className="truncate">{(c.project_id && projectName.get(c.project_id)) || t('noProject')}</span>
                   <span aria-hidden>·</span>
-                  <span className="shrink-0">{t('refs', { n: c.ref_asset_ids.length })}</span>
+                  <span className="shrink-0">{t('refs', { n: c.ref_asset_ids.length, count: c.ref_asset_ids.length })}</span>
                 </p>
                 <Button variant="primary" className="mt-auto w-full" icon={<Sparkles aria-hidden className="size-4" />} title={t('useHint', { name: c.name })} onClick={() => use(c)}>
                   {t('use')}

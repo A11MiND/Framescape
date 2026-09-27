@@ -21,7 +21,11 @@
     "done": "完成选择",
     "item": "选择 {{name}}",
     "count": "已选 {{n}} 个",
+    "count_one": "已选 {{n}} 个",
+    "count_other": "已选 {{n}} 个",
     "hidden": "另有 {{n}} 个已选素材不在当前筛选中",
+    "hidden_one": "另有 1 个已选素材不在当前筛选中",
+    "hidden_other": "另有 {{n}} 个已选素材不在当前筛选中",
     "clearHidden": "清除这些",
     "clear": "清除选择",
     "download": "下载所选",
@@ -56,6 +60,8 @@
   "move": {
     "title": "归入项目",
     "body": "把 {{n}} 个素材归入：",
+    "body_one": "把 {{n}} 个素材归入：",
+    "body_other": "把 {{n}} 个素材归入：",
     "hidden": "其中 {{n}} 个不在当前筛选中。",
     "target": "目标项目",
     "none": "未归属项目",
@@ -63,16 +69,26 @@
   },
   "delete": {
     "title": "删除 {{n}} 个素材？",
+    "title_one": "删除 {{n}} 个素材？",
+    "title_other": "删除 {{n}} 个素材？",
     "body": "素材会移到回收站，{{days}} 天内可以恢复。",
     "hidden": "其中 {{n}} 个不在当前筛选中。",
     "confirm": "移到回收站"
   },
   "done": {
     "deleted": "已删除 {{n}} 个素材，已移到回收站。",
+    "deleted_one": "已删除 {{n}} 个素材，已移到回收站。",
+    "deleted_other": "已删除 {{n}} 个素材，已移到回收站。",
     "undo": "撤销",
     "restored": "已恢复 {{n}} 个素材。",
+    "restored_one": "已恢复 {{n}} 个素材。",
+    "restored_other": "已恢复 {{n}} 个素材。",
     "moved": "已把 {{n}} 个素材归入项目。",
-    "downloading": "正在打包 {{n}} 个素材…"
+    "moved_one": "已把 {{n}} 个素材归入项目。",
+    "moved_other": "已把 {{n}} 个素材归入项目。",
+    "downloading": "正在打包 {{n}} 个素材…",
+    "downloading_one": "正在打包 {{n}} 个素材…",
+    "downloading_other": "正在打包 {{n}} 个素材…"
   },
   "trash": {
     "hint": "回收站里的素材在删除 {{days}} 天后永久删除。",
@@ -82,8 +98,12 @@
     "emptyAll": "清空回收站（{{n}}）",
     "emptyTitle": "清空回收站？",
     "emptyBody": "将永久删除回收站里的 {{n}} 个素材，删除后无法恢复。",
+    "emptyBody_one": "将永久删除回收站里的 {{n}} 个素材，删除后无法恢复。",
+    "emptyBody_other": "将永久删除回收站里的 {{n}} 个素材，删除后无法恢复。",
     "emptyConfirm": "永久删除",
-    "emptied": "已永久删除 {{n}} 个素材。"
+    "emptied": "已永久删除 {{n}} 个素材。",
+    "emptied_one": "已永久删除 {{n}} 个素材。",
+    "emptied_other": "已永久删除 {{n}} 个素材。"
   },
   "uploads": {
     "title": "上传素材",

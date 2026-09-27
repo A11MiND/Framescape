@@ -46,6 +46,8 @@
   "results": {
     "title": "Results",
     "count": "{{n}} results",
+    "count_one": "1 result",
+    "count_other": "{{n}} results",
     "missing": "File unavailable",
     "prev": "Previous",
     "next": "Next",

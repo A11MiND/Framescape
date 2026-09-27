@@ -212,7 +212,7 @@ export default function PresetsPage() {
 
       {chosen.length > 0 && (
         <div role="region" aria-label={t('tray.label')} className="sticky bottom-3 z-20 flex flex-wrap items-center gap-2 rounded-card border border-border bg-surface p-3 shadow-overlay">
-          <span className="text-body font-semibold text-fg tabular-nums">{t('tray.count', { n: chosen.length })}</span>
+          <span className="text-body font-semibold text-fg tabular-nums">{t('tray.count', { n: chosen.length, count: chosen.length })}</span>
           <ul className="flex min-w-0 flex-1 flex-wrap gap-1.5">
             {chosen.map((p) => (
               <li key={p.biz_id} className="inline-flex h-8 items-center gap-1 rounded-full border border-border bg-surface-2 pr-1 pl-3 text-caption text-fg">

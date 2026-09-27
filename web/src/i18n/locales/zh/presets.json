@@ -43,6 +43,8 @@
   "tray": {
     "label": "已选择的预设",
     "count": "已选 {{n}} 个",
+    "count_one": "已选 {{n}} 个",
+    "count_other": "已选 {{n}} 个",
     "clear": "清空",
     "remove": "移除 {{name}}",
     "apply": "应用到创作",

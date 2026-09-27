@@ -16,6 +16,7 @@ export interface OpenAICapabilities {
 }
 
 export interface Capabilities {
+  auth?: { email_password: boolean; email_verification: boolean; phone_sms: boolean; google: boolean; guest_trial: boolean }
   assets?: { trash_retention_days: number }
   password?: { min_chars: number; max_bytes: number }
   characters?: { max_references: number; name_max_chars: number; description_max_chars: number }

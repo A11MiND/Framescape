@@ -50,11 +50,11 @@ export function AdminLayout() {
             </Link>
           </li>
         </ul>
-        <div className="mt-auto hidden px-5 pb-4 lg:block">
+        <div className="mt-auto px-5 pb-3">
           <LanguageSwitch />
         </div>
       </nav>
-      <main id="main" className="min-h-0 flex-1 overflow-y-auto">
+      <main id="main" className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
         <ErrorBoundary resetKey={pathname}>
           <Suspense fallback={<PageFallback />}>
             <Outlet />

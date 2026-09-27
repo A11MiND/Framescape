@@ -25,7 +25,7 @@ export function PresetPicker({ presets, value, onChange }: { presets: Preset[]; 
         open={open}
         onOpenChange={setOpen}
         title={t('presets.title')}
-        description={chosen.length ? t('presets.selected', { n: chosen.length }) : undefined}
+        description={chosen.length ? t('presets.selected', { n: chosen.length, count: chosen.length }) : undefined}
         footer={
           <>
             <Button onClick={() => onChange([])} disabled={!value.length}>

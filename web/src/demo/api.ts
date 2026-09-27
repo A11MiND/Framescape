@@ -57,6 +57,7 @@ function sampleJobs(): Job[] {
     ...extra,
   })
   return [
+    j(14, 'image.single', '海湾帆船 · 超额结算示例', 'succeeded', 1, 1, 30, 31, '24T06:25', 'bay'),
     j(13, 'image.single', '阳光下的海岸电车', 'succeeded', 1, 1, 40, 36, '24T06:20', 'tram-1'),
     j(12, 'video.sequence', '海岸电车之旅 · 宣传视频', 'awaiting_review', 6, 7, 120, 64, '24T06:10', 'tram-1'),
     j(11, 'video.sequence', '雪山晨雾 · 风格测试', 'awaiting_review', 3, 4, 90, 48, '24T05:02', 'alpine'),
@@ -255,10 +256,11 @@ export function createDemoApi(img: Img) {
   }
   const me = { biz_id: 'demo-user', email: 'demo@example.com', phone: null, balance: 860, held: 350, is_admin: true, entitlements: ['openai_image'], comic_ai: true, has_password: true }
 
-  // Ledger: one classic comic's reserve, charges (one past its reservation) and release, plus top-ups and rewards.
+  // Ledger: separate under-budget and over-budget tasks, plus top-ups and rewards.
   const ledgerJob = (id: string, title: string, workflow: string, cover: string) => ({ biz_id: id, title, workflow_name: workflow, cover_url: img(`${cover}.jpg`) })
   const comicJob = ledgerJob('J005', '柠檬汽水四格漫画', 'image.comic4', 'comic-page')
-  const tramJob = ledgerJob('J012', '海岸电车 · 5 秒镜头', 'video.single', 'tram-1')
+  const tramJob = ledgerJob('J012', '海岸电车之旅 · 宣传视频', 'video.sequence', 'tram-1')
+  const overageJob = ledgerJob('J014', '海湾帆船 · 超额结算示例', 'image.single', 'bay')
   let ledgerSeq = 0
   const entry = (direction: string, amount: number, remark: Record<string, unknown>, job: unknown, minutesAgo: number) => ({
     direction, amount, balance_after: me.balance, held_after: me.held, ref_type: job ? 'job' : '', ref_id: '', job,
@@ -267,14 +269,21 @@ export function createDemoApi(img: Img) {
   })
   const ledger = [
     entry('refund', 0, { kind: 'refund', amount: 9 }, comicJob, 0),
-    entry('commit', -21, { kind: 'commit', amount: 21, shortfall: 1 }, comicJob, 2),
+    entry('commit', -21, { kind: 'commit', amount: 21 }, comicJob, 2),
     entry('commit', -10, { kind: 'commit', amount: 10 }, comicJob, 4),
     entry('hold', 0, { kind: 'hold_job', amount: 40 }, comicJob, 6),
+    entry('commit', -31, { kind: 'commit', amount: 31, shortfall: 1 }, overageJob, 10),
+    entry('hold', 0, { kind: 'hold_job', amount: 30 }, overageJob, 12),
     entry('recharge', 10, { kind: 'community_streak_3', amount: 10 }, null, 60),
     entry('commit', -64, { kind: 'commit', amount: 64 }, tramJob, 120),
-    entry('hold', 0, { kind: 'hold_job', amount: 64 }, tramJob, 125),
+    entry('hold', 0, { kind: 'hold_job', amount: 120 }, tramJob, 125),
     entry('recharge', 500, { kind: 'recharge_custom', amount: 500, text: '内测赠送' }, null, 1440),
   ]
+  const adminUsers = Array.from({ length: 28 }, (_, i) => ({
+    biz_id: `U${i + 1}`, email: i === 0 ? 'admin@example.com' : `creator${i}@example.com`, phone: null,
+    is_admin: i === 0, is_active: i !== 2, comic_ai_enabled: i < 3, balance: 500 + i * 10, held: i * 3,
+    credits_spent: 100 + i * 5, cost_yuan: 2.1 + i / 10, job_count: 5 + i, created_at: '2026-09-24T00:00:00Z',
+  }))
   const view = (x: Job) => ({
     biz_id: x.biz_id,
     workflow_name: x.workflow_name,
@@ -289,9 +298,9 @@ export function createDemoApi(img: Img) {
     credits: {
       reserved: x.reserved,
       settled: x.settled,
-      overage: 0,
+      overage: Math.max(0, x.settled - x.reserved),
       released: ['succeeded', 'partial', 'failed', 'cancelled'].includes(x.status) ? Math.max(0, x.reserved - x.settled) : 0,
-      frozen: ['succeeded', 'partial', 'failed', 'cancelled'].includes(x.status) ? 0 : x.reserved - x.settled,
+      frozen: ['succeeded', 'partial', 'failed', 'cancelled'].includes(x.status) ? 0 : Math.max(0, x.reserved - x.settled),
     },
     error_code: x.error_code,
     error_msg: '',
@@ -531,6 +540,8 @@ export function createDemoApi(img: Img) {
       return {
         status: 200,
         body: {
+          auth: { email_password: true, email_verification: false, phone_sms: false, google: false, guest_trial: true },
+          password: { min_chars: 8, max_bytes: 72 },
           image: { max_n: 9, max_prompt_chars: 1500, sequence_max_shots: 12 },
           video: { duration_min: 4, duration_max: 15, max_prompt_chars: 7000, resolutions: ['768P', '2K'], ratios: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'], max_reference_videos: 3, reference_video_max_seconds: 15, sequence_max_shots: 12, max_reference_images: 9, max_reference_audios: 3 },
           comic: { openai_enabled: true, model: 'gpt-image-2.5-flare', max_composed_chars: 20000, max_references: 15 },
@@ -593,6 +604,37 @@ export function createDemoApi(img: Img) {
       else liked.delete(like[1])
       const base = COMMUNITY.find(([id]) => id === like[1])?.[1] ?? 0
       return { status: 200, body: { liked: liked.has(like[1]), like_count: base + (liked.has(like[1]) ? 1 : 0) } }
+    }
+    if (path === '/auth/login' || path === '/auth/register' || path === '/auth/phone/verify') {
+      return { status: 200, body: { access_token: 'demo', refresh_token: 'demo' } }
+    }
+    if (path === '/auth/email/send-code' || path === '/auth/phone/send-code') return { status: 204 }
+    if (path === '/admin/overview') return { status: 200, body: { user_count: adminUsers.length, jobs_by_status: { succeeded: 128, running: 8, queued: 3, failed: 4, awaiting_review: 2 }, credits_recharged: 42000, credits_consumed: 12800, total_cost_yuan: 246.8 } }
+    if (path === '/admin/usage') {
+      const n = Number(new URLSearchParams(search).get('days') ?? 30)
+      return { status: 200, body: { days: Array.from({length:n}, (_,i)=>({day: new Date(Date.UTC(2026,8,27-n+i)).toISOString().slice(0,10), jobs: 4+i, credits_consumed: 40+i*3, cost_yuan: Math.round((1.2+(i%7)*0.7)*100)/100 })) } }
+    }
+    if (path === '/admin/users' && method === 'GET') {
+      const q = new URLSearchParams(search); const text = (q.get('q') ?? '').toLowerCase(); const offset = Number(q.get('cursor') ?? 0); const limit = Number(q.get('limit') ?? 25)
+      const found = adminUsers.filter(u => u.email.toLowerCase().includes(text)); const page = found.slice(offset,offset+limit)
+      return { status: 200, body: { users: page, ...(offset+limit<found.length?{next_cursor:String(offset+limit)}:{}) } }
+    }
+    if (path === '/admin/users' && method === 'POST') {
+      const email = (body as {email:string}).email
+      if (adminUsers.some(u=>u.email===email)) return { status:409,body:{code:'email_taken'} }
+      const u = { ...adminUsers[1], biz_id: `U${adminUsers.length+1}`, email, balance:0, held:0, credits_spent:0, cost_yuan:0, job_count:0, comic_ai_enabled:false }
+      adminUsers.unshift(u)
+      return { status:200,body:{biz_id:u.biz_id,email,temp_password:'demo-temporary-9R!'} }
+    }
+    const adminAction = path.match(/^\/admin\/users\/([^/]+)\/(credits|admin|active|comic-ai)$/)
+    if (adminAction && method === 'POST') {
+      const u = adminUsers.find(x=>x.biz_id===adminAction[1]); if (!u) return {status:404,body:{code:'not_found'}}
+      const b = body as {amount:number;is_admin:boolean;is_active:boolean;enabled:boolean}
+      if(adminAction[2]==='credits')u.balance+=b.amount
+      if(adminAction[2]==='admin')u.is_admin=b.is_admin
+      if(adminAction[2]==='active')u.is_active=b.is_active
+      if(adminAction[2]==='comic-ai')u.comic_ai_enabled=b.enabled
+      return {status:200,body:{...u,credited:b.amount}}
     }
     if (path === '/credits/ledger' && method === 'GET') return { status: 200, body: { entries: ledger } }
     if (path === '/credits/topup' && method === 'POST') {
