@@ -182,24 +182,24 @@ export default function LoginPage() {
   }
   return (
     <div className="min-h-dvh bg-surface-2 p-2 text-fg sm:p-3 lg:p-4">
-      <div className="grid min-h-[calc(100dvh-1rem)] overflow-hidden rounded-dialog border border-border bg-surface sm:min-h-[calc(100dvh-1.5rem)] lg:grid-cols-[1.08fr_.92fr] lg:min-h-[calc(100dvh-2rem)]">
+      <div className="grid min-h-[calc(100dvh-1rem)] overflow-hidden rounded-dialog border border-border bg-surface sm:min-h-[calc(100dvh-1.5rem)] lg:grid-cols-[58%_42%] lg:min-h-[calc(100dvh-2rem)]">
       <aside className="relative hidden min-w-0 overflow-hidden bg-[#edf6ff] lg:block dark:bg-surface-2">
         <img src="/login-showcase/creative-collage.png" alt={t('showcaseAlt')} width={1536} height={1024} className="absolute inset-0 size-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-[#edf6ff]/20 dark:from-black/5 dark:to-surface-2/20" />
         <div className="relative z-10 max-w-[440px] p-8 xl:p-12 dark:rounded-dialog dark:bg-surface/80 dark:backdrop-blur-sm">
           <LoginBrand t={t} />
-          <p className="mt-14 text-[38px] leading-[1.12] font-semibold tracking-tight text-hero-fg xl:text-[48px]">{t('hero')}</p>
+          <p className="mt-8 text-[38px] leading-[1.12] font-semibold tracking-tight text-hero-fg xl:text-[48px]">{t('hero')}</p>
           <p className="mt-2 text-[22px] leading-tight text-hero-fg xl:text-[28px]">{t('heroSecondary')}</p>
           <p className="mt-5 text-body leading-relaxed text-hero-muted">{t('heroBody')}</p>
           <p className="mt-1 text-caption text-hero-muted">{t('heroBodySecondary')}</p>
         </div>
       </aside>
-      <main className="flex min-w-0 flex-col bg-surface px-5 py-6 sm:px-10 lg:px-14 xl:px-20">
-        <header className="flex items-center justify-between gap-3">
+      <main className="flex min-w-0 flex-col bg-surface px-5 py-6 sm:px-10 lg:px-10 xl:px-14">
+        <header className="flex items-center justify-between gap-3 lg:justify-end">
           <div className="lg:hidden"><LoginBrand t={t} /></div>
           <LanguageSwitch />
         </header>
-        <div className="my-auto w-full max-w-[500px] self-center py-10">
+        <div className="my-auto w-full max-w-[440px] self-center py-10 lg:my-0 lg:py-0">
           <h1 className="text-[30px] font-semibold tracking-tight">{t('welcome')}</h1>
           <p className="mt-1 text-[21px] leading-tight text-fg-muted">{t('welcomeSecondary')}</p>
           <p className="mt-5 text-body text-fg-muted">{t('subtitle')}</p>
