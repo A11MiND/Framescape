@@ -16,6 +16,7 @@ go test ./...                           # full suite (many packages skip cleanly
 go test ./internal/interfaces/http/...  # one package
 go test ./internal/domain/prompt/... -run TestCompileVideoRefs_MutualExclusion -v  # one test
 go test -race ./...                     # do this before considering backend work done, not just a plain pass
+go run ./cmd/migrate -command=status    # inspect embedded migration state
 ```
 `make build` / `make run-api` / `make run-worker` / `make run-fakeprovider` / `make test-infra-up` / `make migrate` / `make test` / `make lint` wrap the equivalent `go`/`npm` commands — see the Makefile for the full list including Docker targets (`make docker-up` etc., using `deploy/docker-compose.yml`). `make test-infra-up` starts disposable MySQL/Redis/MinIO on 13316/16386/19000 (`deploy/docker-compose.test.yml`); point `MYSQL_DSN`/`REDIS_ADDR`/`MINIO_*` at them to run the DB-backed tests for real instead of skipping.
 
@@ -50,3 +51,5 @@ Local (non-Docker) dev runs two long-lived Go processes plus Vite: `go run ./cmd
 **Testing conventions**: DB/Redis-backed tests open a real connection and skip (`t.Skip`, not fail) when unreachable — see any `*_test.go` under `internal/application/*`, `internal/infra/orchestrator` or `internal/interfaces/http` for the pattern, including reserved fake user-ID ranges and `t.Cleanup`-based row deletion so repeated local runs don't accumulate data. Orchestrator tests drive execution with an in-memory dispatcher and a controllable clock (`harness_test.go`); HTTP tests use the real orchestrator with a recording dispatcher (`testEngine` in `server_test.go`). Tests never call real provider APIs — executor tests point real clients at `httptest.Server` fakes, and multi-process end-to-end/chaos runs use `cmd/fakeprovider`.
 
 **Migrations**: goose-based, sequential-numbered (`migrations/0000N_*.sql`), applied via `go run ./cmd/migrate` (embeds the SQL files, no `goose` CLI needed) — keep numbering contiguous if a migration is added then reverted before landing.
+
+For phase 7 local hardening, `go run ./cmd/migrate -command=down` rolls back one migration, `-command=down-to -version=N` rolls back to a disposable target, and `scripts/phase7-migration-roundtrip.sh` performs a guarded loopback rehearsal. `scripts/security-review.mjs` scans the tracked source for unsafe dynamic HTML/code and checks the auth/admin/CORS/JWT guards. `scripts/phase7-load.mjs` is a dependency-free read-path smoke test and refuses non-loopback URLs. The opt-in `FRAMESCAPE_LOAD_TEST=1` Go tests exercise 500 duplicate-delivery jobs and 1,000 SSE listeners against the disposable services.

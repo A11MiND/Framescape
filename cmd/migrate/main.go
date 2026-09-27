@@ -8,6 +8,7 @@ package main
 
 import (
 	"database/sql"
+	"flag"
 	"log"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -18,6 +19,10 @@ import (
 )
 
 func main() {
+	command := flag.String("command", "up", "migration action: up, down, down-to, redo, status, version")
+	version := flag.Int64("version", 0, "target version for down-to")
+	flag.Parse()
+
 	db, err := sql.Open("mysql", config.MySQLDSN())
 	if err != nil {
 		log.Fatalf("open mysql: %v", err)
@@ -28,8 +33,27 @@ func main() {
 	if err := goose.SetDialect("mysql"); err != nil {
 		log.Fatalf("set dialect: %v", err)
 	}
-	if err := goose.Up(db, "."); err != nil {
-		log.Fatalf("migrate up: %v", err)
+	switch *command {
+	case "up":
+		err = goose.Up(db, ".")
+	case "down":
+		err = goose.Down(db, ".")
+	case "down-to":
+		if *version < 0 {
+			log.Fatal("-version must be non-negative")
+		}
+		err = goose.DownTo(db, ".", *version)
+	case "redo":
+		err = goose.Redo(db, ".")
+	case "status":
+		err = goose.Status(db, ".")
+	case "version":
+		err = goose.Version(db, ".")
+	default:
+		log.Fatalf("unknown -command %q (want up, down, down-to, redo, status, version)", *command)
 	}
-	log.Println("migrations applied")
+	if err != nil {
+		log.Fatalf("migrate %s: %v", *command, err)
+	}
+	log.Printf("migration %s complete", *command)
 }

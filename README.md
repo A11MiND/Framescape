@@ -100,12 +100,19 @@ go build ./...                          # build everything
 go vet ./...
 go test ./...                           # full suite — DB/Redis tests skip cleanly if unreachable
 go test -race ./...                     # run before considering backend work done
+go run ./cmd/migrate -command=status    # inspect migration state
 
 cd web
 npm run build                           # tsc -b && vite build
 npm run lint                            # oxlint
 npm test                                # vitest
 ```
+
+Phase 7 local checks are kept dependency-free: `node scripts/security-review.mjs`,
+`./scripts/phase7-migration-roundtrip.sh`, and `node scripts/phase7-load.mjs`.
+The load script accepts only `localhost`/`127.0.0.1`; set `LOAD_URL` to a local
+API route. The opt-in `FRAMESCAPE_LOAD_TEST=1` Go tests cover the 500-job and
+1,000-SSE listener rehearsals against the disposable test services.
 
 `make build` / `make run-api` / `make run-worker` / `make run-fakeprovider` /
 `make migrate` / `make test` / `make lint` / `make docker-*` wrap the
