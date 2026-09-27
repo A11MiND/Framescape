@@ -23,7 +23,7 @@
 | 6 第一批 P15–P19 | P15/P16/P17/P19 已同意；P18 演示数据已在本地修正，外部复签仍待完成 | 用修正后的评审截图和提交号完成 P18 复签 |
 | 6 第二批 | P08、P20、P21 已实现并通过本地回归；P22 全局状态/移动主题检查已覆盖 | 产品评审仍待完成；逐页验收证据和剩余边界见阶段 7 |
 | 7 | 本地加固证据已完成；生产规模长压仍需运营环境另行执行 | 已保存安全、无障碍、故障注入、500 任务、1,000 SSE、迁移回滚证据；产品签收仍独立 |
-| 8 | 待本地合并；明确不部署 | 完成最终本地检查后把 redesign 分支合并到本地 `main`，不 push、不触发 Railway |
+| 8 | 已在本地完成快进合并；明确不部署 | `main` 与 `redesign/framescape-v2` 同步到 `6214bac`；不 push、不触发 Railway |
 
 评审记录：
 
@@ -118,5 +118,11 @@
 - `scripts/phase7-load.mjs` 对本地 API 300 请求/64 并发的 `/internal/health` p95 18.9ms、`/api/v1/capabilities` p95 22.1ms，0 失败。该结果是本机烟测，不是生产容量承诺。
 - `scripts/phase7-migration-roundtrip.sh` 已实际完成 1–26 升级、回滚、重放、回滚到 22、再次升级并自动清理临时库；`cmd/migrate` 新增 `down/down-to/redo/status/version`。
 - 详细边界和重复运行命令见根目录 `PHASE7-VALIDATION.md`。真实供应商请求、生产长压、Railway 行为仍未执行。
+
+## 阶段 8 本地合并结果（2026-09-27，Codex）
+
+- `redesign/framescape-v2` 已用 `git merge --ff-only` 快进合并到本地 `main`，当前两分支均指向 `6214bac`。
+- 合并前工作区只有既有未跟踪 `diagnostics/`；它没有被纳入提交。合并后 `git status` 仍只显示该目录。
+- 合并后没有 push、没有创建 PR、没有检查或触发 Railway 部署。Railway 切换仍留到产品明确安排上线窗口时处理。
 
 阶段 7 的本地验证记录见根目录 `PHASE7-VALIDATION.md`：安全扫描、无障碍烟审、403/21 race 回归、500 任务重复投递、1,000 SSE 扇出、loopback 读取负载和迁移回滚均已通过。剩余工作是 P18/阶段 6 产品签收、真实供应商和更长时间的容量曲线，以及阶段 8 的本地合并；当前用户要求先本地，因此不执行 Railway 检查、push 或部署。
