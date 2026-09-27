@@ -163,6 +163,7 @@ export function ReferencePicker({
               multiple={limits.max > 1}
               className="sr-only"
               tabIndex={-1}
+              aria-label={label}
               onChange={(e) => {
                 upload(e.target.files)
                 e.target.value = ''

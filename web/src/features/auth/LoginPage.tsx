@@ -164,19 +164,38 @@ export default function LoginPage() {
     setError(null)
   }
   return (
-    <div className="grid min-h-dvh bg-bg text-fg lg:grid-cols-[58%_42%]">
-      <aside aria-hidden className="relative hidden overflow-hidden bg-surface-2 lg:block">
-        <img src="/login-showcase/warrior-watercolor.jpg" alt="" className="absolute inset-0 size-full object-cover" />
-        <div className="absolute inset-0 bg-overlay" />
-        <div className="absolute inset-x-12 bottom-14 rounded-dialog bg-surface/95 p-8">
-          <Brand />
-          <p className="mt-5 text-[36px] leading-tight font-semibold">{t('hero')}</p>
-          <p className="mt-3 text-body text-fg-muted">{t('heroBody')}</p>
+    <div className="grid min-h-dvh bg-bg text-fg lg:grid-cols-2">
+      <aside className="hidden min-w-0 flex-col border-r border-border bg-surface-2 p-8 lg:flex xl:p-12">
+        <Brand />
+        <div className="my-auto w-full max-w-[680px] self-center py-10">
+          <p className="max-w-[540px] text-[36px] leading-tight font-semibold xl:text-[44px]">{t('hero')}</p>
+          <p className="mt-4 text-body text-fg-muted">{t('heroBody')}</p>
+          <figure className="mt-8">
+            <img
+              src="/login-showcase/community-comic.jpg"
+              alt={t('showcaseAlt')}
+              width={1536}
+              height={1024}
+              className="aspect-[3/2] w-full rounded-dialog object-contain"
+            />
+            <figcaption className="mt-3 flex flex-wrap justify-between gap-2 text-caption text-fg-muted">
+              <span>{t('showcaseTitle')}</span>
+              <span>{t('showcaseSource')}</span>
+            </figcaption>
+          </figure>
+          <div className="mt-6 flex items-center gap-4 border-t border-border pt-5">
+            <div aria-hidden className="flex shrink-0 gap-2">
+              {['character-girl.png', 'character-mascot.jpg', 'character-boy.png'].map((file) => (
+                <img key={file} src={`/login-showcase/${file}`} alt="" width={56} height={64} className="h-16 w-14 rounded-control bg-white object-contain p-1" />
+              ))}
+            </div>
+            <p className="text-caption leading-relaxed text-fg-muted">{t('referenceCaption')}</p>
+          </div>
         </div>
       </aside>
       <main className="flex min-w-0 flex-col px-5 py-6 sm:px-10">
         <header className="flex items-center justify-between gap-3">
-          <Brand />
+          <div className="lg:invisible"><Brand /></div>
           <LanguageSwitch />
         </header>
         <div className="my-auto w-full max-w-[420px] self-center py-10">

@@ -26,5 +26,9 @@
   "phoneError": "Enter a phone number including the country code.",
   "codeError": "Enter the six-digit verification code.",
   "required": "Enter your password.",
-  "passwordRule": "At least {{min}} characters and at most {{max}} bytes; some characters use multiple bytes."
+  "passwordRule": "At least {{min}} characters and at most {{max}} bytes; some characters use multiple bytes.",
+  "showcaseAlt": "A four-panel community comic: spot wasted energy, switch off unused lights, share energy-saving tips, and record actions.",
+  "showcaseTitle": "A greener community, together",
+  "showcaseSource": "GPT comic example",
+  "referenceCaption": "From character references to a four-panel story. Bring your ideas to life."
 }
