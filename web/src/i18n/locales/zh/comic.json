@@ -132,7 +132,8 @@
     "generated": "生成完成。对白和 Logo 图层已保留。请保存编辑稿。",
     "submitted": "已提交，等待生成。可以继续编辑对白。",
     "pageImported": "已导入底图。它来自你上传的图片，不是模型生成的。",
-    "deleted": "编辑稿已删除。"
+    "deleted": "编辑稿已删除。",
+    "referencesUploaded": "参考图已上传并添加。请保存编辑稿，将修改保存到账户。"
   },
   "error": {
     "backupFull": "浏览器备份空间不足，请点击「保存编辑稿」保存到服务器。",
@@ -160,7 +161,9 @@
     "exportFailed": "无法导出图片",
     "exportBlocked": "图片跨域设置阻止导出，请检查存储服务 CORS。",
     "fontFailed": "字体加载失败，请重试后再导出。",
-    "invalidDocument": "编辑稿格式无效、版本不支持或内容超出限制。"
+    "invalidDocument": "编辑稿格式无效、版本不支持或内容超出限制。",
+    "saveFailed": "编辑稿未能保存到账户。请保留当前页面并重试保存。",
+    "invalidDraft": "这不是有效的 JSON 编辑稿。添加图片请使用「添加 Logo」「导入底图」或参考图上传。"
   },
   "steps": {
     "label": "漫画步骤",

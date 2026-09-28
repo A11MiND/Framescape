@@ -68,6 +68,7 @@ export function ReferencePicker({
   label,
   kind = 'image',
   required,
+  onUploadSuccess,
 }: {
   value: string[]
   onChange: (ids: string[]) => void
@@ -75,6 +76,7 @@ export function ReferencePicker({
   label: string
   kind?: ReferenceKind
   required?: boolean
+  onUploadSuccess?: () => void
 }) {
   const { t } = useTranslation('create')
   const toast = useToast()
@@ -84,10 +86,10 @@ export function ReferencePicker({
   const [uploading, setUploading] = useState(false)
   const library = useQuery({ queryKey: ['assets', 'reference-picker', kind], queryFn: () => createApi.recentAssets(kind, 60), enabled: picking })
   const room = limits.max - value.length
-  const fmtList = (limits.formats ?? []).map((f) => f.replace(/^[a-z]+\//, '').toUpperCase()).join(t('ui:listSeparator'))
+  const fmtList = (limits.formats ?? DEFAULT_ACCEPT[kind]).map((f) => f.replace(/^[a-z]+\//, '').toUpperCase()).join(t('ui:listSeparator'))
 
   const allowed = (mime: string, size: number) => {
-    if (limits.formats && !limits.formats.includes(mime)) return t('reference.format', { formats: fmtList })
+    if (!(limits.formats ?? DEFAULT_ACCEPT[kind]).includes(mime)) return t('reference.format', { formats: fmtList })
     if (limits.maxBytes && size > limits.maxBytes) return t('reference.tooLarge', { mb: Math.floor(limits.maxBytes / (1 << 20)) })
     return null
   }
@@ -111,7 +113,10 @@ export function ReferencePicker({
       }
     }
     setUploading(false)
-    if (added.length) onChange([...value, ...added])
+    if (added.length) {
+      onChange([...value, ...added])
+      onUploadSuccess?.()
+    }
   }
 
   return (

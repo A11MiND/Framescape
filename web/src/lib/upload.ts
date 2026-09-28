@@ -1,5 +1,6 @@
 import { api, type AssetResponse } from './api'
 import { ApiError } from './api/client'
+import { uploadStage } from './uploadError'
 
 // Reads intrinsic width/height (and duration for video) from a File
 // entirely client-side — the one piece of metadata the server genuinely
@@ -36,15 +37,15 @@ function readMediaMeta(file: File): Promise<{ width: number; height: number; dur
 // one client-supplied upload affordance in the app; AssetPicker calls this
 // so every picker that embeds it gets upload for free.
 export async function uploadAsset(file: File): Promise<AssetResponse> {
-  const { biz_id, upload_url, storage_key } = await api.getUploadURL(file.name, file.type || 'application/octet-stream')
-  await api.uploadToPresignedURL(upload_url, file)
+  const { biz_id, upload_url, storage_key } = await uploadStage('prepare', () => api.getUploadURL(file.name, file.type || 'application/octet-stream'))
+  await uploadStage('transfer', () => api.uploadToPresignedURL(upload_url, file))
   const meta = await readMediaMeta(file)
-  return api.completeAsset(biz_id, {
+  return uploadStage('confirm', () => api.completeAsset(biz_id, {
     storage_key,
     width: meta.width,
     height: meta.height,
     duration_ms: meta.durationMs,
-  })
+  }))
 }
 
 function putWithProgress(url: string, file: File, onProgress: (fraction: number) => void, signal?: AbortSignal): Promise<void> {
@@ -63,8 +64,8 @@ function putWithProgress(url: string, file: File, onProgress: (fraction: number)
 
 /** uploadAsset with the bytes-sent fraction reported as it goes; aborting cancels the transfer. */
 export async function uploadAssetWithProgress(file: File, onProgress: (fraction: number) => void, signal?: AbortSignal): Promise<AssetResponse> {
-  const { biz_id, upload_url, storage_key } = await api.getUploadURL(file.name, file.type || 'application/octet-stream')
-  await putWithProgress(upload_url, file, onProgress, signal)
+  const { biz_id, upload_url, storage_key } = await uploadStage('prepare', () => api.getUploadURL(file.name, file.type || 'application/octet-stream'))
+  await uploadStage('transfer', () => putWithProgress(upload_url, file, onProgress, signal))
   const meta = await readMediaMeta(file)
-  return api.completeAsset(biz_id, { storage_key, width: meta.width, height: meta.height, duration_ms: meta.durationMs })
+  return uploadStage('confirm', () => api.completeAsset(biz_id, { storage_key, width: meta.width, height: meta.height, duration_ms: meta.durationMs }))
 }

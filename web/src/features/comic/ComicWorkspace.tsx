@@ -107,7 +107,7 @@ export default function ComicWorkspace() {
   const ai: AiState = !me.data || !caps.data ? 'loading' : !hasOpenAIImage(me.data) ? 'beta' : !comic?.openai_enabled ? 'unconfigured' : 'ready'
   const storageKey = userId ? `aigc.comic-draft.${userId}` : null
 
-  const run = useCallback(async (action: () => Promise<void>) => {
+  const run = useCallback(async (action: () => Promise<void>, fallback = 'generic') => {
     if (inFlight.current) return
     inFlight.current = true
     setBusy(true)
@@ -122,7 +122,7 @@ export default function ComicWorkspace() {
         } catch (e) {
           setError(comicErrorText(t, e))
         }
-      } else setError(comicErrorText(t, err))
+      } else setError(comicErrorText(t, err, fallback))
     } finally {
       inFlight.current = false
       setBusy(false)
@@ -266,7 +266,7 @@ export default function ComicWorkspace() {
     />
   )
   const references = (
-    <ReferencePanel doc={doc} limits={limits} formats={openai?.reference_formats ?? COMIC_IMAGE_MIMES} maxBytes={openai?.max_reference_bytes} onChange={(d) => change(d)} disabled={busy || pending} />
+    <ReferencePanel onUploadSuccess={() => { setError(''); setMessage(t('done.referencesUploaded')) }} doc={doc} limits={limits} formats={openai?.reference_formats ?? COMIC_IMAGE_MIMES} maxBytes={openai?.max_reference_bytes} onChange={(d) => change(d)} disabled={busy || pending} />
   )
   const left =
     step === 'story' ? (
@@ -330,7 +330,7 @@ export default function ComicWorkspace() {
             <Button disabled={busy} onClick={() => void run(async () => {
               await draft.persist()
               setMessage(t('done.saved'))
-            })}>
+            }, 'saveFailed')}>
               {t('toolbar.save')}
             </Button>
             <Button variant="primary" disabled={busy || !doc.page_asset_id} onClick={() => void exportPng()}>
@@ -343,7 +343,7 @@ export default function ComicWorkspace() {
                 { key: 'copy', label: t('toolbar.saveCopy'), onSelect: () => void run(async () => {
                   await draft.saveCopy()
                   setMessage(t('done.copySaved'))
-                }), disabled: busy },
+                }, 'saveFailed'), disabled: busy },
                 { key: 'backup', label: t('toolbar.backup'), onSelect: () => download(new Blob([JSON.stringify(draft.live.current, null, 2)], { type: 'application/json' }), 'comic-editable.json') },
                 { key: 'import', label: t('toolbar.import'), onSelect: () => importInput.current?.click(), disabled: busy || pending },
                 { key: 'delete', label: t('header.delete'), danger: true, onSelect: () => setPendingAction({ kind: 'delete' }), disabled: busy || !draft.savedId },
@@ -362,7 +362,9 @@ export default function ComicWorkspace() {
                 if (file)
                   void run(async () => {
                     if (file.size > 2 * 1024 * 1024) throw new ComicError('draftFile')
-                    guard({ kind: 'import', doc: parseComicDocument(JSON.parse(await file.text())) })
+                    let value: unknown
+                    try { value = JSON.parse(await file.text()) } catch { throw new ComicError('invalidDraft') }
+                    guard({ kind: 'import', doc: parseComicDocument(value) })
                   })
               }}
             />

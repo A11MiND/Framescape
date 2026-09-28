@@ -93,5 +93,16 @@
     "worker_lost": "The step was interrupted and is being retried."
   },
   "unknown": "Something unexpected happened. Try again shortly.",
-  "network": "The network connection failed. Check it and try again."
+  "network": "The network connection failed. Check it and try again.",
+  "upload": {
+    "prepare": "Could not get an upload address. {{reason}}",
+    "transfer": "File transfer failed. {{reason}}",
+    "confirm": "The file was transferred, but adding it to your library failed. {{reason}}",
+    "tooLarge": "The storage service rejected the file size. Choose a smaller file.",
+    "format": "The storage service rejected this format. Choose a supported file.",
+    "denied": "Upload permission was rejected or has expired. Select the file again to retry.",
+    "storage": "The storage service returned HTTP {{status}}. Try again shortly.",
+    "timeout": "The request timed out. Check your connection and retry.",
+    "cancelled": "The operation was cancelled. Select the file again to retry."
+  }
 }

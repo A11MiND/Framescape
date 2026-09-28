@@ -1,5 +1,6 @@
 import type { TFunction } from 'i18next'
 import { ApiError } from './api/client'
+import { UploadError } from './uploadError'
 
 function params(raw: Record<string, unknown>, sep: string): Record<string, string | number> {
   const out: Record<string, string | number> = {}
@@ -15,6 +16,19 @@ function params(raw: Record<string, unknown>, sep: string): Record<string, strin
  * the server's English message is never shown.
  */
 export function errorText(t: TFunction, err: unknown): string {
+  if (err instanceof UploadError) {
+    const cause = err.cause
+    let reason: string
+    if (cause instanceof TypeError || (cause instanceof ApiError && cause.status === 0)) reason = t('codes:network')
+    else if (cause instanceof DOMException && cause.name === 'TimeoutError') reason = t('codes:upload.timeout')
+    else if (cause instanceof ApiError && cause.code === 'upload_failed') {
+      const key = cause.status === 413 ? 'tooLarge' : cause.status === 415 ? 'format' : cause.status === 401 || cause.status === 403 ? 'denied' : 'storage'
+      reason = t(`codes:upload.${key}`, { status: cause.status })
+    } else reason = errorText(t, cause)
+    return t(`codes:upload.${err.stage}`, { reason })
+  }
+  if (err instanceof DOMException && err.name === 'AbortError') return t('codes:upload.cancelled')
+  if (err instanceof DOMException && err.name === 'TimeoutError') return t('codes:upload.timeout')
   if (err instanceof ApiError) {
     const key = `codes:api.${err.code}`
     const text = t(key, params(err.params, t('ui:listSeparator')))

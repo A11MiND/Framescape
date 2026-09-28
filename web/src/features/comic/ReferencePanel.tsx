@@ -10,11 +10,12 @@ interface Props {
   formats?: string[]
   maxBytes?: number
   onChange: (doc: ComicDocument) => void
+  onUploadSuccess?: () => void
   disabled: boolean
 }
 
 /** Character and style references, each with what it is for. */
-export function ReferencePanel({ doc, limits, formats, maxBytes, onChange, disabled }: Props) {
+export function ReferencePanel({ doc, limits, formats, maxBytes, onChange, onUploadSuccess, disabled }: Props) {
   const { t } = useTranslation('comic')
   const ids = doc.references.map((r) => r.asset_id)
   return (
@@ -24,6 +25,7 @@ export function ReferencePanel({ doc, limits, formats, maxBytes, onChange, disab
       </h2>
       <fieldset disabled={disabled} className="contents">
         <ReferencePicker
+          onUploadSuccess={onUploadSuccess}
           label={t('inputs.referencesPick')}
           value={ids}
           limits={{ max: limits.references, formats, maxBytes }}

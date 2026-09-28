@@ -132,7 +132,8 @@
     "generated": "Generation finished. Dialogue and logo layers were kept. Save the draft.",
     "submitted": "Submitted. You can keep editing dialogue while it generates.",
     "pageImported": "Page imported. It comes from your upload, not from the model.",
-    "deleted": "Draft deleted."
+    "deleted": "Draft deleted.",
+    "referencesUploaded": "Reference images uploaded and added. Save the draft to keep these changes in your account."
   },
   "error": {
     "backupFull": "Browser storage is full; save the draft to the server.",
@@ -160,7 +161,9 @@
     "exportFailed": "The image could not be exported",
     "exportBlocked": "Storage CORS settings block the export; check the storage service.",
     "fontFailed": "The font failed to load; try again before exporting.",
-    "invalidDocument": "The draft is invalid, from an unsupported version, or over the limits."
+    "invalidDocument": "The draft is invalid, from an unsupported version, or over the limits.",
+    "saveFailed": "The draft could not be saved to your account. Keep this page open and retry saving.",
+    "invalidDraft": "This is not a valid JSON draft. To add an image, use Add logo, Import page or the reference-image upload."
   },
   "steps": {
     "label": "Comic steps",

@@ -5,7 +5,7 @@ import { newComic } from '../../src/lib/comicDocument'
 async function setup(page: Page, { comicAI = true, lang = 'zh' } = {}) {
   const document = newComic(); document.title = '港燈 ESG 漫画'; document.brief = '清新扁平插画，阿健是工程师，小智是机器人。四格故事。'; document.page_asset_id = 'page-original'
   let saved = { biz_id: 'draft-one', version: 1, document }
-  const state = { conflict: false, finished: false, jobRequests: [] as Record<string, unknown>[], assetUploads: 0, lastSaved: null as Record<string, unknown> | null }
+  const state = { conflict: false, saveFailed: false, finished: false, jobRequests: [] as Record<string, unknown>[], assetUploads: 0, lastSaved: null as Record<string, unknown> | null }
   await page.addInitScript((l) => {
     localStorage.setItem('aigc.auth', JSON.stringify({ accessToken: 'test-token', refreshToken: 'test-refresh' }))
     localStorage.setItem('aigc.lang', l)
@@ -20,6 +20,7 @@ async function setup(page: Page, { comicAI = true, lang = 'zh' } = {}) {
     if (path === '/capabilities') return send({ image: { max_n: 9, max_prompt_chars: 1500 }, comic: { openai_enabled: true, model: 'gpt-image-2.5-flare' }, video: { resolutions: [], ratios: [] } })
     if (path === '/comics' && req.method() === 'GET') return send({ comics: [{ biz_id: saved.biz_id, title: saved.document.title, version: saved.version }] })
     if (path.startsWith('/comics') && req.method() !== 'GET') {
+      if (state.saveFailed) return send({ code: 'internal', message: 'save failed' }, 500)
       if (state.conflict) return send({ code: 'version_conflict', message: '编辑稿已在其他窗口更新，请重新载入或保存副本。' }, 409)
       const body = req.postDataJSON(); state.lastSaved = body.document; saved = { ...saved, version: saved.version + 1, document: body.document }; return send(saved)
     }
@@ -230,6 +231,23 @@ test('PDF text import retains page provenance; empty PDF requests OCR', async ({
   await page.getByLabel('导入背景资料', { exact: true }).setInputFiles({ name: 'scanned.pdf', mimeType: 'application/pdf', buffer: pdfFixture('') })
   await expect(page.getByRole('alert')).toContainText('OCR', { timeout: 15_000 })
   await expect(page.getByLabel('背景原文', { exact: true })).toHaveValue(/Green energy/)
+})
+
+test('reference upload clears a previous error and explains transfer failures', async ({ page }) => {
+  const state = await setup(page)
+  state.saveFailed = true
+  await page.getByRole('button', { name: '保存编辑稿', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('编辑稿未能保存到账户')
+  state.saveFailed = false
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64')
+  await page.getByLabel('添加参考图', { exact: true }).setInputFiles({ name: 'reference.png', mimeType: 'image/png', buffer: png })
+  await expect(page.getByText('参考图已上传并添加')).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await page.unroute('**/mock-upload')
+  await page.route('**/mock-upload', route => route.fulfill({ status: 415, body: 'unsupported' }))
+  await page.getByLabel('添加参考图', { exact: true }).setInputFiles({ name: 'bad.png', mimeType: 'image/png', buffer: png })
+  await expect(page.getByRole('status').filter({ hasText: '文件传输失败' })).toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: '格式' })).toBeVisible()
 })
 
 test('a logo is an independent layer, not a character reference; an imported page is labelled as imported', async ({ page }) => {
