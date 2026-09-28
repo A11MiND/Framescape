@@ -1,129 +1,144 @@
-# Framescape (帧境)
+# Framescape 帧境
 
-An AIGC content-generation platform for image and video, built on MiniMax,
-OpenAI and Gemini generation APIs. Users compose structured prompts and
-reference material into generation jobs — from a single image to a
-multi-shot video sequence with a preview review step — and every generated
-result is stored as a reusable asset.
+[![CI](https://github.com/A11MiND/Framescape/actions/workflows/ci.yml/badge.svg)](https://github.com/A11MiND/Framescape/actions/workflows/ci.yml) · [![Open demo](https://img.shields.io/badge/demo-framescape.up.railway.app-6d4aff)](https://framescape.up.railway.app)
 
-[![CI](https://github.com/A11MiND/Framescape/actions/workflows/ci.yml/badge.svg)](https://github.com/A11MiND/Framescape/actions/workflows/ci.yml)
+Framescape is an AI creation workspace for images, comics, and video. Turn a
+structured idea, reference images, and reusable characters into generation
+jobs that can be reviewed, edited, exported, and reused as new assets.
 
-## Generation modes
+帧境是一个图片、漫画和视频创作工作台。用户可以把故事、参考图和角色
+组合成任务，逐步审核、编辑、导出，并把结果保存为可复用素材。
 
-- `image.single` / `image.batch` — one prompt, one or more images
-- `image.comic4` — a 4-panel comic composed into a single image
-- `image.sequence` — a multi-shot image sequence with cross-shot continuity
-- `video.single` — text/image-to-video, with first/last-frame reference modes
-- `video.sequence` — a multi-shot video, with a preview/finalize gate between
-  each shot to control cost
+## See it in action / 快速预览
 
-## Architecture
+The repository includes a small, self-contained demo so the project page can
+be viewed without a separate asset host.
 
-Two horizontally scalable Go processes plus a React frontend. Neither holds
-job state in memory; any instance can be stopped or killed at any time.
+仓库内置了演示素材，打开 GitHub 项目即可查看，不需要额外的素材服务器。
 
-- **`cmd/api`** — Gin HTTP layer: auth, validation, pricing quotes, job
-  creation (job row, credit reservation and plan in one transaction), reads,
-  and a per-user SSE event stream.
-- **`cmd/worker`** — runs job nodes from asynq queues (`interactive`,
-  `video`, `media`, `system`, each with its own pool), sweeps for work a
-  crash or lost message left behind, and runs maintenance.
+![Four-panel comic workflow result](web/src/demo/assets/comic-page.jpg)
 
-Execution state lives in MySQL (`job_nodes`); every transition is a
-compare-and-set, so duplicated or lost queue messages are harmless. Remote
-provider tasks (video) are submitted once and polled from short tasks, so
-waiting never occupies a worker slot and a worker restart never resubmits
-a paid task. See `internal/infra/orchestrator`.
+**Video demo / 视频演示:** [▶ Open the MP4 demo](web/src/demo/assets/clip-1.mp4)
 
+The deployed review environment is available at
+[framescape.up.railway.app](https://framescape.up.railway.app). Use the local
+setup below for development and provider tests.
+
+## What you can make / 支持的创作模式
+
+| Mode | Description | 模式说明 |
+| --- | --- | --- |
+| `image.single` / `image.batch` | One prompt, one or up to four images | 单图或批量出图 |
+| `image.comic4` | Four-panel comic with characters, dialogue, and logo references | 四格漫画，支持角色、对白和 Logo 参考图 |
+| `image.sequence` | A multi-shot image sequence with continuity controls | 连续图片，支持跨镜头一致性 |
+| `video.single` | Text/image-to-video, including first/last-frame references | 单段视频，支持首尾帧 |
+| `video.sequence` | Multi-shot video with preview and finalize gates | 连续视频，分镜预览后再生成 |
+
+Every job reserves credits before submission, reports progress through SSE, and
+stores generated results as reusable assets. Provider errors are normalized
+into stable error codes so the UI can show translated, actionable messages.
+
+## Architecture / 架构
+
+```mermaid
+flowchart LR
+  UI[React + Vite] --> API[Go API]
+  API --> DB[(MySQL)]
+  API --> Queue[(Redis / Asynq)]
+  Queue --> Worker[Go workers]
+  Worker --> Providers[MiniMax · OpenAI · Gemini]
+  Worker --> Store[(S3 / MinIO)]
+  API -. SSE progress .-> UI
 ```
-internal/
-  domain/         — plan and status types, capability limits, prompt compilation
-  application/    — job lifecycle (jobsvc), plan builders (workflows),
-                    credits, community, review, upkeep
-  infra/          — orchestrator, realtime fan-out, persistence, executors
-                    (MiniMax/OpenAI/Gemini/local/mock), storage, cache
-  interfaces/http — Gin handlers
-```
 
-`cmd/fakeprovider` imitates MiniMax and OpenAI (configurable latency, errors
-and rate limits) for local end-to-end and load testing without paid calls.
+The API and workers are stateless and can be scaled horizontally. MySQL is the
+source of truth for job state and credit reservations; a worker restart does
+not resubmit a paid provider task. The `cmd/fakeprovider` service reproduces
+provider latency, errors, and rate limits for local end-to-end testing without
+paid calls.
 
-## Tech stack
+## Run locally / 本地运行
 
-Go 1.25 · Gin · GORM · MySQL 8 · Redis 7 · asynq · MinIO · goose migrations ·
-React 19 · TypeScript · Vite · TanStack Query · Tailwind v4
-
-## Getting started
-
-### Docker Compose (fastest path)
+### Full stack with Docker Compose
 
 ```bash
-cp .env.example .env   # fill in the REQUIRED values, see comments in the file
+cp .env.example .env
+# Fill in the required values in .env.
 docker compose -f deploy/docker-compose.yml --env-file .env up -d --build
 ```
 
-This builds and runs the full stack — MySQL, Redis, MinIO, `api`,
-`worker`, and an nginx-fronted build of the frontend — behind a
-single public port (`:80`). See [`deploy/docker-compose.yml`](deploy/docker-compose.yml).
+This starts MySQL, Redis, S3-compatible object storage, the API, workers, and
+the nginx-fronted frontend on port 80.
 
-### Local development
-
-Three long-lived processes: two Go binaries plus the Vite dev server. Run as
-many api/worker instances as you like.
+### Development processes
 
 ```bash
-set -a && source .env && set +a   # go run does NOT load .env on its own
+set -a && source .env && set +a
 
 go run ./cmd/api
 go run ./cmd/worker
 
-cd web && npm install && npm run dev
+cd web
+npm install
+npm run dev
 ```
 
-Without real provider keys, run `make run-fakeprovider` and point
-`MINIMAX_BASE_URL=http://127.0.0.1:18090` and
-`OPENAI_BASE_URL=http://127.0.0.1:18090/v1` at it; the real executors then run
-end to end at no cost. `make test-infra-up` starts disposable
-MySQL/Redis/MinIO for tests.
+For a no-cost provider run, start the fake provider and point
+`MINIMAX_BASE_URL` and `OPENAI_BASE_URL` at `http://127.0.0.1:18090` as shown in
+[`.env.example`](.env.example). `make test-infra-up` starts disposable
+MySQL, Redis, and MinIO services for backend tests.
 
-## Configuration
+## Configuration / 配置
 
-Copy `.env.example` → `.env` (and `web/.env.example` → `web/.env`) and fill
-in the values marked `REQUIRED`. Every variable is documented inline —
-MySQL/Redis/MinIO connection info, `JWT_SECRET`, the MiniMax API key, and
-optional login providers (Google OAuth, phone/email codes).
+Copy `.env.example` to `.env` and `web/.env.example` to `web/.env`. Required
+values include the MySQL and Redis connections, `JWT_SECRET`, object-storage
+credentials, and provider keys. Optional Google OAuth and phone/email login
+variables are documented inline in the example files.
 
-## Commands
+Never commit `.env`, provider keys, or generated diagnostic output.
+
+## Test and build / 测试与构建
 
 ```bash
-go build ./...                          # build everything
+go build ./...
 go vet ./...
-go test ./...                           # full suite — DB/Redis tests skip cleanly if unreachable
-go test -race ./...                     # run before considering backend work done
-go run ./cmd/migrate -command=status    # inspect migration state
+go test -race ./...
 
 cd web
-npm run build                           # tsc -b && vite build
-npm run lint                            # oxlint
-npm test                                # vitest
+npm run lint
+npm run build
+npm test
 ```
 
-Phase 7 local checks are kept dependency-free: `node scripts/security-review.mjs`,
-`./scripts/phase7-migration-roundtrip.sh`, and `node scripts/phase7-load.mjs`.
-The load script accepts only `localhost`/`127.0.0.1`; set `LOAD_URL` to a local
-API route. The opt-in `FRAMESCAPE_LOAD_TEST=1` Go tests cover the 500-job and
-1,000-SSE listener rehearsals against the disposable test services.
+The GitHub Actions workflow runs the backend and frontend checks on every push
+to `main` and on pull requests. The backend CI uses a pinned, community
+LocalStack S3 image so tests do not depend on a withdrawn MinIO image or a
+private registry license.
 
-`make build` / `make run-api` / `make run-worker` / `make run-fakeprovider` /
-`make migrate` / `make test` / `make lint` / `make docker-*` wrap the
-equivalent commands — see the [`Makefile`](Makefile).
+Phase 7 local checks are also available:
 
-## Project layout
+```bash
+node scripts/security-review.mjs
+./scripts/phase7-migration-roundtrip.sh
+node scripts/phase7-load.mjs
+```
 
-| Path | What lives there |
-|---|---|
-| `cmd/` | Entry points: api, worker, migrate, cli, fakeprovider (dev/test) |
-| `internal/` | All business logic, layered as above |
-| `web/` | React + TypeScript frontend |
-| `migrations/` | goose SQL migrations |
-| `deploy/` | Dockerfile, docker-compose.yml, nginx config, Prometheus/Grafana |
+## Repository map / 目录
+
+| Path | Contents |
+| --- | --- |
+| `cmd/` | API, worker, migration, CLI, and fake-provider entry points |
+| `internal/domain/` | Plans, statuses, capabilities, and prompt compilation |
+| `internal/application/` | Jobs, workflows, credits, community, and upkeep |
+| `internal/infra/` | Orchestration, persistence, providers, storage, and cache |
+| `internal/interfaces/http/` | Gin handlers, auth, SSE, and API errors |
+| `web/` | React + TypeScript frontend and demo assets |
+| `migrations/` | Goose database migrations |
+| `deploy/` | Dockerfiles, Compose, nginx, and observability configuration |
+
+## License and status / 状态
+
+Framescape is under active development. Check the commit history and CI badge
+before deploying a branch. Production deployment is intentionally separate from
+local development; verify environment variables and storage persistence before
+promoting a release.

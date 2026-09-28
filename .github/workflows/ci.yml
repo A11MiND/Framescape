@@ -55,11 +55,13 @@ jobs:
       # Start a public S3-compatible service. Docker Hub withdrew the
       # minio/minio image; LocalStack's S3 endpoint exercises the same
       # bucket, policy, PUT, HEAD and presign paths used by the app.
+      # Pin the last community image: `latest` now requires a LocalStack
+      # Pro license and exits before exposing the health endpoint.
       - name: Start S3 test service
         run: |
           docker run -d --name localstack -p 4566:4566 \
             -e SERVICES=s3 -e AWS_DEFAULT_REGION=us-east-1 \
-            localstack/localstack:latest
+            localstack/localstack:3.8.1
           for i in $(seq 1 60); do
             curl -sf http://127.0.0.1:4566/_localstack/health && exit 0
             sleep 1
