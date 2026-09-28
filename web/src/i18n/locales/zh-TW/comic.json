@@ -115,6 +115,7 @@
     "imagesPending" : "仍有圖片未加載，暫時不能導出。",
     "invalidDocument" : "編輯稿格式無效、版本不支持或內容超出限制。",
     "saveFailed": "編輯稿未能儲存至帳戶。請保留目前頁面並重試儲存。",
+    "pdfReadFailed": "瀏覽器無法讀取此 PDF。請使用帶文字層的 PDF，或先進行 OCR 後再匯入。",
     "invalidDraft": "這不是有效的 JSON 編輯稿。添加圖片請使用「添加 Logo」「匯入底圖」或參考圖上傳。",
     "noCanvas" : "瀏覽器不支持畫布",
     "noImage" : "生成完成但找不到圖片，請打開任務詳情檢查。",

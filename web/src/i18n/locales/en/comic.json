@@ -163,6 +163,7 @@
     "fontFailed": "The font failed to load; try again before exporting.",
     "invalidDocument": "The draft is invalid, from an unsupported version, or over the limits.",
     "saveFailed": "The draft could not be saved to your account. Keep this page open and retry saving.",
+    "pdfReadFailed": "The PDF could not be read in this browser. Try a PDF with a text layer, or run OCR before importing.",
     "invalidDraft": "This is not a valid JSON draft. To add an image, use Add logo, Import page or the reference-image upload."
   },
   "steps": {

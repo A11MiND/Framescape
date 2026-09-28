@@ -6,10 +6,18 @@ export async function importComicSource(file: File, pageLabel: (page: number) =>
   if (file.size > 20 * 1024 * 1024) throw new ComicError('fileTooLarge', { mb: 20 })
   let text: string
   if (/\.pdf$/i.test(file.name)) {
-    const pdfjs = await import('pdfjs-dist')
-    pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
-    const task = pdfjs.getDocument({ data: await file.arrayBuffer() })
+    type PdfTask = {
+      promise: Promise<{
+        numPages: number
+        getPage: (page: number) => Promise<{ getTextContent: () => Promise<{ items: Array<{ str?: string; hasEOL?: boolean }> }> }>
+      }>
+      destroy: () => Promise<void>
+    }
+    let task: PdfTask | undefined
     try {
+      const pdfjs = await import('pdfjs-dist')
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
+      task = pdfjs.getDocument({ data: await file.arrayBuffer() }) as unknown as PdfTask
       const pdf = await task.promise
       if (pdf.numPages > 300) throw new ComicError('pdfTooManyPages', { max: 300 })
       const pages: string[] = []; const bodies: string[] = []; let length = 0
@@ -24,7 +32,12 @@ export async function importComicSource(file: File, pageLabel: (page: number) =>
       }
       if (bodies.every(body => body.trim().length < 10)) throw new ComicError('scannedPdf')
       text = pages.join('\n\n')
-    } finally { await task.destroy() }
+    } catch (err) {
+      if (err instanceof ComicError) throw err
+      throw new ComicError('pdfReadFailed')
+    } finally {
+      if (task) await task.destroy()
+    }
   } else if (/\.(txt|md)$/i.test(file.name)) text = await file.text()
   else throw new ComicError('unsupportedFile')
   if (charCount(text) > BACKGROUND_LIMIT) throw new ComicError('textTooLong', { max: BACKGROUND_LIMIT })

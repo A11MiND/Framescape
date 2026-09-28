@@ -67,6 +67,13 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
+    # PDF.js ships its worker as an ES module. nginx:alpine does not map
+    # .mjs by default, so an omitted MIME would make Chrome reject the worker.
+    location ~* \.mjs$ {
+        default_type application/javascript;
+        try_files $uri =404;
+    }
+
     location / {
         try_files $uri /index.html;
     }

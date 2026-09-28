@@ -163,6 +163,7 @@
     "fontFailed": "字体加载失败，请重试后再导出。",
     "invalidDocument": "编辑稿格式无效、版本不支持或内容超出限制。",
     "saveFailed": "编辑稿未能保存到账户。请保留当前页面并重试保存。",
+    "pdfReadFailed": "浏览器无法读取此 PDF。请使用带文字层的 PDF，或先进行 OCR 后再导入。",
     "invalidDraft": "这不是有效的 JSON 编辑稿。添加图片请使用「添加 Logo」「导入底图」或参考图上传。"
   },
   "steps": {
