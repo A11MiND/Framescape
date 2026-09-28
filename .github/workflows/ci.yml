@@ -38,36 +38,33 @@ jobs:
     env:
       MYSQL_DSN: "root:root@tcp(127.0.0.1:3306)/aigc?parseTime=true&loc=UTC&charset=utf8mb4"
       REDIS_ADDR: "127.0.0.1:6379"
-      # Matches internal/pkg/config's own MinIO defaults exactly (same
-      # reasoning as the mysql/redis env above) — set explicitly rather
-      # than relied on implicitly.
-      MINIO_ENDPOINT: "127.0.0.1:9000"
+      # LocalStack exposes the same S3 API used by internal/infra/storage.
+      # The old minio/minio Docker Hub image was withdrawn, so the CI
+      # service uses a maintained public S3-compatible image instead.
+      MINIO_ENDPOINT: "127.0.0.1:4566"
       MINIO_ACCESS_KEY: "minioadmin"
       MINIO_SECRET_KEY: "minioadmin"
       MINIO_USE_SSL: "false"
       MINIO_BUCKET: "aigc-assets"
-      MINIO_PUBLIC_BASE_URL: "http://127.0.0.1:9000/aigc-assets"
+      MINIO_PUBLIC_BASE_URL: "http://127.0.0.1:4566/aigc-assets"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      # MinIO isn't started via jobs.<id>.services — that block has no way
-      # to override a service image's CMD, and minio/minio's default
-      # ENTRYPOINT needs "server /data" args to actually boot as a server
-      # (see deploy/Dockerfile.minio's own doc on this same limitation).
-      # ubuntu-latest ships Docker Engine already, so a plain `docker run`
-      # step has full control over that where the services: block doesn't.
-      - name: Start MinIO
+      # Start a public S3-compatible service. Docker Hub withdrew the
+      # minio/minio image; LocalStack's S3 endpoint exercises the same
+      # bucket, policy, PUT, HEAD and presign paths used by the app.
+      - name: Start S3 test service
         run: |
-          docker run -d --name minio -p 9000:9000 \
-            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-            minio/minio server /data
-          for i in $(seq 1 30); do
-            curl -sf http://127.0.0.1:9000/minio/health/live && exit 0
+          docker run -d --name localstack -p 4566:4566 \
+            -e SERVICES=s3 -e AWS_DEFAULT_REGION=us-east-1 \
+            localstack/localstack:latest
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:4566/_localstack/health && exit 0
             sleep 1
           done
-          echo "MinIO did not become healthy in time" >&2
+          echo "S3 test service did not become healthy in time" >&2
           exit 1
       - run: go build ./...
       - run: go vet ./...
