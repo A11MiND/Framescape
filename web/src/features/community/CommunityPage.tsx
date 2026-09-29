@@ -14,8 +14,26 @@ import { useToast } from '../../components/Toast'
 import { StreakPanel } from './StreakPanel'
 import { WorkViewer } from './WorkViewer'
 import { useStreak, workTitle } from './helpers'
+import tramHero from '../../demo/assets/tram-hero.jpg'
+import comicPage from '../../demo/assets/comic-page.jpg'
+import clip1 from '../../demo/assets/clip-1.mp4'
+import cat from '../../demo/assets/cat.jpg'
+import alpine from '../../demo/assets/alpine.jpg'
+import bay from '../../demo/assets/bay.jpg'
 
 type Page = { assets: CommunityWork[]; next_cursor?: string }
+
+function featuredWorks(t: (key: string) => string): CommunityWork[] {
+  const now = new Date(0).toISOString()
+  return [
+    { biz_id: 'demo-tram', type: 'image', public_url: tramHero, width: 646, height: 412, resolution_tag: 'demo', published_at: now, prompt: t('demo.tram'), like_count: 0, liked: false },
+    { biz_id: 'demo-comic', type: 'image', public_url: comicPage, width: 960, height: 640, resolution_tag: 'demo', published_at: now, prompt: t('demo.comic'), like_count: 0, liked: false },
+    { biz_id: 'demo-video', type: 'video', public_url: clip1, thumb_url: bay, width: 646, height: 412, duration_ms: 8000, resolution_tag: 'demo', published_at: now, prompt: t('demo.video'), like_count: 0, liked: false },
+    { biz_id: 'demo-cat', type: 'image', public_url: cat, width: 640, height: 480, resolution_tag: 'demo', published_at: now, prompt: t('demo.cat'), like_count: 0, liked: false },
+    { biz_id: 'demo-alpine', type: 'image', public_url: alpine, width: 640, height: 480, resolution_tag: 'demo', published_at: now, prompt: t('demo.alpine'), like_count: 0, liked: false },
+    { biz_id: 'demo-bay', type: 'image', public_url: bay, width: 640, height: 480, resolution_tag: 'demo', published_at: now, prompt: t('demo.bay'), like_count: 0, liked: false },
+  ]
+}
 
 function WorkCard({ work, active, onOpen }: { work: CommunityWork; active: boolean; onOpen: () => void }) {
   const { t } = useTranslation('community')
@@ -86,8 +104,10 @@ export default function CommunityPage() {
   })
   const streak = useStreak(signedIn)
   const works = feed.data?.pages.flatMap((p) => p.assets) ?? []
+  const canShowFeatured = !signedIn && tab === 'all' && !type
+  const visibleWorks = works.length > 0 || !canShowFeatured ? works : featuredWorks(t)
   const [openId, setOpenId] = useState<string | null>(null)
-  const open = works.find((w) => w.biz_id === openId) ?? null
+  const open = visibleWorks.find((w) => w.biz_id === openId) ?? null
 
   const patchWork = (id: string, patch: Partial<CommunityWork> | null) =>
     qc.setQueriesData<InfiniteData<Page>>({ queryKey: ['community', 'feed'] }, (data) =>
@@ -137,18 +157,35 @@ export default function CommunityPage() {
 
   return (
     <div className="mx-auto flex max-w-[1440px] flex-col gap-5 px-4 py-6 lg:px-6">
-      <PageHeader
-        title={t('title')}
-        description={t('description')}
-        actions={
-          signedIn && streak.data ? (
-            <a href="#streak" className={buttonClasses('secondary')}>
-              <Flame aria-hidden className="size-4 text-warning" />
-              {t('streakEntry', { n: streak.data.current_streak })}
-            </a>
-          ) : undefined
-        }
-      />
+      {signedIn ? (
+        <PageHeader
+          title={t('title')}
+          description={t('description')}
+          actions={
+            streak.data ? (
+              <a href="#streak" className={buttonClasses('secondary')}>
+                <Flame aria-hidden className="size-4 text-warning" />
+                {t('streakEntry', { n: streak.data.current_streak })}
+              </a>
+            ) : undefined
+          }
+        />
+      ) : (
+        <section className="relative isolate overflow-hidden rounded-[24px] border border-border bg-surface px-5 py-8 sm:px-8 lg:px-10 lg:py-10">
+          <div className="pointer-events-none absolute inset-y-0 right-0 -z-10 hidden w-2/5 bg-gradient-to-l from-primary-soft/70 to-transparent lg:block" />
+          <div className="max-w-2xl">
+            <h1 className="text-[clamp(2rem,4vw,3.5rem)] leading-[1.05] font-semibold tracking-tight text-fg">{t('guest.welcome')}</h1>
+            <p className="mt-3 max-w-xl text-body leading-relaxed text-fg-muted sm:text-lg">{t('guest.welcomeSubtitle')}</p>
+            <p className="mt-2 text-caption text-fg-muted">{t('guest.welcomeHelper')}</p>
+          </div>
+        </section>
+      )}
+      {!signedIn && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-primary/20 bg-primary-soft/45 px-4 py-3 text-body">
+          <span className="text-fg-muted">{t('guest.banner')}</span>
+          <Link to="/login" state={{ from: '/community' }} className={buttonClasses('secondary', 'sm')}>{t('guest.login')}</Link>
+        </div>
+      )}
       <Tabs value={tab} onValueChange={(v) => setParam('tab', v === 'mine' ? 'mine' : undefined)}>
         <TabList
           label={t('tab.label')}
@@ -185,15 +222,15 @@ export default function CommunityPage() {
               }
             />
           </Card>
-        ) : feed.isPending ? (
+        ) : feed.isPending && !canShowFeatured ? (
           <div className="columns-2 gap-3 md:columns-3 2xl:columns-4">
             {Array.from({ length: 8 }, (_, i) => (
               <Skeleton key={i} className={cn('mb-3 w-full', i % 3 ? 'h-48' : 'h-64')} />
             ))}
           </div>
-        ) : feed.isError ? (
+        ) : feed.isError && !canShowFeatured ? (
           <ErrorState message={errorText(t, feed.error)} onRetry={() => feed.refetch()} />
-        ) : works.length === 0 ? (
+        ) : visibleWorks.length === 0 ? (
           <Card padding="none">
             {type ? (
               <EmptyState icon={<ImageIcon className="size-7" />} title={t('empty.filtered')} />
@@ -215,7 +252,7 @@ export default function CommunityPage() {
         ) : (
           <div className="flex flex-col gap-4">
             <ul className={cn('columns-2 gap-3 md:columns-3', open && wide ? '2xl:columns-3' : '2xl:columns-4')}>
-              {works.map((w) => (
+              {visibleWorks.map((w) => (
                 <WorkCard key={w.biz_id} work={w} active={w.biz_id === openId} onOpen={() => setOpenId(w.biz_id)} />
               ))}
             </ul>

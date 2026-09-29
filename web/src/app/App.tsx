@@ -5,6 +5,7 @@ import { AppLayout } from './shell/AppLayout'
 import CreateRoute from './CreateRoute'
 import { RedirectKeeping, RequireAdmin, RequireAuth } from './guards'
 import { lastCreateMode, prefillTarget } from './routing'
+import { useAuthStore } from '../lib/authStore'
 
 const Login = lazy(() => import('../features/auth/LoginPage'))
 const Characters = lazy(() => import('../features/characters/CharactersPage'))
@@ -25,11 +26,12 @@ const AdminUsers = lazy(() => import('../features/admin/UsersPage'))
 /** `/` opens the mode a prefill belongs to, else the mode used last (image on a first visit). */
 function Home() {
   const location = useLocation()
+  const signedIn = useAuthStore((s) => Boolean(s.accessToken))
   const target = prefillTarget(location.state)
   return (
     <Navigate
       replace
-      to={{ pathname: `/create/${target?.mode ?? lastCreateMode()}`, search: location.search }}
+      to={{ pathname: target ? `/create/${target.mode}` : signedIn ? `/create/${lastCreateMode()}` : '/community', search: location.search }}
       state={target ? target.state : location.state}
     />
   )

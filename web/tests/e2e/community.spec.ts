@@ -4,10 +4,18 @@ import { useDemoApi } from './demo'
 const work = (page: Page, title: RegExp) => page.getByRole('button', { name: title })
 const viewer = (page: Page) => page.getByRole('complementary', { name: '作品详情' })
 
+test('guest root opens the community instead of an empty creation form', async ({ page }) => {
+  await useDemoApi(page, { guest: true })
+  await page.goto('/')
+  await expect(page).toHaveURL(/\/community$/)
+  await expect(page.getByRole('heading', { name: '看看灵感，能变成什么。' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /查看作品/ }).first()).toBeVisible()
+})
+
 test('guests browse works without a sign-in wall and are told to sign in to act', async ({ page }) => {
   await useDemoApi(page, { guest: true })
   await page.goto('/community')
-  await expect(page.getByRole('heading', { name: '发现灵感' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '看看灵感，能变成什么。' })).toBeVisible()
   await work(page, /查看作品：午后阳光下的猫咪/).click()
   const v = viewer(page)
   await expect(v).toContainText('午后阳光下的猫咪')

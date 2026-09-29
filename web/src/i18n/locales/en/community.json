@@ -21,9 +21,21 @@
     "openLibrary": "Open the library"
   },
   "guest": {
+    "welcome": "See what ideas can become.",
+    "welcomeSubtitle": "Create images, comics, and videos with AI. Start with a work you like.",
+    "welcomeHelper": "Browse freely; sign in when you are ready to create.",
+    "banner": "Browse the community freely. Sign in to create, save, and publish your own work.",
     "mine": "Sign in to see what you have published.",
     "like": "Sign in to like and publish work.",
     "login": "Sign in"
+  },
+  "demo": {
+    "tram": "Rainy Hong Kong tram",
+    "comic": "A day of small choices",
+    "video": "City wandering",
+    "cat": "Afternoon nap",
+    "alpine": "Mountain glow",
+    "bay": "A quiet bay"
   },
   "viewer": {
     "label": "Work details",
