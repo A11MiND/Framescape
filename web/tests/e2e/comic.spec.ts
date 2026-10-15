@@ -122,7 +122,7 @@ test('exports a real PNG and blocks clipped dialogue with a way to fix it', asyn
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: '导出 PNG', exact: true }).first().click()
   const download = await downloadPromise, data = await readFile((await download.path())!)
-  expect(data.subarray(1, 4).toString()).toBe('PNG'); expect(data.readUInt32BE(16)).toBe(1536); expect(data.readUInt32BE(20)).toBe(1024)
+  expect(data.subarray(1, 4).toString()).toBe('PNG'); expect(data.readUInt32BE(16)).toBe(512); expect(data.readUInt32BE(20)).toBe(512)
   await page.getByLabel('对白文字', { exact: true }).fill('很长的对白'.repeat(100))
   await expect(page.getByRole('alert').filter({ hasText: '溢出' }).first()).toBeVisible()
   await page.getByRole('button', { name: '导出 PNG', exact: true }).first().click()
@@ -253,9 +253,9 @@ test('reference upload clears a previous error and explains transfer failures', 
 test('a logo is an independent layer, not a character reference; an imported page is labelled as imported', async ({ page }) => {
   const state = await setup(page)
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64')
-  await page.getByLabel('添加 Logo', { exact: true }).first().setInputFiles({ name: 'brand.png', mimeType: 'image/png', buffer: png })
+  await page.getByLabel('添加图片 / Logo', { exact: true }).first().setInputFiles({ name: 'brand.png', mimeType: 'image/png', buffer: png })
   await page.getByRole('tab', { name: /图层/ }).click()
-  await expect(page.getByRole('button', { name: 'Logo', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '图片 / Logo', exact: true })).toBeVisible()
   expect(state.assetUploads).toBe(1)
   await page.getByLabel('导入底图', { exact: true }).first().setInputFiles({ name: 'page.png', mimeType: 'image/png', buffer: png })
   await expect(page.getByText('底图 · 导入的图片')).toBeVisible()
@@ -331,4 +331,182 @@ test('the comic editor is fully translated in English', async ({ page }) => {
   }
   await page.getByRole('button', { name: 'Add speech bubble' }).click()
   expect(await untranslated()).toEqual([])
+})
+
+
+for (const [viewport, imageWidth, imageHeight] of [[1440, 960, 640], [390, 768, 1024], [1440, 512, 512]]) test(`appended image on a free canvas: ${imageWidth}x${imageHeight} at ${viewport}px`, async ({ page }) => {
+  await page.setViewportSize({ width: viewport, height: 1000 })
+  const errors: string[] = []
+  page.on('pageerror', e => errors.push(e.message))
+  page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()) })
+  const state = await setup(page, { lang: 'en' })
+  const fixture = await page.evaluate(async ({ width, height }) => {
+    const image = new Image(); image.src = '/src/demo/assets/comic-page.jpg'; await image.decode()
+    const c = document.createElement('canvas'); c.width = width; c.height = height
+    c.getContext('2d')!.drawImage(image, 0, 0, width, height)
+    return c.toDataURL('image/png').split(',')[1]
+  }, { width: imageWidth, height: imageHeight })
+  await page.route('**/page-fixture.png', route => route.fulfill({ contentType: 'image/png', body: Buffer.from(fixture, 'base64') }))
+  await page.route('**/api/v1/assets/page-original', route => route.fulfill({ json: { biz_id: 'page-original', public_url: 'http://127.0.0.1:4173/page-fixture.png', mime: 'image/png', type: 'image' } }))
+  await page.getByLabel('Saved drafts').selectOption('draft-one')
+  await expect(page.getByLabel('Title', { exact: true })).toHaveValue('港燈 ESG 漫画')
+  await expect(page).toHaveURL(/\/create\/comic/)
+  expect(await page.title()).not.toBe('')
+  const canvas = page.locator('canvas[role="img"]')
+  await expect(canvas).toHaveAttribute('width', String(imageWidth))
+  await expect(canvas).toHaveAttribute('height', String(imageHeight))
+  await canvas.evaluate(c => {
+    const el = c as HTMLCanvasElement
+    ;(window as unknown as { originalComicPixels: Uint8ClampedArray }).originalComicPixels = el.getContext('2d')!.getImageData(0, 0, el.width, el.height).data
+  })
+  const logoData = await page.evaluate(() => {
+    const c = document.createElement('canvas'); c.width = 800; c.height = 140
+    const ctx = c.getContext('2d')!
+    ctx.fillStyle = '#0f766e'; ctx.fillRect(0, 0, 800, 140)
+    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 40px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('COMMUNITY • CREATE TOGETHER', 400, 88)
+    return c.toDataURL('image/png').split(',')[1]
+  })
+  await page.route('**/image-fixture.png', route => route.fulfill({ contentType: 'image/png', body: Buffer.from(logoData, 'base64') }))
+  await page.route('**/api/v1/assets/upload-1', route => route.fulfill({ json: { biz_id: 'upload-1', public_url: 'http://127.0.0.1:4173/image-fixture.png', mime: 'image/png', type: 'image' } }))
+  await page.getByLabel('Add image / logo', { exact: true }).first().setInputFiles({ name: 'image.png', mimeType: 'image/png', buffer: Buffer.from(logoData, 'base64') })
+  await expect(page.getByLabel('Rotation (°)', { exact: true })).toBeVisible()
+  await page.getByLabel('Fit canvas automatically').uncheck()
+  const space = page.getByLabel('Top space (px)')
+  await expect.poll(async () => Number(await space.inputValue())).toBeGreaterThan(0)
+  const sameArtwork = () => canvas.evaluate((c, height) => {
+    const el = c as HTMLCanvasElement
+    const original = (window as unknown as { originalComicPixels: Uint8ClampedArray }).originalComicPixels
+    const current = el.getContext('2d')!.getImageData(0, el.height - height, el.width, height).data
+    return current.every((v, i) => v === original[i])
+  }, imageHeight)
+  await expect.poll(sameArtwork).toBe(true)
+  const rotation = page.getByLabel('Rotation (°)', { exact: true })
+  await rotation.fill('12'); await rotation.press('Enter')
+  await space.fill('300'); await space.press('Enter')
+  await expect(canvas).toHaveAttribute('height', String(imageHeight + 300))
+  const top = page.getByLabel('Top %', { exact: true })
+  await top.fill('3'); await top.press('Enter')
+  const layer = layers(page).first()
+  await expect(layer).toHaveCSS('transform', /matrix/)
+  const box = (await layer.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down(); await page.mouse.move(box.x + box.width / 2 + 8, box.y + box.height / 2 + 3); await page.mouse.up()
+  const resize = (await page.locator('[data-resize]').boundingBox())!
+  await page.mouse.move(resize.x + resize.width / 2, resize.y + resize.height / 2)
+  await page.mouse.down(); await page.mouse.move(resize.x + resize.width / 2 - 5, resize.y + resize.height / 2 - 2); await page.mouse.up()
+  await expect.poll(sameArtwork).toBe(true)
+  // Added images can also be placed over the comic; there is no restricted banner area.
+  await top.fill('60'); await top.press('Enter')
+  await expect.poll(sameArtwork).toBe(false)
+  await page.getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect.poll(sameArtwork).toBe(true)
+  await page.getByRole('button', { name: 'Redo', exact: true }).click()
+  await expect.poll(sameArtwork).toBe(false)
+  await page.getByRole('button', { name: 'Undo', exact: true }).click()
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click()
+  await expect.poll(() => state.lastSaved?.top_space).toBe(300)
+  expect(state.lastSaved).toMatchObject({ page_width: imageWidth, page_height: imageHeight })
+  expect((state.lastSaved!.layers as { rotation: number }[])[0]).toMatchObject({ rotation: 12 })
+  const expectedPNG = await canvas.evaluate(c => (c as HTMLCanvasElement).toDataURL('image/png').split(',')[1])
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export PNG', exact: true }).first().click()
+  const bytes = await readFile((await (await download).path())!)
+  expect(bytes.readUInt32BE(16)).toBe(imageWidth); expect(bytes.readUInt32BE(20)).toBe(imageHeight + 300)
+  expect(bytes.equals(Buffer.from(expectedPNG, 'base64'))).toBe(true)
+  await page.reload()
+  await page.getByLabel('Saved drafts').selectOption('draft-one')
+  await expect(canvas).toHaveAttribute('height', String(imageHeight + 300))
+  await layers(page).first().click()
+  await expect(rotation).toHaveValue('12')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0)
+  expect(errors).toEqual([])
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'))
+  await page.screenshot({ path: `/tmp/comic-canvas-${viewport}-${imageWidth}.png`, fullPage: true })
+  await canvas.screenshot({ path: `/tmp/comic-artwork-${viewport}-${imageWidth}.png` })
+  await page.getByRole('button', { name: 'Delete layer', exact: true }).click()
+  await space.fill('0'); await space.press('Enter')
+  await expect(canvas).toHaveAttribute('height', String(imageHeight))
+})
+
+for (const [index, side] of (['top', 'left', 'right', 'bottom'] as const).entries()) test(`auto-fit follows shrinking, rotating and repositioning an image on the ${side}`, async ({ page }) => {
+  const viewport = index % 2 ? 390 : 1440
+  await page.setViewportSize({ width: viewport, height: 1000 })
+  const errors: string[] = []
+  page.on('pageerror', e => errors.push(e.message))
+  const state = await setup(page, { lang: 'en' })
+  await page.getByLabel('Saved drafts').selectOption('draft-one')
+  const canvas = page.locator('canvas[role="img"]')
+  await expect(canvas).toHaveAttribute('width', '512')
+  await expect(canvas).toHaveAttribute('height', '512')
+  await canvas.evaluate(c => {
+    const el = c as HTMLCanvasElement
+    ;(window as unknown as { originalComicPixels: Uint8ClampedArray }).originalComicPixels = el.getContext('2d')!.getImageData(0, 0, el.width, el.height).data
+  })
+  const file = await page.evaluate(() => {
+    const c = document.createElement('canvas'); c.width = 300; c.height = 120
+    const ctx = c.getContext('2d')!; ctx.fillStyle = '#7c3aed'; ctx.fillRect(0, 0, 300, 120)
+    ctx.fillStyle = 'white'; ctx.font = 'bold 48px sans-serif'; ctx.fillText('MY LOGO', 24, 78)
+    return c.toDataURL('image/png').split(',')[1]
+  })
+  await page.route('**/flex-logo.png', route => route.fulfill({ contentType: 'image/png', body: Buffer.from(file, 'base64') }))
+  await page.route('**/api/v1/assets/upload-1', route => route.fulfill({ json: { biz_id: 'upload-1', public_url: 'http://127.0.0.1:4173/flex-logo.png', mime: 'image/png', type: 'image' } }))
+  await page.getByLabel('Add new image at').selectOption(side)
+  await page.getByLabel('Add image / logo', { exact: true }).first().setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: Buffer.from(file, 'base64') })
+  await expect(page.getByLabel('Fit canvas automatically')).toBeChecked()
+  await expect(page.getByLabel('Image position', { exact: true })).toHaveValue(side)
+  const axis = side === 'top' || side === 'bottom' ? 'height' : 'width'
+  await expect.poll(async () => Number(await canvas.getAttribute(axis))).toBeGreaterThan(512)
+  const initial = Number(await canvas.getAttribute(axis))
+  const width = page.getByLabel('Width %', { exact: true })
+  await width.fill('10'); await width.press('Enter')
+  await expect.poll(async () => Number(await canvas.getAttribute(axis))).toBeLessThan(initial)
+  const reduced = Number(await canvas.getAttribute(axis))
+  expect(reduced - 512).toBeLessThan((initial - 512) * .7)
+  // Undo restores both the image and the canvas size in a single step.
+  await page.getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect(canvas).toHaveAttribute(axis, String(initial))
+  await page.getByRole('button', { name: 'Redo', exact: true }).click()
+  await expect(canvas).toHaveAttribute(axis, String(reduced))
+  const rotation = page.getByLabel('Rotation (°)')
+  await rotation.fill('45'); await rotation.press('Enter')
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click()
+  await expect.poll(() => state.lastSaved?.auto_fit).toBe(true)
+  const saved = state.lastSaved as unknown as { top_space: number; left_space: number; right_space: number; bottom_space: number; image_gap?: number; layers: { w: number; h: number; placement: string }[] }
+  expect(saved.layers[0].placement).toBe(side)
+  expect(saved[`${side}_space`]).toBeGreaterThan(0)
+  for (const other of ['top', 'bottom', 'left', 'right'] as const) if (other !== side) expect(saved[`${other}_space`]).toBe(0)
+  expect(await canvas.evaluate((c, offsets) => {
+    const original = (window as unknown as { originalComicPixels: Uint8ClampedArray }).originalComicPixels
+    const pixels = (c as HTMLCanvasElement).getContext('2d')!.getImageData(offsets.left, offsets.top, 512, 512).data
+    return pixels.every((v, i) => v === original[i])
+  }, { left: saved.left_space, top: saved.top_space })).toBe(true)
+  const cw = Number(await canvas.getAttribute('width')), ch = Number(await canvas.getAttribute('height'))
+  expect(saved.layers[0].w * cw / (saved.layers[0].h * ch)).toBeCloseTo(2.5)
+  // Rotated bounds plus no arbitrary margin determine the final extension.
+  const rotatedExtent = (saved.layers[0].w * cw + saved.layers[0].h * ch) / Math.sqrt(2)
+  const extent = Math.max(rotatedExtent, axis === 'width' ? saved.layers[0].w * cw : saved.layers[0].h * ch)
+  expect(saved[`${side}_space`]).toBeGreaterThanOrEqual(extent - .00001)
+  expect(saved[`${side}_space`]).toBeLessThan(extent + 1.01)
+  const gap = page.getByRole('slider')
+  await gap.focus(); await gap.press('Home'); await gap.press('ArrowRight')
+  await expect.poll(async () => Number(await canvas.getAttribute(axis))).toBe(saved[`${side}_space`] + 513)
+  await gap.press('Home')
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'))
+  await page.screenshot({ path: `/tmp/comic-flex-${side}.png` })
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export PNG', exact: true }).first().click()
+  await (await download).saveAs(`/tmp/comic-flex-export-${side}.png`)
+  await page.getByLabel('Image position', { exact: true }).selectOption(side === 'right' ? 'left' : 'right')
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click()
+  await expect.poll(() => state.lastSaved?.[`${side}_space`]).toBe(0)
+  await page.reload(); await page.getByLabel('Saved drafts').selectOption('draft-one')
+  await layers(page).first().click()
+  await expect(page.getByLabel('Image position', { exact: true })).toHaveValue(side === 'right' ? 'left' : 'right')
+  await expect(page.getByLabel('Fit canvas automatically')).toBeChecked()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0)
+  expect(errors).toEqual([])
+  await page.getByRole('button', { name: 'Delete layer', exact: true }).click()
+  await expect(canvas).toHaveAttribute('width', '512'); await expect(canvas).toHaveAttribute('height', '512')
 })

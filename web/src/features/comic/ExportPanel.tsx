@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { CircleCheck, Download, FileJson, TriangleAlert } from 'lucide-react'
 import { Button } from '../../ui'
-import type { ComicDocument } from '../../lib/comicDocument'
+import { comicSize, type ComicDocument } from '../../lib/comicDocument'
 
 interface Props {
   doc: ComicDocument
@@ -45,7 +45,7 @@ export function ExportPanel({ doc, overflow, busy, onFix, onExport, onBackup }: 
       <Button variant="primary" size="lg" icon={<Download aria-hidden className="size-5" />} loading={busy} disabled={!ready} onClick={onExport}>
         {t('toolbar.export')}
       </Button>
-      <p className="text-caption text-fg-muted">{t('export.note')}</p>
+      <p className="text-caption text-fg-muted">{t('export.note', { width: comicSize(doc).width, height: comicSize(doc).height })}</p>
       <Button icon={<FileJson aria-hidden className="size-4" />} onClick={onBackup}>
         {t('toolbar.backup')}
       </Button>

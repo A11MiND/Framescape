@@ -1,5 +1,5 @@
 import { ComicError } from './comicError'
-import { PAGE_WIDTH as W, PAGE_HEIGHT as H, wrapText, type ComicDocument, type ComicLayer } from './comicDocument'
+import { PAGE_WIDTH, wrapText, comicSize, constrainLayer, type ComicDocument, type ComicLayer } from './comicDocument'
 
 export type ComicImages = Record<string, HTMLImageElement>
 export function loadComicImage(url: string): Promise<HTMLImageElement> {
@@ -18,10 +18,15 @@ function contain(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: numb
 // One renderer is used for the preview and export. No DOM screenshot, remote
 // SVG, foreignObject, or separate text-wrapping implementation is involved.
 export function renderComic(canvas: HTMLCanvasElement, doc: ComicDocument, images: ComicImages, panelLabel: (n: number) => string = String): string[] {
-  canvas.width = W; canvas.height = H
+  const page = images[doc.page_asset_id]
+  if (page) doc = { ...doc, page_width: page.naturalWidth, page_height: page.naturalHeight }
+  const size = comicSize(doc)
+  const W = size.comicWidth, H = size.comicHeight
+  canvas.width = size.width; canvas.height = size.height
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new ComicError('noCanvas')
-  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H)
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, size.width, size.height)
+  ctx.save(); ctx.translate(size.left, size.top)
   if (images[doc.page_asset_id]) contain(ctx, images[doc.page_asset_id], 0, 0, W, H)
   else if (doc.mode === 'editable') {
     // Before generation an editable comic shows its 2x2 numbered frames; a
@@ -42,20 +47,29 @@ export function renderComic(canvas: HTMLCanvasElement, doc: ComicDocument, image
     ctx.strokeStyle = '#172033'; ctx.lineWidth = 4; ctx.strokeRect(2, 2, W - 4, H - 4)
     ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke()
   }
+  ctx.restore()
   const overflow: string[] = []
   for (const layer of doc.layers) {
     if (layer.hidden) continue
+    ctx.save()
+    ctx.beginPath(); ctx.rect(0, 0, size.width, size.height); ctx.clip()
     if (layer.kind === 'logo') {
-      if (images[layer.asset_id ?? '']) contain(ctx, images[layer.asset_id!], layer.x * W, layer.y * H, layer.w * W, layer.h * H)
-    } else if (drawTextLayer(ctx, layer)) overflow.push(layer.id)
+      const l = constrainLayer(layer, doc)
+      ctx.translate((l.x + l.w / 2) * size.width, (l.y + l.h / 2) * size.height)
+      ctx.rotate((l.rotation ?? 0) * Math.PI / 180)
+      if (images[l.asset_id ?? '']) contain(ctx, images[l.asset_id!], -l.w * size.width / 2, -l.h * size.height / 2, l.w * size.width, l.h * size.height)
+    } else if (drawTextLayer(ctx, layer, size.width, size.height, W)) overflow.push(layer.id)
+    ctx.restore()
   }
   return overflow
 }
-function drawTextLayer(ctx: CanvasRenderingContext2D, l: ComicLayer): boolean {
-  const x = l.x * W, y = l.y * H, w = l.w * W, h = l.h * H
+function drawTextLayer(ctx: CanvasRenderingContext2D, l: ComicLayer, W: number, height: number, comicWidth: number): boolean {
+  const scale = comicWidth / PAGE_WIDTH
+  W /= scale; height /= scale
+  const x = l.x * W, y = l.y * height, w = l.w * W, h = l.h * height
   const tail = l.kind === 'bubble' && l.tail !== 'none' ? Math.min(24, h * .2) : 0
   const bodyH = h - tail, pad = 18
-  ctx.save(); ctx.fillStyle = l.fill; ctx.strokeStyle = l.color; ctx.lineWidth = 3
+  ctx.save(); ctx.scale(scale, scale); ctx.fillStyle = l.fill; ctx.strokeStyle = l.color; ctx.lineWidth = 3
   if (l.kind === 'bubble') {
     // One outline avoids double-alpha seams where the tail joins the body.
     const r = Math.min(22, bodyH / 3), bottom = y + bodyH

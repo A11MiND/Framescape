@@ -1,6 +1,7 @@
 package comic
 
 import (
+	"encoding/json"
 	"math"
 	"strings"
 	"testing"
@@ -48,5 +49,48 @@ func TestAssetIDsDeduplicated(t *testing.T) {
 	d.Layers[0].AssetID = "c"
 	if ids := d.AssetIDs(); strings.Join(ids, ",") != "a,b,c" {
 		t.Fatalf("IDs = %v", ids)
+	}
+}
+
+func TestExtendedCanvasRoundTrip(t *testing.T) {
+	d := validDocument()
+	d.TopSpace = 300
+	d.LeftSpace = 120
+	d.RightSpace = 80
+	d.BottomSpace = 90
+	enabled := true
+	d.AutoFit = &enabled
+	d.ImageGap = 12
+	d.PageWidth = 768
+	d.PageHeight = 1024
+	d.Layers = append(d.Layers, Layer{ID: "logo", Kind: "logo", Placement: "left", Rotation: 45, X: .2, Y: .2, W: .2, H: .3, AssetID: "brand", FontSize: 32, Color: "#172033", Fill: "#ffffff", Tail: "none"})
+	b, err := json.Marshal(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restored Document
+	if err := json.Unmarshal(b, &restored); err != nil {
+		t.Fatal(err)
+	}
+	if err := restored.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if restored.LeftSpace != 120 || restored.RightSpace != 80 || restored.BottomSpace != 90 || restored.AutoFit == nil || !*restored.AutoFit || restored.ImageGap != 12 || restored.Layers[1].Placement != "left" || restored.TopSpace != 300 || restored.PageWidth != 768 || restored.PageHeight != 1024 || restored.Layers[1].Rotation != 45 {
+		t.Fatalf("lost canvas metadata: %s", b)
+	}
+	for _, height := range []int{-1, 32769} {
+		restored.TopSpace = height
+		if restored.Validate() == nil {
+			t.Fatalf("accepted top space %v", height)
+		}
+	}
+	restored.TopSpace = 300
+	d.PageWidth = 768
+	d.PageHeight = 1024
+	for _, rotation := range []float64{-181, 181, math.NaN(), math.Inf(1)} {
+		restored.Layers[1].Rotation = rotation
+		if restored.Validate() == nil {
+			t.Fatalf("accepted rotation %v", rotation)
+		}
 	}
 }

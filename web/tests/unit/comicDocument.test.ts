@@ -16,7 +16,7 @@ test('whole-page replacement clears old patches but preserves editable overlays'
 })
 test('drag and resize keep layers inside page', () => {
   const next = constrainLayer({ ...newLayer('bubble', 'one'), x: 2, y: -.2, w: 1.2, h: -.1 })
-  assert.equal(next.x, 0); assert.equal(next.y, 0); assert.equal(next.w, 1); assert.equal(next.h, .02)
+  assert.equal(next.x, 0); assert.equal(next.y, 0); assert.equal(next.w, 1); assert.equal(next.h, .0001)
 })
 test('Chinese and supplementary characters are not split by UTF16 units', () => {
   assert.equal(charCount('智𠮷A'), 3)

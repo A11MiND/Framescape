@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { MoreHorizontal, RotateCcw } from 'lucide-react'
-import { Button, ConfirmDialog, Dialog, IconButton, Input, Menu, Select, cn } from '../../ui'
+import { Button, ConfirmDialog, Dialog, Field, IconButton, Input, Menu, Select, cn } from '../../ui'
 import { createApi, type CreateRequest } from '../../lib/api/create'
 import { comicsApi } from '../../lib/api/comics'
 import { hasOpenAIImage } from '../../lib/api/account'
@@ -14,12 +14,12 @@ import { failureText } from '../../lib/errorText'
 import { ComicError } from '../../lib/comicError'
 import { formatClock, formatNumber } from '../../lib/format'
 import { uploadAsset } from '../../lib/upload'
-import { COMIC_IMAGE_MIMES, charCount, importPage, newComic, newLayer, parseComicDocument, type ComicDocument, type SavedComic } from '../../lib/comicDocument'
-import { exportComic, type ComicImages } from '../../lib/comicRender'
+import { COMIC_IMAGE_MIMES, charCount, comicSize, withCanvasSpace, fitComicCanvas, imagePlacement, appendImage, importPage, newComic, newLayer, parseComicDocument, type ComicDocument, type ComicLayer, type ImagePlacement, type SavedComic } from '../../lib/comicDocument'
+import { exportComic, loadComicImage, type ComicImages } from '../../lib/comicRender'
 import { useMe } from '../../app/useMe'
 import { CreateNav } from '../create/CreateNav'
 import { ComicCanvas } from './ComicCanvas'
-import { Inspector } from './Inspector'
+import { Inspector, NumericProperty } from './Inspector'
 import { StoryPanel, type ComicLimits } from './StoryPanel'
 import { ReferencePanel } from './ReferencePanel'
 import { GeneratePanel, type AiState } from './GeneratePanel'
@@ -81,6 +81,7 @@ export default function ComicWorkspace() {
 
   const [selected, setSelected] = useState<string | null>(null)
   const [inspectorTab, setInspectorTab] = useState<'layers' | 'properties'>('layers')
+  const [newImagePosition, setNewImagePosition] = useState<ImagePlacement>('top')
   const [images, setImages] = useState<ComicImages>({})
   const [overflow, setOverflow] = useState<string[]>([])
   const [error, setError] = useState('')
@@ -145,9 +146,27 @@ export default function ComicWorkspace() {
     onError: (err) => setError(comicErrorText(t, err)),
   })
 
+  const { change: changeDraft, live: liveDraft } = draft
+  const onPageSize = useCallback((assetId: string, width: number, height: number) => {
+    const current = liveDraft.current
+    if (current.page_asset_id === assetId && (current.page_width !== width || current.page_height !== height)) {
+      const next = { ...current, page_width: width, page_height: height }
+      changeDraft(next.auto_fit ? fitComicCanvas(next) : next, false)
+    }
+  }, [changeDraft, liveDraft])
+
   const change = (next: ComicDocument, undoable = true) => {
-    draft.change(next, undoable)
+    draft.change(next.auto_fit ? fitComicCanvas(next) : next, undoable)
     setQuote(null)
+  }
+  const updateLayer = (layer: ComicLayer) => {
+    const current = draft.live.current
+    const prior = current.layers.find(l => l.id === layer.id)
+    // Moving across the comic changes the attachment side; resizing retains it.
+    if (current.auto_fit && prior && layer.kind === 'logo' && prior.placement !== 'free' && layer.w === prior.w && layer.h === prior.h && layer.rotation === prior.rotation && (layer.x !== prior.x || layer.y !== prior.y)) {
+      layer = { ...layer, placement: imagePlacement(current, { ...layer, placement: undefined }) }
+    }
+    change({ ...current, layers: current.layers.map(l => l.id === layer.id ? layer : l) })
   }
   const removeLayer = (id: string) => {
     change({ ...draft.live.current, layers: draft.live.current.layers.filter((l) => l.id !== id || l.locked) })
@@ -160,7 +179,9 @@ export default function ComicWorkspace() {
     if (step === 'story' || step === 'art') setStep('text')
   }
   const addLayer = (kind: 'bubble' | 'text') => {
-    const l = newLayer(kind, crypto.randomUUID(), 0, t('content.bubbleText'))
+    const base = newLayer(kind, crypto.randomUUID(), 0, t('content.bubbleText'))
+    const size = comicSize(draft.live.current)
+    const l = { ...base, x: (base.x * size.comicWidth + size.left) / size.width, w: base.w * size.comicWidth / size.width, y: (base.y * size.comicHeight + size.top) / size.height, h: base.h * size.comicHeight / size.height }
     change({ ...draft.live.current, layers: [...draft.live.current.layers, l] })
     selectLayer(l.id)
   }
@@ -172,9 +193,13 @@ export default function ComicWorkspace() {
         change(importPage(draft.live.current, asset.biz_id))
         setMessage(t('done.pageImported'))
       } else {
-        const l = { ...newLayer('logo', crypto.randomUUID()), asset_id: asset.biz_id }
-        change({ ...draft.live.current, layers: [...draft.live.current.layers, l] })
-        selectLayer(l.id)
+        const url = URL.createObjectURL(file)
+        try {
+          const image = await loadComicImage(url)
+          const id = crypto.randomUUID()
+          change(appendImage(draft.live.current, id, asset.biz_id, image.naturalWidth, image.naturalHeight, newImagePosition))
+          selectLayer(id)
+        } finally { URL.revokeObjectURL(url) }
       }
     })
 
@@ -259,7 +284,7 @@ export default function ComicWorkspace() {
       tab={inspectorTab}
       onTab={setInspectorTab}
       onSelect={selectLayer}
-      onLayer={draft.updateLayer}
+      onLayer={updateLayer}
       onDocument={(d) => change(d)}
       onRemove={removeLayer}
       overflow={overflow}
@@ -321,7 +346,7 @@ export default function ComicWorkspace() {
       <header className="flex flex-col gap-3 rounded-card border border-border bg-surface p-3 lg:p-4">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <Input aria-label={t('inputs.title')} value={doc.title} maxLength={comic?.max_title_chars ?? 128} onChange={(e) => change({ ...doc, title: e.target.value })} className="h-10 max-w-80 text-section font-semibold" />
-          <span className="rounded-badge bg-surface-2 px-2 py-0.5 text-caption text-fg-muted">{doc.mode === 'editable' ? t('header.metaEditable') : t('header.metaDirect')}</span>
+          <span className="rounded-badge bg-surface-2 px-2 py-0.5 text-caption text-fg-muted">{t('canvas.dimensions', { width: comicSize(doc).width, height: comicSize(doc).height })}</span>
           {comic?.model && <span className="rounded-full bg-primary-soft px-2.5 py-0.5 text-caption font-medium text-primary-text">{t('header.model', { model: comic.model })}</span>}
           <span role="status" aria-live="polite" className={cn('text-caption', draft.backupFailed ? 'text-warning-fg' : 'text-fg-muted')}>
             {draft.backupFailed ? t('error.backupFull') : saveStatus}
@@ -452,7 +477,30 @@ export default function ComicWorkspace() {
           <div className={cn(step === 'text' && 'xl:hidden')}>
             <Toolbar vertical={false} canAdd={doc.layers.length < maxLayers} canUndo={draft.canUndo && !pending} canRedo={draft.canRedo && !pending} busy={busy} pending={pending} onAdd={addLayer} onLogo={(f) => void addImage(f, 'logo')} onPage={(f) => void addImage(f, 'page')} onUndo={draft.undo} onRedo={draft.redo} />
           </div>
-          <ComicCanvas document={doc} selected={selected} onSelect={selectLayer} onChange={draft.updateLayer} onDelete={removeLayer} onImages={setImages} onOverflow={setOverflow} />
+          <div className="flex flex-wrap items-end gap-3 rounded-card border border-border bg-surface p-3">
+            <label className="flex items-center gap-2 text-body">
+              <input type="checkbox" checked={doc.auto_fit ?? false} disabled={busy} onChange={e => change({ ...draft.live.current, auto_fit: e.target.checked })} />
+              {t('canvas.autoFit')}
+            </label>
+            <Button size="sm" disabled={busy} onClick={() => change(fitComicCanvas({ ...draft.live.current, auto_fit: true }))}>{t('canvas.fitNow')}</Button>
+            <Field label={t('canvas.newPosition')}>
+              <Select value={newImagePosition} onChange={e => setNewImagePosition(e.target.value as ImagePlacement)}>
+                {(['top', 'left', 'right', 'bottom', 'free'] as const).map(side => <option key={side} value={side}>{t(`canvas.position.${side}`)}</option>)}
+              </Select>
+            </Field>
+            {doc.auto_fit ? <Field label={t('canvas.imageGap', { n: doc.image_gap ?? 0 })}>
+              <input type="range" min={0} max={100} step={1} value={doc.image_gap ?? 0} disabled={busy}
+                onChange={e => change({ ...draft.live.current, image_gap: Number(e.target.value) })} className="w-full accent-primary" />
+            </Field> : <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4">
+              {(['top', 'left', 'right', 'bottom'] as const).map(side => <Field key={side} label={t(`canvas.margin.${side}`)}>
+                <NumericProperty min={0} max={32768} value={doc[`${side}_space`] ?? 0} disabled={busy}
+                  onCommit={value => change(withCanvasSpace(draft.live.current, side, value))} />
+              </Field>)}
+            </div>}
+            <p className="w-full text-caption text-fg-muted">{t('canvas.spaceHelp')}</p>
+            <p className="text-caption text-fg-muted" data-testid="comic-dimensions">{t('canvas.dimensions', { width: comicSize(doc).width, height: comicSize(doc).height })}</p>
+          </div>
+          <ComicCanvas document={doc} selected={selected} onSelect={selectLayer} onChange={updateLayer} onDelete={removeLayer} onImages={setImages} onPageSize={onPageSize} onOverflow={setOverflow} />
           {overflow.length > 0 && (
             <p role="alert" className="text-caption text-warning-fg">
               {t('canvas.overflow', { n: overflow.length })}

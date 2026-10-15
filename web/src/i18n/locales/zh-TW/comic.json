@@ -1,5 +1,8 @@
 {
   "art" : {
+    "placement": "圖片位置",
+    "rotationHelp": "−180° 至 180°。圖片可在整個畫布內自由編輯。",
+    "rotation": "旋轉角度 (°)",
     "color" : "文字顏色",
     "delete" : "刪除圖層",
     "duplicate" : "複製",
@@ -14,7 +17,7 @@
     "left" : "左側 %",
     "lock" : "鎖定",
     "locked" : "（已鎖定）",
-    "logo" : "Logo",
+    "logo": "圖片 / Logo",
     "opacity" : "氣泡不透明度 (%)",
     "opacityHelp" : "0 為透明，100 為不透明；文字保持清晰。",
     "pick" : "點擊畫布中的對話框，或從圖層列表選擇。",
@@ -30,6 +33,15 @@
     "width" : "寬度 %"
   },
   "canvas" : {
+    "margin": {"top": "上方留白（像素）", "left": "左側留白（像素）", "right": "右側留白（像素）", "bottom": "下方留白（像素）"},
+    "position": {"top": "漫畫上方", "left": "漫畫左側", "right": "漫畫右側", "bottom": "漫畫下方", "free": "自由放置"},
+    "imageGap": "圖片間距：{{n}} 像素",
+    "newPosition": "新圖片放置位置",
+    "fitNow": "貼合內容",
+    "autoFit": "自動貼合內容",
+    "spaceHelp": "圖片可放在任意一側，調整大小後畫布自動貼合。關閉自動貼合後可自行設定四周留白。",
+    "topSpace": "上方擴展空間（像素）",
+    "dimensions": "畫布：{{width}} × {{height}} 像素",
     "fontSample" : "漫畫",
     "hint" : "拖動圖層移動，右下角調整大小；選中後可用方向鍵微調。原圖中的文字無法直接修改。",
     "label" : "四格漫畫畫布",
@@ -133,7 +145,7 @@
   "export" : {
     "backupNote" : "JSON 編輯稿備份單獨保存，可以在其他設備導入後繼續編輯。",
     "fix" : "修復此問題",
-    "note" : "導出固定為 1536×1024 PNG，隱藏的圖層不會導出。",
+    "note": "匯出完整的 {{width}} × {{height}} PNG，將可見圖片和文字合併。隱藏圖層不會匯出。",
     "overflow" : "「{{name}}」的文字超出文本框",
     "pageMissing" : "還沒有畫面：請先生成或導入底圖",
     "pageReady" : "已有整頁畫面",
@@ -245,7 +257,7 @@
   "title" : "四格漫畫工作台",
   "toolbar" : {
     "addBubble" : "添加對話框",
-    "addLogo" : "添加 Logo",
+    "addLogo": "添加圖片 / Logo",
     "addText" : "添加標題文字",
     "backup" : "備份編輯稿",
     "export" : "導出 PNG",

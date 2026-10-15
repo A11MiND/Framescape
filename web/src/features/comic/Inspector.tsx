@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Copy, Eye, EyeOff, Image as ImageIcon, Lock, LockOpen, Trash2, ArrowUpToLine } from 'lucide-react'
 import { Button, Field, IconButton, Input, Select, TabList, TabPanel, Tabs, Textarea, cn } from '../../ui'
-import { constrainLayer, type ComicDocument, type ComicLayer } from '../../lib/comicDocument'
+import { constrainLayer, imagePlacement, placeImage, resizeImage, type ImagePlacement, type ComicDocument, type ComicLayer } from '../../lib/comicDocument'
 
 interface Props {
   doc: ComicDocument
@@ -23,7 +23,7 @@ function layerName(t: (k: string) => string, l: ComicLayer) {
 }
 
 /** Keep partial input local; commit only when the user finishes typing. */
-function NumericProperty({ value, min, max, disabled, onCommit }: { value: number; min: number; max: number; disabled?: boolean; onCommit: (value: number) => void }) {
+export function NumericProperty({ value, min, max, disabled, onCommit }: { value: number; min: number; max: number; disabled?: boolean; onCommit: (value: number) => void }) {
   const [draft, setDraft] = useState<string | null>(null)
   const commit = () => {
     const parsed = draft === null || draft.trim() === '' ? value : Number(draft)
@@ -131,12 +131,25 @@ export function Inspector({ doc, selected, tab, onTab, onSelect, onLayer, onDocu
                 )}
               </>
             )}
+            {layer.kind === 'logo' && <Field label={t('art.placement')}>
+              <Select disabled={layer.locked || disabled} value={imagePlacement(doc, layer)} onChange={e => onDocument(placeImage(doc, layer, e.target.value as ImagePlacement))}>
+                {(['top', 'left', 'right', 'bottom', 'free'] as const).map(side => <option key={side} value={side}>{t(`canvas.position.${side}`)}</option>)}
+              </Select>
+            </Field>}
+            {layer.kind === 'logo' && <Field label={t('art.rotation')} help={t('art.rotationHelp')}>
+              <NumericProperty key={`${layer.id}-rotation`} min={-180} max={180}
+                value={layer.rotation ?? 0} disabled={layer.locked || disabled}
+                onCommit={(rotation) => onLayer(doc.auto_fit ? { ...layer, rotation } : constrainLayer({ ...layer, rotation }, doc))} />
+            </Field>}
             <div className="grid grid-cols-2 gap-2 [&>*]:min-w-0">
               {(['x', 'y', 'w', 'h'] as const).map((key, i) => (
                 <Field key={key} label={[t('art.left'), t('art.top'), t('art.width'), t('art.height')][i]}>
                   <NumericProperty key={`${layer.id}-${key}`} min={0} max={100}
                     value={Math.round(layer[key] * 100)} disabled={layer.locked || disabled}
-                    onCommit={(value) => onLayer(constrainLayer({ ...layer, [key]: value / 100 }))} />
+                    onCommit={(value) => {
+                      const next = layer.kind === 'logo' && (key === 'w' || key === 'h') ? resizeImage(layer, key, value / 100) : { ...layer, [key]: value / 100 }
+                      onLayer(doc.auto_fit ? next : constrainLayer(next, doc))
+                    }} />
                 </Field>
               ))}
             </div>
@@ -157,7 +170,7 @@ export function Inspector({ doc, selected, tab, onTab, onSelect, onLayer, onDocu
                 icon={<Copy aria-hidden className="size-4" />}
                 disabled={layer.locked || disabled || doc.layers.length >= 64}
                 onClick={() => {
-                  const copy = constrainLayer({ ...layer, id: crypto.randomUUID(), x: layer.x + 0.02, y: layer.y + 0.02 })
+                  const copy = constrainLayer({ ...layer, id: crypto.randomUUID(), x: layer.x + 0.02, y: layer.y + 0.02 }, doc)
                   onDocument({ ...doc, layers: [...doc.layers, copy] })
                   onSelect(copy.id)
                 }}

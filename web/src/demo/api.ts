@@ -210,6 +210,13 @@ export function createDemoApi(img: Img) {
         layers: [bubble('L1', 0.03, 0.03, '早上好，出发啦！'), bubble('L2', 0.77, 0.06, '今天花开得真好。', 'right'), bubble('L3', 0.03, 0.54, '下一站，山坡小站。'), bubble('L4', 0.37, 0.45, '海岸电车 · 第 1 话', 'none', 0.26)],
       },
     }],
+    ['C3', {
+      biz_id: 'C3', version: 1,
+      document: {
+        schema_version: 1, auto_fit: true, title: '自由画布 · 图片拼贴', mode: 'direct', brief: '', background: '', context: '', references: [],
+        page_asset_id: 'comic-page', page_source: 'imported', panel_asset_ids: ['', '', '', ''], layers: [],
+      },
+    }],
     ['C2', {
       biz_id: 'C2', version: 1,
       document: {

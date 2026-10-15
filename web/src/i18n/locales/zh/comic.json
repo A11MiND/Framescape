@@ -9,7 +9,7 @@
     "export": "导出 PNG",
     "addBubble": "添加对话框",
     "addText": "添加标题文字",
-    "addLogo": "添加 Logo",
+    "addLogo": "添加图片 / Logo",
     "importPage": "导入底图",
     "undo": "撤销",
     "redo": "重做",
@@ -75,10 +75,13 @@
     "referencesTitle": "参考设置"
   },
   "art": {
+    "placement": "图片位置",
+    "rotationHelp": "−180° 至 180°。图片可在整个画布内自由编辑。",
+    "rotation": "旋转角度 (°)",
     "label": "漫画编辑区",
     "layers": "图层（从下到上）",
     "layersEmpty": "添加对话框后，就能在这里修改文字。Logo 直接叠加原文件，不让模型重画。",
-    "logo": "Logo",
+    "logo": "图片 / Logo",
     "emptyText": "空白文字",
     "locked": "（已锁定）",
     "properties": "图层属性",
@@ -105,6 +108,15 @@
     "opacityHelp": "0 为透明，100 为不透明；文字保持清晰。"
   },
   "canvas": {
+    "margin": {"top": "上方留白（像素）", "left": "左侧留白（像素）", "right": "右侧留白（像素）", "bottom": "下方留白（像素）"},
+    "position": {"top": "漫画上方", "left": "漫画左侧", "right": "漫画右侧", "bottom": "漫画下方", "free": "自由放置"},
+    "imageGap": "图片间距：{{n}} 像素",
+    "newPosition": "新图片放置位置",
+    "fitNow": "贴合内容",
+    "autoFit": "自动贴合内容",
+    "spaceHelp": "图片可放在任意一侧，调整大小后画布自动贴合。关闭自动贴合后可自行设置四周留白。",
+    "topSpace": "上方扩展空间（像素）",
+    "dimensions": "画布：{{width}} × {{height}} 像素",
     "label": "四格漫画画布",
     "preview": "漫画预览，文字和 Logo 可以在上方图层编辑",
     "layerLogo": "Logo 图层：{{name}}",
@@ -221,7 +233,7 @@
     "textFits": "所有可见文字都在文本框内",
     "overflow": "「{{name}}」的文字超出文本框",
     "fix": "修复此问题",
-    "note": "导出固定为 1536×1024 PNG，隐藏的图层不会导出。",
+    "note": "导出完整的 {{width}} × {{height}} PNG，将可见图片和文字合并。隐藏图层不会导出。",
     "backupNote": "JSON 编辑稿备份单独保存，可以在其他设备导入后继续编辑。"
   },
   "conflict": {

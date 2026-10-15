@@ -15,6 +15,8 @@ type Reference struct {
 	Label   string `json:"label"`
 }
 type Layer struct {
+	Placement   string   `json:"placement,omitempty"`
+	Rotation    float64  `json:"rotation,omitempty"`
 	FillOpacity *float64 `json:"fill_opacity,omitempty"` // nil preserves opaque legacy documents
 	ID          string   `json:"id"`
 	Kind        string   `json:"kind"` // bubble | text | logo
@@ -37,6 +39,14 @@ type Pending struct {
 	Panel int    `json:"panel"`
 }
 type Document struct {
+	LeftSpace     int         `json:"left_space,omitempty"`
+	RightSpace    int         `json:"right_space,omitempty"`
+	BottomSpace   int         `json:"bottom_space,omitempty"`
+	AutoFit       *bool       `json:"auto_fit,omitempty"`
+	ImageGap      int         `json:"image_gap,omitempty"`
+	PageWidth     int         `json:"page_width,omitempty"`
+	PageHeight    int         `json:"page_height,omitempty"`
+	TopSpace      int         `json:"top_space,omitempty"`
 	SchemaVersion int         `json:"schema_version"`
 	Title         string      `json:"title"`
 	Mode          string      `json:"mode"`
@@ -82,6 +92,12 @@ func ImageMime(mime string) bool { return slices.Contains(ReferenceMimes, mime) 
 var hexColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
 func (d Document) Validate() error {
+	if (d.PageWidth == 0) != (d.PageHeight == 0) || d.PageWidth < 0 || d.PageHeight < 0 || d.PageWidth > 32768 || d.PageHeight > 32768 {
+		return fmt.Errorf("invalid page dimensions")
+	}
+	if d.TopSpace < 0 || d.TopSpace > 32768 || d.LeftSpace < 0 || d.LeftSpace > 32768 || d.RightSpace < 0 || d.RightSpace > 32768 || d.BottomSpace < 0 || d.BottomSpace > 32768 || d.ImageGap < 0 || d.ImageGap > 1000 {
+		return fmt.Errorf("invalid canvas extension")
+	}
 	if d.SchemaVersion != 1 {
 		return fmt.Errorf("unsupported comic document version")
 	}
@@ -110,6 +126,12 @@ func (d Document) Validate() error {
 	}
 	ids := map[string]bool{}
 	for _, l := range d.Layers {
+		if l.Placement != "" && !slices.Contains([]string{"top", "bottom", "left", "right", "free"}, l.Placement) {
+			return fmt.Errorf("invalid image placement")
+		}
+		if math.IsNaN(l.Rotation) || math.IsInf(l.Rotation, 0) || l.Rotation < -180 || l.Rotation > 180 {
+			return fmt.Errorf("invalid layer rotation")
+		}
 		if l.ID == "" || len(l.ID) > 80 || ids[l.ID] {
 			return fmt.Errorf("duplicate or invalid layer ID")
 		}
@@ -122,7 +144,7 @@ func (d Document) Validate() error {
 				return fmt.Errorf("invalid layer geometry")
 			}
 		}
-		if l.W < 0.02 || l.H < 0.02 || l.X+l.W > 1.000001 || l.Y+l.H > 1.000001 {
+		if l.W < 0.0001 || l.H < 0.0001 || l.X+l.W > 1.000001 || l.Y+l.H > 1.000001 {
 			return fmt.Errorf("layer extends outside canvas")
 		}
 		if l.FontSize < 12 || l.FontSize > 96 || !hexColor.MatchString(l.Color) || !hexColor.MatchString(l.Fill) || utf8.RuneCountInString(l.Text) > 2000 {

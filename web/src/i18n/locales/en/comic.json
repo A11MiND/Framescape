@@ -9,7 +9,7 @@
     "export": "Export PNG",
     "addBubble": "Add speech bubble",
     "addText": "Add title text",
-    "addLogo": "Add logo",
+    "addLogo": "Add image / logo",
     "importPage": "Import base image",
     "undo": "Undo",
     "redo": "Redo",
@@ -75,10 +75,13 @@
     "referencesTitle": "References"
   },
   "art": {
+    "placement": "Image position",
+    "rotationHelp": "−180° to 180°. Images remain editable anywhere on the canvas.",
+    "rotation": "Rotation (°)",
     "label": "Comic editor",
     "layers": "Layers (bottom to top)",
     "layersEmpty": "Add a speech bubble to edit its text here. Logos are placed as the original file, never redrawn by the model.",
-    "logo": "Logo",
+    "logo": "Image / logo",
     "emptyText": "Empty text",
     "locked": "(locked)",
     "properties": "Layer properties",
@@ -105,6 +108,15 @@
     "opacityHelp": "0 is transparent, 100 is opaque. Text remains fully visible."
   },
   "canvas": {
+    "margin": {"top": "Top space (px)", "left": "Left space (px)", "right": "Right space (px)", "bottom": "Bottom space (px)"},
+    "position": {"top": "Above comic", "left": "Left of comic", "right": "Right of comic", "bottom": "Below comic", "free": "Free positioning"},
+    "imageGap": "Image spacing: {{n}} px",
+    "newPosition": "Add new image at",
+    "fitNow": "Fit to content",
+    "autoFit": "Fit canvas automatically",
+    "spaceHelp": "Place images on any side. The canvas fits their current size after each edit. Turn off automatic fitting to set margins yourself.",
+    "topSpace": "Extra space above (px)",
+    "dimensions": "Canvas: {{width}} × {{height}} px",
     "label": "Four-panel comic canvas",
     "preview": "Comic preview; text and logos are editable as layers",
     "layerLogo": "Logo layer: {{name}}",
@@ -221,7 +233,7 @@
     "textFits": "All visible text fits its box",
     "overflow": "The text of \"{{name}}\" does not fit",
     "fix": "Fix this",
-    "note": "The export is always a 1536×1024 PNG; hidden layers are left out.",
+    "note": "Exports the full {{width}} × {{height}} PNG. All visible images and text are combined; hidden layers are left out.",
     "backupNote": "The JSON draft backup is separate and can be imported on another device to keep editing."
   },
   "conflict": {
