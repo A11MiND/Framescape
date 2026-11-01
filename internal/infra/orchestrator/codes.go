@@ -15,6 +15,7 @@ const (
 	CodeProviderRejected    = "provider_rejected"
 	CodeProviderBusy        = "provider_busy"
 	CodeProviderAccount     = "provider_account"
+	CodeProviderBalance     = "provider_balance"
 	CodeIncompleteOutput    = "incomplete_output"
 	CodePollFailed          = "poll_failed"
 	CodeExecutorError       = "executor_error"
@@ -35,7 +36,8 @@ var FailureCodes = map[string]string{
 	CodeBadParams:           "the provider rejected the parameters",
 	CodeProviderRejected:    "the provider rejected the request",
 	CodeProviderBusy:        "the provider was over capacity after all retries",
-	CodeProviderAccount:     "the platform's provider account needs attention (balance or credentials); not the user's fault",
+	CodeProviderAccount:     "the platform's provider account needs attention (e.g. credentials rejected); not the user's fault",
+	CodeProviderBalance:     "the platform's provider account is out of balance or quota; not the user's credits",
 	CodeIncompleteOutput:    "fewer results than requested",
 	CodePollFailed:          "the remote task status could not be read",
 	CodeExecutorError:       "the step failed unexpectedly",
@@ -56,7 +58,7 @@ func NeedsInputChange(code string) bool { return inputChangeCodes[code] }
 // failurePrefixes maps the executors' message prefixes to codes.
 var failurePrefixes = []struct{ prefix, code string }{
 	{"sensitive_content:", CodeModeration},
-	{"insufficient_balance:", CodeProviderAccount},
+	{"insufficient_balance:", CodeProviderBalance},
 	{"auth_error:", CodeProviderAccount},
 	{"rate_limited:", CodeProviderBusy},
 	{"concurrency_limited:", CodeProviderBusy},

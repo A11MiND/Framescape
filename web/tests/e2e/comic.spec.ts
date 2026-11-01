@@ -5,7 +5,7 @@ import { newComic } from '../../src/lib/comicDocument'
 async function setup(page: Page, { comicAI = true, lang = 'zh' } = {}) {
   const document = newComic(); document.title = '港燈 ESG 漫画'; document.brief = '清新扁平插画，阿健是工程师，小智是机器人。四格故事。'; document.page_asset_id = 'page-original'
   let saved = { biz_id: 'draft-one', version: 1, document }
-  const state = { conflict: false, saveFailed: false, finished: false, jobRequests: [] as Record<string, unknown>[], assetUploads: 0, lastSaved: null as Record<string, unknown> | null }
+  const state = { conflict: false, saveFailed: false, finished: false, failedCode: '', jobRequests: [] as Record<string, unknown>[], assetUploads: 0, lastSaved: null as Record<string, unknown> | null }
   await page.addInitScript((l) => {
     localStorage.setItem('aigc.auth', JSON.stringify({ accessToken: 'test-token', refreshToken: 'test-refresh' }))
     localStorage.setItem('aigc.lang', l)
@@ -29,10 +29,11 @@ async function setup(page: Page, { comicAI = true, lang = 'zh' } = {}) {
     if (path === '/jobs' && req.method() === 'POST') { state.jobRequests.push(req.postDataJSON()); return send({ biz_id: 'generation-one', status: 'running', workflow_run_id: 'run-one' }) }
     if (path.startsWith('/jobs/')) return send({
       biz_id: 'generation-one', title: '四格漫画', spec: { text: document.brief, comic_mode: 'editable', image_provider: 'openai' },
-      status: state.finished ? 'succeeded' : 'running', workflow_name: 'image.comic4', retry_of_job_id: '', project_id: '', error_code: '', cover_asset_id: '',
-      created_at: '2026-09-24T06:00:00Z', started_at: '2026-09-24T06:00:00Z', finished_at: state.finished ? '2026-09-24T06:01:00Z' : null, review_deadline: null,
-      credits: { reserved: 53, settled: state.finished ? 40 : 0, overage: 0, released: state.finished ? 13 : 0, frozen: state.finished ? 0 : 53 },
-      nodes: state.finished ? [{ name: 'compose', status: 'succeeded', outputs: { 'asset-id': 'new-image', 'usage-known': true }, display: { result: true }, attempt: 1, error: '', error_code: '', queue_reason: '', started_at: null, finished_at: null }] : [],
+      status: state.failedCode ? 'failed' : state.finished ? 'succeeded' : 'running', workflow_name: 'image.comic4', retry_of_job_id: '', project_id: '', error_code: state.failedCode, cover_asset_id: '',
+      created_at: '2026-09-24T06:00:00Z', started_at: '2026-09-24T06:00:00Z', finished_at: state.finished || state.failedCode ? '2026-09-24T06:01:00Z' : null, review_deadline: null,
+      credits: state.failedCode ? { reserved: 53, settled: 0, overage: 0, released: 53, frozen: 0 } : { reserved: 53, settled: state.finished ? 40 : 0, overage: 0, released: state.finished ? 13 : 0, frozen: state.finished ? 0 : 53 },
+      nodes: state.failedCode ? [{ name: 'compose', status: 'failed', outputs: {}, display: { result: true }, attempt: 1, error: '', error_code: state.failedCode, queue_reason: '', started_at: null, finished_at: null }]
+        : state.finished ? [{ name: 'compose', status: 'succeeded', outputs: { 'asset-id': 'new-image', 'usage-known': true }, display: { result: true }, attempt: 1, error: '', error_code: '', queue_reason: '', started_at: null, finished_at: null }] : [],
     })
     if (path === '/assets' && req.method() === 'GET') return send({ assets: [
       { biz_id: 'lib-png', type: 'image', mime: 'image/png', public_url: 'http://127.0.0.1:4173/preset-covers/style-manga.jpg' },
@@ -171,6 +172,16 @@ test('single panel completion preserves edits made while generating', async ({ p
   await expect(page.getByLabel('对白文字', { exact: true })).toHaveValue('生成中修改的对白不能丢失')
   const spec = state.jobRequests[0].spec as Record<string, unknown>
   expect(spec.comic_panel).toBe(2); expect(spec.source_image_asset_id).toBe('page-original')
+})
+
+test('a provider balance failure says so and drops the submitted note', async ({ page }) => {
+  const state = await setup(page)
+  await page.getByRole('button', { name: '重画第 2 格' }).click()
+  await page.getByRole('button', { name: '确认生成第 2 格' }).click()
+  await expect(page.getByText('已提交，等待生成。可以继续编辑对白。')).toBeVisible()
+  state.failedCode = 'provider_balance'
+  await expect(page.getByText('平台的生成服务账户余额不足（不是你的积分），请联系管理员。')).toBeVisible({ timeout: 12000 })
+  await expect(page.getByText('已提交，等待生成。可以继续编辑对白。')).toHaveCount(0)
 })
 
 test('a direct page has no panel frames and no single-panel redraw', async ({ page }) => {

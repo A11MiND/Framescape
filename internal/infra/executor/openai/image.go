@@ -426,9 +426,20 @@ func (p *ImagePlugin) loadReference(ctx context.Context, assetID string) (refere
 
 var safeCode = regexp.MustCompile(`^[a-z0-9_.-]{1,64}$`)
 
+// balanceCodes are OpenAI errors meaning the platform's account has no credit
+// left; OpenAI sends some of them as HTTP 429, which is not a rate limit.
+var balanceCodes = map[string]bool{
+	"insufficient_quota":         true,
+	"credit_balance_exhausted":   true,
+	"billing_hard_limit_reached": true,
+	"billing_not_active":         true,
+}
+
 // upstreamError reports only OpenAI's machine-readable error code, never the
 // free-text message (which can quote the prompt). Moderation rejections use
-// the "sensitive_content:" prefix projection keys moderation_records off.
+// the "sensitive_content:" prefix projection keys moderation_records off;
+// balance and credential problems use the prefixes that mark them as the
+// platform's account, not the user's request.
 func upstreamError(status int, body []byte) string {
 	var e struct {
 		Error struct {
@@ -444,11 +455,22 @@ func upstreamError(status int, body []byte) string {
 	if code == "moderation_blocked" || code == "content_policy_violation" {
 		return "sensitive_content: OpenAI rejected the prompt or a reference image (" + code + ")"
 	}
-	if code == "" && safeCode.MatchString(e.Error.Type) {
-		code = e.Error.Type
+	errType := e.Error.Type
+	if !safeCode.MatchString(errType) {
+		errType = ""
 	}
+	if code == "" {
+		code = errType
+	}
+	detail := fmt.Sprintf("OpenAI returned HTTP %d; no automatic retry was made", status)
 	if code != "" {
-		return fmt.Sprintf("OpenAI returned HTTP %d (%s); no automatic retry was made", status, code)
+		detail = fmt.Sprintf("OpenAI returned HTTP %d (%s); no automatic retry was made", status, code)
 	}
-	return fmt.Sprintf("OpenAI returned HTTP %d; no automatic retry was made", status)
+	switch {
+	case balanceCodes[code] || balanceCodes[errType]:
+		return "insufficient_balance: " + detail
+	case status == http.StatusUnauthorized || status == http.StatusForbidden:
+		return "auth_error: " + detail
+	}
+	return detail
 }

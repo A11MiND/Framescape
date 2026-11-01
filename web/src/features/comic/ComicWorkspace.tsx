@@ -142,7 +142,10 @@ export default function ComicWorkspace() {
       setMessage(t('done.generated'))
       if (usageUnknown) setError(t('error.usageUnknown'))
     },
-    onFailed: (code) => setError(code ? failureText(t, code) : t('error.notFinished')),
+    onFailed: (code) => {
+      setMessage('')
+      setError(code ? failureText(t, code) : t('error.notFinished'))
+    },
     onError: (err) => setError(comicErrorText(t, err)),
   })
 

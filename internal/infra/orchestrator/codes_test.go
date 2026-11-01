@@ -5,7 +5,8 @@ import "testing"
 func TestFailureCodes(t *testing.T) {
 	for msg, want := range map[string]string{
 		"sensitive_content: flagged":      CodeModeration,
-		"insufficient_balance: account":   CodeProviderAccount,
+		"insufficient_balance: account":   CodeProviderBalance,
+		"auth_error: key":                 CodeProviderAccount,
 		"rate_limited: 429":               CodeProviderBusy,
 		"bad_params: ratio":               CodeBadParams,
 		"wait_timeout: poll":              CodeTimeout,

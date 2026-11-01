@@ -244,8 +244,10 @@ func TestErrorsDoNotRetryOrLeak(t *testing.T) {
 		message     string
 	}{
 		{"rate limit", 429, `{"error":{"message":"secret prompt","code":"rate_limit_exceeded"}}`, false, false, "rate_limit_exceeded"},
-		{"quota", 429, `{"error":{"message":"secret","type":"insufficient_quota","code":"insufficient_quota"}}`, false, false, "insufficient_quota"},
-		{"unauthorized", 401, "secret", false, false, "HTTP 401"},
+		{"quota", 429, `{"error":{"message":"secret","type":"insufficient_quota","code":"insufficient_quota"}}`, false, false, "insufficient_balance: OpenAI returned HTTP 429 (insufficient_quota)"},
+		{"credit exhausted", 429, `{"error":{"message":"secret","type":"insufficient_quota","code":"credit_balance_exhausted"}}`, false, false, "insufficient_balance: OpenAI returned HTTP 429 (credit_balance_exhausted)"},
+		{"unauthorized", 401, "secret", false, false, "auth_error: OpenAI returned HTTP 401"},
+		{"forbidden", 403, `{"error":{"message":"secret","code":"unsupported_country_region_territory"}}`, false, false, "auth_error: OpenAI returned HTTP 403"},
 		{"moderation", 400, `{"error":{"message":"secret prompt","code":"moderation_blocked"}}`, false, false, "sensitive_content:"},
 		{"invalid json", 200, "secret", false, false, "invalid JSON"},
 		{"empty images", 200, `{"data":[],"usage":{"input_tokens":100,"output_tokens":100}}`, false, true, "returned 0 images"},
