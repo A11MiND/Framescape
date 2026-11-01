@@ -243,11 +243,20 @@ func TestErrorsDoNotRetryOrLeak(t *testing.T) {
 		billed      bool
 		message     string
 	}{
-		{"rate limit", 429, `{"error":{"message":"secret prompt","code":"rate_limit_exceeded"}}`, false, false, "rate_limit_exceeded"},
+		{"rate limit", 429, `{"error":{"message":"secret prompt","code":"rate_limit_exceeded"}}`, false, false, "throttled: OpenAI returned HTTP 429 (rate_limit_exceeded)"},
+		{"slow down", 429, `{"error":{"message":"secret","type":"rate_limit_error","code":"slow_down"}}`, false, false, "throttled: OpenAI returned HTTP 429 (slow_down)"},
 		{"quota", 429, `{"error":{"message":"secret","type":"insufficient_quota","code":"insufficient_quota"}}`, false, false, "insufficient_balance: OpenAI returned HTTP 429 (insufficient_quota)"},
 		{"credit exhausted", 429, `{"error":{"message":"secret","type":"insufficient_quota","code":"credit_balance_exhausted"}}`, false, false, "insufficient_balance: OpenAI returned HTTP 429 (credit_balance_exhausted)"},
+		{"quota type only", 429, `{"error":{"message":"secret","type":"insufficient_quota","code":null}}`, false, false, "insufficient_balance: OpenAI returned HTTP 429 (insufficient_quota)"},
+		{"org spend limit", 429, `{"error":{"message":"secret","type":"insufficient_quota","code":"organization_spend_limit_exceeded"}}`, false, false, "spend_limit: OpenAI returned HTTP 429 (organization_spend_limit_exceeded)"},
+		{"project spend limit", 429, `{"error":{"message":"secret","type":"insufficient_quota","code":"project_spend_limit_exceeded"}}`, false, false, "spend_limit: OpenAI returned HTTP 429 (project_spend_limit_exceeded)"},
+		{"org usage limit", 429, `{"error":{"message":"secret","code":"organization_usage_limit_exceeded"}}`, false, false, "spend_limit: OpenAI returned HTTP 429 (organization_usage_limit_exceeded)"},
 		{"unauthorized", 401, "secret", false, false, "auth_error: OpenAI returned HTTP 401"},
 		{"forbidden", 403, `{"error":{"message":"secret","code":"unsupported_country_region_territory"}}`, false, false, "auth_error: OpenAI returned HTTP 403"},
+		{"model not found", 404, `{"error":{"message":"secret","code":"model_not_found"}}`, false, false, "account_config: OpenAI returned HTTP 404 (model_not_found)"},
+		{"overloaded", 503, `{"error":{"message":"secret","type":"service_unavailable_error","code":"server_is_overloaded"}}`, false, false, "provider_unavailable: OpenAI returned HTTP 503 (server_is_overloaded)"},
+		{"server error", 500, "secret", false, false, "provider_unavailable: OpenAI returned HTTP 500"},
+		{"invalid request", 400, `{"error":{"message":"secret prompt","type":"invalid_request_error","param":"size"}}`, false, false, "invalid_request: OpenAI returned HTTP 400 (invalid_request_error)"},
 		{"moderation", 400, `{"error":{"message":"secret prompt","code":"moderation_blocked"}}`, false, false, "sensitive_content:"},
 		{"invalid json", 200, "secret", false, false, "invalid JSON"},
 		{"empty images", 200, `{"data":[],"usage":{"input_tokens":100,"output_tokens":100}}`, false, true, "returned 0 images"},

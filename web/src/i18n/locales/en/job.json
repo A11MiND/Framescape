@@ -37,7 +37,8 @@
   "failed": {
     "title": "Generation failed",
     "partial": "Some steps failed",
-    "hint": "Adjust the description or settings and generate again; this creates a new task."
+    "hint": "Adjust the description or settings and generate again; this creates a new task.",
+    "hintPlatform": "This was not caused by your description or settings. Generating again will fail the same way until an administrator fixes it."
   },
   "cancelled": {
     "title": "Task cancelled",

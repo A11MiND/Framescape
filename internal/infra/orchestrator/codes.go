@@ -16,6 +16,9 @@ const (
 	CodeProviderBusy        = "provider_busy"
 	CodeProviderAccount     = "provider_account"
 	CodeProviderBalance     = "provider_balance"
+	CodeProviderLimit       = "provider_limit"
+	CodeProviderThrottled   = "provider_throttled"
+	CodeProviderUnavailable = "provider_unavailable"
 	CodeIncompleteOutput    = "incomplete_output"
 	CodePollFailed          = "poll_failed"
 	CodeExecutorError       = "executor_error"
@@ -36,8 +39,11 @@ var FailureCodes = map[string]string{
 	CodeBadParams:           "the provider rejected the parameters",
 	CodeProviderRejected:    "the provider rejected the request",
 	CodeProviderBusy:        "the provider was over capacity after all retries",
-	CodeProviderAccount:     "the platform's provider account needs attention (e.g. credentials rejected); not the user's fault",
+	CodeProviderAccount:     "the platform's provider account or configuration needs attention (e.g. credentials rejected, model unavailable); not the user's fault",
 	CodeProviderBalance:     "the platform's provider account is out of balance or quota; not the user's credits",
+	CodeProviderLimit:       "the platform's provider account reached a spend or usage limit; not the user's credits",
+	CodeProviderThrottled:   "the provider rate-limited the request and it was not retried automatically",
+	CodeProviderUnavailable: "the provider had a server error or was overloaded and the request was not retried automatically",
 	CodeIncompleteOutput:    "fewer results than requested",
 	CodePollFailed:          "the remote task status could not be read",
 	CodeExecutorError:       "the step failed unexpectedly",
@@ -59,7 +65,12 @@ func NeedsInputChange(code string) bool { return inputChangeCodes[code] }
 var failurePrefixes = []struct{ prefix, code string }{
 	{"sensitive_content:", CodeModeration},
 	{"insufficient_balance:", CodeProviderBalance},
+	{"spend_limit:", CodeProviderLimit},
 	{"auth_error:", CodeProviderAccount},
+	{"account_config:", CodeProviderAccount},
+	{"throttled:", CodeProviderThrottled},
+	{"provider_unavailable:", CodeProviderUnavailable},
+	{"invalid_request:", CodeProviderRejected},
 	{"rate_limited:", CodeProviderBusy},
 	{"concurrency_limited:", CodeProviderBusy},
 	{"no_capacity:", CodeProviderBusy},

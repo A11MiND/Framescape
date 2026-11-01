@@ -52,6 +52,18 @@ test('a step that failed for a transient reason can be retried as a new task', a
   expect(retried).toBe(1)
 })
 
+test('a provider balance failure says it is the platform account, not the request', async ({ page }) => {
+  await useDemoApi(page)
+  const detail = createDemoApi((f) => `/src/demo/assets/${f}`)('GET', '/jobs/J007', '', undefined).body as { error_code: string; nodes: { error_code: string }[] }
+  detail.error_code = 'provider_balance'
+  detail.nodes = detail.nodes.map((n) => ({ ...n, error_code: 'provider_balance' }))
+  await page.route('**/api/v1/jobs/J007', (route) => route.fulfill({ json: detail }))
+  await page.goto('/jobs/J007')
+  await expect(page.getByText('平台的生成服务账户余额不足（不是你的积分），请联系管理员。').first()).toBeVisible()
+  await expect(page.getByText('这不是你的描述或参数导致的。管理员处理好之前，重新生成也会同样失败。')).toBeVisible()
+  await expect(page.getByText('修改描述或参数后重新生成，会创建一个新任务。')).toHaveCount(0)
+})
+
 test('a partially finished task keeps the panels that worked and names the one that failed', async ({ page }) => {
   await useDemoApi(page)
   await page.goto('/jobs/J005')

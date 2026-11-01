@@ -23,7 +23,7 @@ import { jobsApi, type JobDetail } from '../../../lib/api/jobs'
 import { projectsApi } from '../../../lib/api/projects'
 import { keys } from '../../../lib/api/keys'
 import { ApiError } from '../../../lib/api/client'
-import { errorText, failureText } from '../../../lib/errorText'
+import { errorText, failureText, isPlatformFailure } from '../../../lib/errorText'
 import { formatClock, formatDateTime, formatDuration, formatNumber } from '../../../lib/format'
 import { useStream } from '../../../lib/stream/context'
 import { useToast } from '../../../components/Toast'
@@ -332,7 +332,7 @@ export default function JobDetailPage() {
                 ) : (
                   <p className="text-body text-fg">{failureText(t, job.error_code || failedNodes[0]?.error_code)}</p>
                 )}
-                <p className="text-caption text-fg-muted">{t('failed.hint')}</p>
+                <p className="text-caption text-fg-muted">{t([job.error_code, ...failedNodes.map((n) => n.error_code)].some(isPlatformFailure) ? 'failed.hintPlatform' : 'failed.hint')}</p>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="primary" onClick={createAgain}>
                     {t('action.editAndRetry')}

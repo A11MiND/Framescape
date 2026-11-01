@@ -87,8 +87,11 @@
     "provider_account" : "平台的生成服務賬戶需要處理（與你的賬戶無關），請聯繫管理員。",
     "provider_balance" : "平台的生成服務賬戶餘額不足（不是你的積分），請聯繫管理員。",
     "provider_busy" : "生成服務繁忙，多次重試後仍未完成。",
+    "provider_limit" : "平台的生成服務已達到本月消費或用量上限（不是你的積分），請聯繫管理員。",
     "provider_ref_invalid" : "生成任務的記錄丟失。",
-    "provider_rejected" : "生成服務拒絕了這次請求。",
+    "provider_rejected" : "生成服務拒絕了這次請求，請檢查描述和參考圖後重試。",
+    "provider_throttled" : "生成服務目前請求過多，請等一分鐘後再試。",
+    "provider_unavailable" : "生成服務暫時不可用或負載過高，請幾分鐘後再試。",
     "timeout" : "該步驟超時。",
     "unexpected_result" : "該步驟返回了無法識別的結果。",
     "worker_lost" : "執行中斷，正在自動重試。"

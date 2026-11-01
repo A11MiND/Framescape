@@ -203,11 +203,11 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 	}
 	rate := p.config.USDToCNY
 	if p.config.APIKey == "" || rate <= 0 || math.IsInf(rate, 0) || math.IsNaN(rate) || p.config.ReserveUSD <= 0 {
-		return failure("OpenAI is not configured")
+		return failure("account_config: OpenAI is not configured")
 	}
 	unit, ok := priceFor(p.config.Model)
 	if !ok {
-		return failure("OpenAI image model " + p.config.Model + " has no configured price; refusing an unbillable call")
+		return failure("account_config: OpenAI image model " + p.config.Model + " has no configured price; refusing an unbillable call")
 	}
 	if strings.TrimSpace(cfg.Prompt) == "" || utf8.RuneCountInString(cfg.Prompt) > 32000 || len(cfg.References) > MaxReferences {
 		return failure("invalid comic prompt/reference count")
@@ -426,20 +426,27 @@ func (p *ImagePlugin) loadReference(ctx context.Context, assetID string) (refere
 
 var safeCode = regexp.MustCompile(`^[a-z0-9_.-]{1,64}$`)
 
-// balanceCodes are OpenAI errors meaning the platform's account has no credit
-// left; OpenAI sends some of them as HTTP 429, which is not a rate limit.
-var balanceCodes = map[string]bool{
-	"insufficient_quota":         true,
-	"credit_balance_exhausted":   true,
-	"billing_hard_limit_reached": true,
-	"billing_not_active":         true,
-}
+// OpenAI sends billing problems as HTTP 429 too, so the error code decides
+// between "out of money", "over a limit" and "too fast". Billing errors may
+// also carry type insufficient_quota with a more specific code.
+var (
+	balanceCodes = map[string]bool{
+		"insufficient_quota":         true,
+		"credit_balance_exhausted":   true,
+		"billing_hard_limit_reached": true,
+		"billing_not_active":         true,
+	}
+	limitCodes = map[string]bool{
+		"organization_spend_limit_exceeded": true,
+		"project_spend_limit_exceeded":      true,
+		"organization_usage_limit_exceeded": true,
+	}
+)
 
 // upstreamError reports only OpenAI's machine-readable error code, never the
-// free-text message (which can quote the prompt). Moderation rejections use
-// the "sensitive_content:" prefix projection keys moderation_records off;
-// balance and credential problems use the prefixes that mark them as the
-// platform's account, not the user's request.
+// free-text message (which can quote the prompt). The prefix classifies the
+// failure (orchestrator failurePrefixes); "sensitive_content:" is also what
+// projection keys moderation_records off.
 func upstreamError(status int, body []byte) string {
 	var e struct {
 		Error struct {
@@ -467,10 +474,20 @@ func upstreamError(status int, body []byte) string {
 		detail = fmt.Sprintf("OpenAI returned HTTP %d (%s); no automatic retry was made", status, code)
 	}
 	switch {
+	case limitCodes[code]:
+		return "spend_limit: " + detail
 	case balanceCodes[code] || balanceCodes[errType]:
 		return "insufficient_balance: " + detail
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
 		return "auth_error: " + detail
+	case status == http.StatusNotFound:
+		return "account_config: " + detail
+	case status == http.StatusTooManyRequests:
+		return "throttled: " + detail
+	case status >= 500:
+		return "provider_unavailable: " + detail
+	case status >= 400:
+		return "invalid_request: " + detail
 	}
 	return detail
 }

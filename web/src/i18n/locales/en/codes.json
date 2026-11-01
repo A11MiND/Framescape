@@ -87,8 +87,11 @@
     "provider_account": "The platform's generation service account needs attention (this is not a problem with your account). Contact an administrator.",
     "provider_balance": "The platform's generation service account has run out of credit (this is not your credit balance). Contact an administrator.",
     "provider_busy": "The provider was busy and the step did not finish after several tries.",
+    "provider_limit": "The platform's generation service has reached its monthly spending or usage limit (this is not your credit balance). Contact an administrator.",
     "provider_ref_invalid": "The record of the remote task was lost.",
-    "provider_rejected": "The provider rejected this request.",
+    "provider_rejected": "The generation service rejected this request. Check the description and reference images, then try again.",
+    "provider_throttled": "The generation service is receiving too many requests right now. Wait a minute, then try again.",
+    "provider_unavailable": "The generation service is temporarily unavailable or overloaded. Try again in a few minutes.",
     "timeout": "This step timed out.",
     "unexpected_result": "This step returned an unexpected result.",
     "worker_lost": "The step was interrupted and is being retried."

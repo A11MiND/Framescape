@@ -46,3 +46,11 @@ export function failureText(t: TFunction, code: string | undefined | null): stri
   const text = t(key)
   return text === key || text === `failure.${code}` ? t('codes:unknown') : text
 }
+
+// Failures of the platform's own provider account: changing the request or
+// generating again cannot fix them until an administrator does.
+const PLATFORM_FAILURES = new Set(['provider_account', 'provider_balance', 'provider_limit'])
+
+export function isPlatformFailure(code: string | undefined | null): boolean {
+  return !!code && PLATFORM_FAILURES.has(code)
+}
