@@ -188,6 +188,13 @@ type reference struct {
 	mime string
 }
 
+// Configured reports whether this worker has the OpenAI settings needed to
+// make a billable call; a worker without them hands the step to another.
+func (p *ImagePlugin) Configured() bool {
+	rate := p.config.USDToCNY
+	return p.config.APIKey != "" && rate > 0 && !math.IsInf(rate, 0) && !math.IsNaN(rate) && p.config.ReserveUSD > 0
+}
+
 func failure(message string) (*model.ExecOutputs, error) {
 	return &model.ExecOutputs{Code: model.ExecCodeError, Message: message}, nil
 }
@@ -202,7 +209,7 @@ func (p *ImagePlugin) Execute(ctx context.Context, req *executor.ExecuteRequest)
 		return failure("invalid user ID")
 	}
 	rate := p.config.USDToCNY
-	if p.config.APIKey == "" || rate <= 0 || math.IsInf(rate, 0) || math.IsNaN(rate) || p.config.ReserveUSD <= 0 {
+	if !p.Configured() {
 		return failure("account_config: OpenAI is not configured")
 	}
 	unit, ok := priceFor(p.config.Model)

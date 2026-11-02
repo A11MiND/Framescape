@@ -376,3 +376,29 @@ func TestRejectsUnofferedOptionsWithoutCalling(t *testing.T) {
 		t.Fatal("called OpenAI with unoffered options")
 	}
 }
+
+func TestConfiguredNeedsKeyAndPricing(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls++ }))
+	defer srv.Close()
+	if !newPlugin(&testStore{}, srv.URL).Configured() {
+		t.Fatal("a plugin with key and pricing must be configured")
+	}
+	for name, cfg := range map[string]Config{
+		"no key":     {Model: testModel, BaseURL: srv.URL, USDToCNY: 7, ReserveUSD: 0.5},
+		"no rate":    {APIKey: "k", Model: testModel, BaseURL: srv.URL, ReserveUSD: 0.5},
+		"no reserve": {APIKey: "k", Model: testModel, BaseURL: srv.URL, USDToCNY: 7},
+	} {
+		p := NewImagePlugin(cfg, &testStore{}, &testStore{})
+		if p.Configured() {
+			t.Fatalf("%s: reported configured", name)
+		}
+		out, err := p.Execute(t.Context(), request("comic"))
+		if err != nil || !strings.HasPrefix(out.Message, "account_config:") {
+			t.Fatalf("%s: %v %+v", name, err, out)
+		}
+	}
+	if calls != 0 {
+		t.Fatal("an unconfigured plugin called OpenAI")
+	}
+}

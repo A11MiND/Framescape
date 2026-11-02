@@ -102,13 +102,25 @@ func (o *Orchestrator) RunNode(ctx context.Context, nodeID uint64, seq int) erro
 	} else if reason != "" {
 		return o.deferNode(ctx, n, reason)
 	}
+	plugin, found := o.plugins.Get(n.Executor)
+	runnable := found && executor.Runnable(plugin)
+	if !runnable {
+		// Workers share queues but not necessarily executors or provider
+		// settings: leave the step for one that can run it, for a while.
+		if young, err := o.jobYoungerThan(ctx, n.JobID, o.cfg.Limits.Handoff); err != nil {
+			return err
+		} else if young {
+			return o.deferNode(ctx, n, "handoff")
+		}
+	}
 	if ok, err := o.claim(ctx, n, workflow.NodeReady); err != nil || !ok {
 		return err
 	}
-
-	plugin, found := o.plugins.Get(n.Executor)
 	if !found {
 		return o.finish(ctx, n, outcome{status: workflow.NodeFailed, code: CodeExecutorUnavailable, message: "no executor registered for " + n.Executor})
+	}
+	if !runnable {
+		return o.finish(ctx, n, outcome{status: workflow.NodeFailed, code: CodeProviderAccount, message: "account_config: " + n.Executor + " is not configured on the workers that picked it up"})
 	}
 	inputs, err := resolveInputs(ctx, o.db, n)
 	if err != nil {
@@ -695,6 +707,19 @@ func (o *Orchestrator) admit(ctx context.Context, n *Node) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// jobYoungerThan reports whether the job was created less than d ago.
+func (o *Orchestrator) jobYoungerThan(ctx context.Context, jobID uint64, d time.Duration) (bool, error) {
+	var created time.Time
+	err := o.db.QueryRowContext(ctx, `SELECT created_at FROM jobs WHERE id = ?`, jobID).Scan(&created)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return o.now().Sub(created) < d, nil
 }
 
 // deferNode re-schedules a ready node that has to wait for capacity. It

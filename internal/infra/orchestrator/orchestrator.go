@@ -151,6 +151,10 @@ type Limits struct {
 	Executor map[string]int
 	// Defer is how long a capped node waits before re-checking.
 	Defer time.Duration
+	// Handoff is how long after its job was created a step this worker
+	// cannot run (executor not registered or not configured here) keeps being
+	// handed back for another worker, before it fails.
+	Handoff time.Duration
 }
 
 func (c Config) withDefaults() Config {
@@ -190,6 +194,9 @@ func (c Config) withDefaults() Config {
 	}
 	if c.Limits.Defer <= 0 {
 		c.Limits.Defer = 5 * time.Second
+	}
+	if c.Limits.Handoff <= 0 {
+		c.Limits.Handoff = 2 * time.Minute
 	}
 	return c
 }

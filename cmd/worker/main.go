@@ -86,8 +86,12 @@ func main() {
 	must(registry.Register(local.NewComposePlugin(sink, sink)), log)
 	must(registry.Register(local.NewExtractFramesPlugin(sink, sink)), log)
 	must(registry.Register(local.NewConcatPlugin(sink, sink)), log)
-	must(registry.Register(openai.NewImagePlugin(openai.Config{APIKey: config.OpenAIAPIKey(), Model: config.OpenAIImageModel(), BaseURL: config.OpenAIBaseURL(), USDToCNY: config.OpenAIUSDToCNY(), ReserveUSD: config.OpenAIImageReserveUSD(), PerRefUSD: config.OpenAIImageReservePerRefUSD(),
-		Sizes: config.OpenAIImageSizes(), Qualities: config.OpenAIImageQualities(), MaxN: config.OpenAIImageMaxN(), Transport: recorder.Transport("openai", nil)}, sink, sink)), log)
+	openaiImage := openai.NewImagePlugin(openai.Config{APIKey: config.OpenAIAPIKey(), Model: config.OpenAIImageModel(), BaseURL: config.OpenAIBaseURL(), USDToCNY: config.OpenAIUSDToCNY(), ReserveUSD: config.OpenAIImageReserveUSD(), PerRefUSD: config.OpenAIImageReservePerRefUSD(),
+		Sizes: config.OpenAIImageSizes(), Qualities: config.OpenAIImageQualities(), MaxN: config.OpenAIImageMaxN(), Transport: recorder.Transport("openai", nil)}, sink, sink)
+	must(registry.Register(openaiImage), log)
+	if !openaiImage.Configured() {
+		log.Warn("OpenAI is not configured on this worker; its steps are left for other workers and fail after the handoff window if none can run them")
+	}
 	// Gemini is optional: a missing or broken Vertex AI setup disables that
 	// provider instead of taking the worker down.
 	if projectID := config.GeminiVertexProjectID(); projectID != "" {

@@ -21,6 +21,18 @@ type Plugin interface {
 	Execute(ctx context.Context, req *ExecuteRequest) (*model.ExecOutputs, error)
 }
 
+// Configurable is implemented by plugins that are always registered but can
+// only run on a worker that has their provider settings.
+type Configurable interface {
+	Configured() bool
+}
+
+// Runnable reports whether this worker can run p's steps.
+func Runnable(p Plugin) bool {
+	c, ok := p.(Configurable)
+	return !ok || c.Configured()
+}
+
 // ExecuteRequest carries one execution attempt of a node.
 type ExecuteRequest struct {
 	// TaskRunID is stable across attempts of the same node; assets record it
